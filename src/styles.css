@@ -1263,4 +1263,22 @@ textarea {
   display: none;
 }
 
-.app-icon {width:32px;height:32px;object-fit:contain;flex-shrink:0;border-radius:8px;}
+.app-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+
+.permission-list {
+  display: grid;
+  gap: 8px;
+}
+.permission-list .secondary {
+  width: auto;
+  min-width: 84px;
+}
+.capitalize {
+  text-transform: capitalize;
+}

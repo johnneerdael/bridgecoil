@@ -64,7 +64,8 @@ export type Action =
   | { kind: "package"; package: string; action: PackageAction }
   | { kind: "shell"; command: string }
   | { kind: "defaultHome"; component: string }
-  | { kind: "setting"; namespace: string; key: string; value: string | null };
+  | { kind: "setting"; namespace: string; key: string; value: string | null }
+  | { kind: "permission"; package: string; permission: string; grant: boolean };
 export type Query =
   | {
       kind:

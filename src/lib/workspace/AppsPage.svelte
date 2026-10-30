@@ -46,6 +46,13 @@
   let detail = $state<PackageDetail | null>(null);
   let tab = $state("overview");
   let actionPage = $state(0);
+  let permissionPage = $state(0);
+  let allPermissions = $state(false);
+  const runtimePermissions = $derived(
+    detail?.metadata?.permissions?.filter((p) => p.protection === 1) ?? [],
+  );
+  const permissionLabel = (name: string) =>
+    name.split(".").pop()!.toLowerCase().replaceAll("_", " ");
   const actions: { id: PackageAction; label: string }[] = [
     { id: "enable", label: "Enable" },
     { id: "disable", label: "Disable" },
@@ -99,6 +106,8 @@
         detail = r;
         tab = "overview";
         actionPage = 0;
+        permissionPage = 0;
+        allPermissions = false;
       }
     } catch (e) {
       error = errorMessage(e);
@@ -284,16 +293,61 @@
         {busy}
         onpage={(n) => (actionPage = n)}
       />
-    {:else if tab === "permissions"}<Output
-        text={detail.metadata?.permissions
-          ?.map(
-            (p) =>
-              `${p.granted ? "Granted" : "Not granted"} · ${p.name}${p.protection === 1 ? " · runtime" : ""}`,
-          )
-          .join("\n") ||
-          detail.permissions.join("\n") ||
-          "No permission details reported."}
-      />
+    {:else if tab === "permissions"}
+      <div class="segmented">
+        <button
+          class:chosen={!allPermissions}
+          onclick={() => (allPermissions = false)}>Runtime access</button
+        ><button
+          class:chosen={allPermissions}
+          onclick={() => (allPermissions = true)}>All permissions</button
+        >
+      </div>
+      {#if allPermissions}<Output
+          text={detail.metadata?.permissions
+            ?.map(
+              (p) =>
+                `${p.granted ? "Granted" : "Not granted"} · ${p.name}${p.protection === 1 ? " · runtime" : ""}`,
+            )
+            .join("\n") ||
+            detail.permissions.join("\n") ||
+            "No permission details reported."}
+        />
+      {:else}<div class="permission-list">
+          {#each runtimePermissions.slice(permissionPage * 2, permissionPage * 2 + 2) as permission}<div
+              class="list-row"
+            >
+              <span class="truncate"
+                ><strong class="capitalize"
+                  >{permissionLabel(permission.name)}</strong
+                ><small>{permission.granted ? "Granted" : "Not granted"}</small
+                ></span
+              ><button
+                class="secondary"
+                disabled={busy}
+                aria-label={`Review ${permission.granted ? "revoke" : "grant"} ${permissionLabel(permission.name)}`}
+                onclick={() =>
+                  detail &&
+                  plan({
+                    kind: "permission",
+                    package: detail.package,
+                    permission: permission.name,
+                    grant: !permission.granted,
+                  })}>{permission.granted ? "Revoke…" : "Grant…"}</button
+              >
+            </div>{/each}
+        </div>
+        {#if !runtimePermissions.length}<p class="subtle">
+            {detail.metadata
+              ? "No changeable runtime permissions reported."
+              : "Runtime access could not be inspected. Read-only permission details are available under All permissions."}
+          </p>{/if}<Pager
+          page={permissionPage}
+          total={runtimePermissions.length}
+          size={2}
+          {busy}
+          onpage={(n) => (permissionPage = n)}
+        />{/if}
     {:else}<Output
         text={`Signing certificate SHA-256:\n${detail.metadata?.signers?.join("\n") || "Not reported"}\n\n${detail.raw}`}
       />{/if}

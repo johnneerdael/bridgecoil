@@ -45,6 +45,11 @@ pub enum Action {
     DefaultHome {
         component: String,
     },
+    Permission {
+        package: String,
+        permission: String,
+        grant: bool,
+    },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -163,6 +168,18 @@ impl Workspace {
                 } else {
                     Some(before.clone())
                 },
+            });
+        }
+        if let Action::Permission {
+            package,
+            permission,
+            ..
+        } = &action
+        {
+            recovery = Some(Action::Permission {
+                package: package.clone(),
+                permission: permission.clone(),
+                grant: before == "granted",
             });
         }
         if let Action::DefaultHome { .. } = &action
@@ -370,6 +387,7 @@ fn state_label(action: &Action, before: &str) -> String {
         Action::Shell { .. } => {
             "Arbitrary shell commands have no general readback or automatic undo.".into()
         }
+        Action::Permission { .. } => format!("Current permission: {before}"),
         _ => format!("Current value: {before}"),
     }
 }
@@ -383,6 +401,7 @@ fn kind(a: &Action) -> &str {
         Action::Shell { .. } => "shell",
         Action::Setting { .. } => "setting",
         Action::DefaultHome { .. } => "launcher",
+        Action::Permission { .. } => "permission",
     }
 }
 fn home_query(user: u32) -> String {
@@ -432,6 +451,41 @@ async fn protect_home(d: &mut dyn ShellDriver, t: &Target, package: &str) -> Res
     Ok(())
 }
 async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String> {
+    if let Action::Permission {
+        package,
+        permission,
+        ..
+    } = a
+    {
+        package_arg(package)?;
+        permission_arg(permission)?;
+        let rows = d
+            .metadata(t, std::slice::from_ref(package))
+            .await?
+            .ok_or_else(|| {
+                PocError::new(
+                    "unsupported",
+                    "This TV cannot inspect runtime permissions through the available route.",
+                )
+            })?;
+        let entry = rows
+            .iter()
+            .find(|m| &m.package == package)
+            .and_then(|m| m.permissions.iter().find(|p| &p.name == permission))
+            .ok_or_else(|| {
+                PocError::new(
+                    "permission",
+                    "This permission is not declared by the selected app.",
+                )
+            })?;
+        if entry.protection != Some(1) {
+            return Err(PocError::new(
+                "permission",
+                "Only declared runtime permissions can be changed here. Signature and system permissions are unavailable.",
+            ));
+        }
+        return Ok(if entry.granted { "granted" } else { "denied" }.into());
+    }
     let command = match a {
         Action::Package { package, .. } => format!("dumpsys package {}", package_arg(package)?),
         Action::Setting { namespace, key, .. } => {
@@ -445,6 +499,7 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
         }
         Action::DefaultHome { .. } => home_query(t.profile_id),
         Action::Shell { .. } => return Ok(String::new()),
+        Action::Permission { .. } => unreachable!(),
     };
     let output = d.shell(t, &command).await?;
     if !output.success() {
@@ -487,6 +542,7 @@ fn verified(a: &Action, after: &str) -> bool {
         Action::Setting { value, .. } => after == value.as_deref().unwrap_or("null"),
         Action::DefaultHome { component } => after == component,
         Action::Shell { .. } => false,
+        Action::Permission { grant, .. } => after == if *grant { "granted" } else { "denied" },
     }
 }
 fn validate_setting(namespace: &str, key: &str, value: Option<&str>) -> Result<()> {
@@ -518,6 +574,25 @@ fn validate_setting(namespace: &str, key: &str, value: Option<&str>) -> Result<(
 fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, String)> {
     let mut losses = Vec::new();
     let result = match a {
+        Action::Permission {
+            package,
+            permission,
+            grant,
+        } => {
+            let package_quoted = package_arg(package)?;
+            let permission_quoted = permission_arg(permission)?;
+            losses.push(if *grant{"This gives the app access covered by the selected permission in this profile. Grant only access you intend the app to have."}else{"The app may stop working correctly until this permission is restored."}.into());
+            (
+                format!("{} {permission}", if *grant { "Grant" } else { "Revoke" }),
+                format!(
+                    "Change this runtime permission for {package}, profile {user}. Android policy may refuse the change."
+                ),
+                format!(
+                    "pm {} --user {user} {package_quoted} {permission_quoted}",
+                    if *grant { "grant" } else { "revoke" }
+                ),
+            )
+        }
         Action::Package { package, action } => {
             let p = package_arg(package)?;
             let (title, command, effect) = match action {
@@ -619,4 +694,18 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
         }
     };
     Ok((result.0, result.1, losses, result.2))
+}
+fn permission_arg(permission: &str) -> Result<String> {
+    if permission.is_empty()
+        || permission.len() > 256
+        || !permission
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._".contains(c))
+    {
+        return Err(PocError::new(
+            "input",
+            "Choose a declared runtime permission.",
+        ));
+    }
+    Ok(shell_quote(permission))
 }
