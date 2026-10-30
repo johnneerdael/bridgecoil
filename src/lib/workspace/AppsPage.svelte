@@ -1,0 +1,279 @@
+<script lang="ts">
+  import { errorMessage, type Device } from "../model";
+  import {
+    targetOf,
+    type Platform,
+    type Review,
+    type Action,
+    type PackageAction,
+    type Page,
+    type PackageDetail,
+  } from "./client";
+  import Modal from "../Modal.svelte";
+  import Output from "./Output.svelte";
+  import Pager from "./Pager.svelte";
+  import Icon from "./Icon.svelte";
+  let {
+    device,
+    api,
+    onreview,
+    oninstall,
+    filter = $bindable("all"),
+    search = $bindable(""),
+    submitted = $bindable(""),
+    page = $bindable(0),
+  }: {
+    device: Device;
+    api: Platform;
+    onreview: (r: Review) => void;
+    oninstall: () => void;
+    filter?: string;
+    search?: string;
+    submitted?: string;
+    page?: number;
+  } = $props();
+  let refresh = $state(0);
+  let busy = $state(false);
+  let error = $state("");
+  let result = $state<Page<string>>({
+    items: [],
+    total: 0,
+    page: 0,
+    pageSize: 4,
+  });
+  let detail = $state<PackageDetail | null>(null);
+  let tab = $state("overview");
+  let actionPage = $state(0);
+  const actions: { id: PackageAction; label: string }[] = [
+    { id: "enable", label: "Enable" },
+    { id: "disable", label: "Disable" },
+    { id: "forceStop", label: "Force stop" },
+    { id: "remove", label: "Remove from profile" },
+    { id: "restore", label: "Restore existing package" },
+    { id: "clearCache", label: "Clear cache" },
+    { id: "clearData", label: "Clear app data" },
+    { id: "resetEnabled", label: "Default enabled state" },
+  ];
+  $effect(() => {
+    const target = targetOf(device);
+    const q = {
+      kind: "packages" as const,
+      filter,
+      search: submitted,
+      page,
+      pageSize: 4,
+    };
+    refresh;
+    let cancelled = false;
+    busy = true;
+    error = "";
+    result = { items: [], total: 0, page: 0, pageSize: 4 };
+    detail = null;
+    void api
+      .query<Page<string>>(target, q)
+      .then((r) => {
+        if (!cancelled) result = r;
+      })
+      .catch((e) => {
+        if (!cancelled) error = errorMessage(e);
+      })
+      .finally(() => {
+        if (!cancelled) busy = false;
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+  async function inspect(packageId: string) {
+    busy = true;
+    error = "";
+    const id = device.id;
+    try {
+      const r = await api.query<PackageDetail>(targetOf(device), {
+        kind: "package",
+        package: packageId,
+      });
+      if (device.id === id) {
+        detail = r;
+        tab = "overview";
+        actionPage = 0;
+      }
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      busy = false;
+    }
+  }
+  async function plan(action: Action) {
+    busy = true;
+    error = "";
+    try {
+      const r = await api.prepare(targetOf(device), action);
+      detail = null;
+      onreview(r);
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      busy = false;
+    }
+  }
+  async function launch(component: string) {
+    busy = true;
+    error = "";
+    try {
+      const r = await api.remote(targetOf(device), {
+        kind: "launch",
+        component,
+      });
+      error =
+        r.error ??
+        (r.status === "sent" ? "Launch sent. Check the TV." : r.output);
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      busy = false;
+    }
+  }
+</script>
+
+<section class="feature-page">
+  <div class="toolbar">
+    <label class="sr-only" for="app-filter">App filter</label><select
+      id="app-filter"
+      bind:value={filter}
+      onchange={() => (page = 0)}
+      disabled={busy}
+      >{#each [["all", "All apps"], ["user", "User apps"], ["system", "System apps"], ["disabled", "Disabled"], ["removed", "Removed for profile"]] as [value, label]}<option
+          {value}>{label}</option
+        >{/each}</select
+    ><button class="secondary" onclick={oninstall}
+      ><Icon name="install" />Install APK</button
+    >
+  </div>
+  <form
+    class="search-form"
+    onsubmit={(e) => {
+      e.preventDefault();
+      submitted = search;
+      page = 0;
+      refresh++;
+    }}
+  >
+    <label class="sr-only" for="app-search">Search apps</label><input
+      id="app-search"
+      bind:value={search}
+      placeholder="Search package IDs"
+    /><button class="secondary" disabled={busy} type="submit">Search</button>
+  </form>
+  <p class="subtle">
+    Profile {device.profileId} · {busy
+      ? "Reading apps…"
+      : `${result.total} apps`} · Select an app to inspect it
+  </p>
+  {#if error}<p class="error-text" role="status">{error}</p>{/if}
+  <div class="row-list">
+    {#each result.items as packageId}<button
+        class="list-row"
+        disabled={busy}
+        onclick={() => inspect(packageId)}
+        ><Icon name="apps" /><span class="truncate">{packageId}</span><Icon
+          name="chevron-right"
+        /></button
+      >{/each}
+    {#if !busy && !result.items.length}<p class="empty-caption">
+        No apps match this view.
+      </p>{/if}
+  </div>
+  <Pager
+    {page}
+    total={result.total}
+    size={4}
+    {busy}
+    onpage={(n) => (page = n)}
+  />
+</section>
+<Modal open={!!detail} title="Application" onclose={() => (detail = null)}>
+  {#if detail}<h3 class="break-word">{detail.package}</h3>
+    <div class="segmented">
+      {#each ["overview", "actions", "permissions", "raw"] as section}<button
+          class:chosen={tab === section}
+          onclick={() => (tab = section)}>{section}</button
+        >{/each}
+    </div>
+    {#if tab === "overview"}<dl>
+        <div>
+          <dt>Version</dt>
+          <dd>
+            {detail.versionName || "Not reported"} ({detail.state.version ??
+              "?"})
+          </dd>
+        </div>
+        <div>
+          <dt>Installed for profile</dt>
+          <dd>
+            {detail.state.installed === null
+              ? "Unknown"
+              : detail.state.installed
+                ? "Yes"
+                : "No"}
+          </dd>
+        </div>
+        <div>
+          <dt>Enabled state</dt>
+          <dd>
+            {detail.state.enabled === 0
+              ? "Default"
+              : detail.state.enabled === 1
+                ? "Enabled"
+                : detail.state.enabled === 3
+                  ? "Disabled for profile"
+                  : `State ${detail.state.enabled ?? "unknown"}`}
+          </dd>
+        </div>
+        <div>
+          <dt>Stopped</dt>
+          <dd>
+            {detail.state.stopped === null
+              ? "Unknown"
+              : detail.state.stopped
+                ? "Yes"
+                : "No"}
+          </dd>
+        </div>
+      </dl>
+      {#each detail.activities.slice(0, 3) as component}<button
+          class="secondary"
+          disabled={busy}
+          onclick={() => launch(component)}
+          >Launch {component.split("/")[1]}</button
+        >{/each}{#if !detail.activities.length}<p class="subtle">
+          No launch activity reported.
+        </p>{/if}
+    {:else if tab === "actions"}<div class="action-grid">
+        {#each actions.slice(actionPage * 4, actionPage * 4 + 4) as action}<button
+            class="secondary"
+            disabled={busy}
+            onclick={() =>
+              detail &&
+              plan({
+                kind: "package",
+                package: detail.package,
+                action: action.id,
+              })}>{action.label}</button
+          >{/each}
+      </div>
+      <Pager
+        page={actionPage}
+        total={actions.length}
+        size={4}
+        {busy}
+        onpage={(n) => (actionPage = n)}
+      />
+    {:else if tab === "permissions"}<Output
+        text={detail.permissions.join("\n") ||
+          "No permission details reported."}
+      />
+    {:else}<Output text={detail.raw} />{/if}
+    {#if error}<p class="error-text" role="alert">{error}</p>{/if}
+  {/if}
+</Modal>

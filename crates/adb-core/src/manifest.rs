@@ -102,7 +102,9 @@ impl<'a> Pool<'a> {
             }
             let bytes = b.get(pos..end).ok_or_else(bad)?;
             let units: Vec<_> = bytes
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|c| u16::from_le_bytes([c[0], c[1]]))
                 .collect();
             String::from_utf16(&units).map_err(|_| bad())

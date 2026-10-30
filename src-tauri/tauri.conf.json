@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ADB Studio",
+  "productName": "Bridgecoil",
   "version": "0.1.1",
   "identifier": "nl.neerdael.adbstudio.poc",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "ADB Studio \u00b7 POC",
+        "title": "Bridgecoil",
         "width": 460,
         "height": 900,
         "minWidth": 360,
@@ -26,14 +26,19 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "app"
-    ],
+    "targets": ["app"],
     "iOS": {
       "infoPlist": "Info.plist"
     },
     "macOS": {
       "infoPlist": "Info.plist"
-    }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
   }
 }

@@ -1,0 +1,622 @@
+//! Single-use, target-bound reviews. Only this module turns a review into a mutation.
+use super::{
+    commands::*,
+    driver::*,
+    history::{History, now_ms},
+    types::*,
+};
+use crate::{backend::PocError, shell_quote};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, sync::Mutex};
+use uuid::Uuid;
+type Result<T> = std::result::Result<T, PocError>;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PackageAction {
+    Enable,
+    ResetEnabled,
+    Disable,
+    ForceStop,
+    Remove,
+    Restore,
+    ClearData,
+    ClearCache,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum Action {
+    Package {
+        package: String,
+        action: PackageAction,
+    },
+    Shell {
+        command: String,
+    },
+    Setting {
+        namespace: String,
+        key: String,
+        value: Option<String>,
+    },
+    DefaultHome {
+        component: String,
+    },
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageState {
+    pub version: Option<u64>,
+    pub installed: Option<bool>,
+    pub enabled: Option<u8>,
+    pub stopped: Option<bool>,
+}
+pub fn parse_package_state(raw: &str, user: u32) -> PackageState {
+    let version = raw
+        .split("versionCode=")
+        .nth(1)
+        .and_then(|v| v.split_whitespace().next())
+        .and_then(|v| v.parse().ok());
+    let prefix = format!("User {user}:");
+    let line = raw
+        .lines()
+        .find(|l| l.trim_start().starts_with(&prefix))
+        .unwrap_or("");
+    let field = |key: &str| line.split_whitespace().find_map(|v| v.strip_prefix(key));
+    PackageState {
+        version,
+        installed: field("installed=").and_then(|v| v.parse().ok()),
+        enabled: field("enabled=").and_then(|v| v.parse().ok()),
+        stopped: field("stopped=").and_then(|v| v.parse().ok()),
+    }
+}
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Review {
+    pub id: String,
+    pub target: Target,
+    pub title: String,
+    pub effect: String,
+    pub current_state: String,
+    pub losses: Vec<String>,
+    pub reversible: bool,
+    pub commands: Vec<String>,
+    pub expires_ms: i64,
+}
+#[derive(Serialize, Deserialize)]
+struct Recovery {
+    action: Action,
+    expected_state: String,
+}
+#[derive(Clone)]
+struct Prepared {
+    review: Review,
+    action: Action,
+    before: String,
+    recovery: Option<Action>,
+}
+pub struct Workspace {
+    pub history: History,
+    plans: Mutex<HashMap<String, Prepared>>,
+}
+impl Workspace {
+    pub fn new(history: History) -> Self {
+        Self {
+            history,
+            plans: Mutex::new(HashMap::new()),
+        }
+    }
+    pub async fn prepare(
+        &self,
+        driver: &mut dyn ShellDriver,
+        target: &Target,
+        action: Action,
+    ) -> Result<Review> {
+        validate_target(driver.current_target().as_ref(), target)?;
+        let (title, effect, losses, command) = describe(&action, target.profile_id)?;
+        let before = probe(driver, target, &action).await?;
+        let mut recovery = None;
+        if let Action::Package {
+            package,
+            action: kind,
+        } = &action
+        {
+            let state: PackageState = serde_json::from_str(&before).map_err(internal)?;
+            if state.installed.is_none() {
+                return Err(PocError::new(
+                    "unsupported",
+                    "The TV did not report this package's state for the selected profile.",
+                ));
+            }
+            if matches!(
+                kind,
+                PackageAction::Disable | PackageAction::Remove | PackageAction::ClearData
+            ) {
+                protect_home(driver, target, package).await?;
+            }
+            match kind {
+                PackageAction::Enable | PackageAction::Disable | PackageAction::ResetEnabled => {
+                    let inverse = match state.enabled {
+                        Some(0) => Some(PackageAction::ResetEnabled),
+                        Some(1) => Some(PackageAction::Enable),
+                        Some(3) => Some(PackageAction::Disable),
+                        _ => None,
+                    };
+                    recovery = inverse.map(|action| Action::Package {
+                        package: package.clone(),
+                        action,
+                    });
+                }
+                // Removed application data is never represented as recoverable by reinstalling.
+                _ => {}
+            }
+        }
+        if let Action::Setting { namespace, key, .. } = &action {
+            recovery = Some(Action::Setting {
+                namespace: namespace.clone(),
+                key: key.clone(),
+                value: if before == "null" {
+                    None
+                } else {
+                    Some(before.clone())
+                },
+            });
+        }
+        if let Action::DefaultHome { .. } = &action
+            && component_arg(&before).is_ok()
+        {
+            recovery = Some(Action::DefaultHome {
+                component: before.clone(),
+            });
+        }
+        let review = Review {
+            id: Uuid::new_v4().to_string(),
+            target: target.clone(),
+            title,
+            effect,
+            current_state: state_label(&action, &before),
+            losses,
+            reversible: recovery.is_some(),
+            commands: vec![command],
+            expires_ms: now_ms() + 600_000,
+        };
+        let mut plans = self.plans.lock().map_err(internal)?;
+        plans.retain(|_, p| p.review.expires_ms > now_ms());
+        if plans.len() >= 64 {
+            return Err(PocError::new(
+                "busy",
+                "Too many open reviews. Finish or dismiss a review first.",
+            ));
+        }
+        plans.insert(
+            review.id.clone(),
+            Prepared {
+                review: review.clone(),
+                action,
+                before,
+                recovery,
+            },
+        );
+        Ok(review)
+    }
+    pub fn discard(&self, id: &str) -> Result<()> {
+        self.plans.lock().map_err(internal)?.remove(id);
+        Ok(())
+    }
+    pub async fn apply(&self, driver: &mut dyn ShellDriver, id: &str) -> Result<OperationRecord> {
+        // Consume before dispatch. A timeout or duplicate IPC can never resend a mutation.
+        let prepared = self
+            .plans
+            .lock()
+            .map_err(internal)?
+            .remove(id)
+            .ok_or_else(|| {
+                PocError::new(
+                    "staleReview",
+                    "This review was already used or dismissed. Review the action again.",
+                )
+            })?;
+        let p = &prepared;
+        let target = &p.review.target;
+        validate_target(driver.current_target().as_ref(), target)?;
+        if now_ms() > p.review.expires_ms {
+            return Err(PocError::new(
+                "staleReview",
+                "This review expired. Inspect the current state again.",
+            ));
+        }
+        if probe(driver, target, &p.action).await? != p.before {
+            return Err(PocError::new(
+                "staleReview",
+                "The TV's state changed after review. Review the action again.",
+            ));
+        }
+        if let Action::Package { package, action } = &p.action
+            && matches!(
+                action,
+                PackageAction::Disable | PackageAction::Remove | PackageAction::ClearData
+            )
+        {
+            protect_home(driver, target, package).await?;
+        }
+        let now = now_ms();
+        let mut row = OperationRecord {
+            id: Uuid::new_v4().to_string(),
+            target: target.clone(),
+            title: p.review.title.clone(),
+            kind: kind(&p.action).into(),
+            status: OperationStatus::Running,
+            created_ms: now,
+            updated_ms: now,
+            output: String::new(),
+            error: None,
+            recovery: None,
+        };
+        self.history.put(&row)?;
+        match driver.shell(target, &p.review.commands[0]).await {
+            Err(e) => {
+                row.status = OperationStatus::Unknown;
+                row.error = Some(format!("{}. Inspect the TV before retrying.", e.message));
+            }
+            Ok(output) => {
+                row.output = output.combined();
+                if !output.success() {
+                    row.status = OperationStatus::Failed;
+                    row.error = Some(format!("TV command exited {:?}.", output.exit_code));
+                } else if matches!(
+                    p.action,
+                    Action::Shell { .. }
+                        | Action::Package {
+                            action: PackageAction::ClearData | PackageAction::ClearCache,
+                            ..
+                        }
+                ) {
+                    row.status = OperationStatus::Sent;
+                } else {
+                    match probe(driver, target, &p.action).await {
+                        Err(e) => {
+                            row.status = OperationStatus::Unknown;
+                            row.error =
+                                Some(format!("Command accepted; readback failed: {}", e.message));
+                        }
+                        Ok(after) => {
+                            row.status = if verified(&p.action, &after) {
+                                OperationStatus::Verified
+                            } else {
+                                OperationStatus::Unknown
+                            };
+                            if row.status == OperationStatus::Unknown {
+                                row.error=Some("The command returned, but its expected effect was not verified. Inspect the TV before retrying.".into());
+                            } else {
+                                row.recovery = p
+                                    .recovery
+                                    .as_ref()
+                                    .map(|action| {
+                                        serde_json::to_value(Recovery {
+                                            action: action.clone(),
+                                            expected_state: after.clone(),
+                                        })
+                                    })
+                                    .transpose()
+                                    .map_err(internal)?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        row.updated_ms = now_ms();
+        self.history.put(&row)?;
+        Ok(row)
+    }
+    pub async fn prepare_recovery(&self, driver: &mut dyn ShellDriver, id: &str) -> Result<Review> {
+        let row = self.history.get(id)?;
+        let current = driver
+            .current_target()
+            .ok_or_else(|| PocError::new("connection", "Connect to the original device first."))?;
+        if current.device_id != row.target.device_id || current.profile_id != row.target.profile_id
+        {
+            return Err(PocError::new(
+                "staleTarget",
+                "Recovery belongs to a different device or profile.",
+            ));
+        }
+        let recovery: Recovery = serde_json::from_value(row.recovery.ok_or_else(|| {
+            PocError::new(
+                "unsupported",
+                "No supported inverse was recorded for this action.",
+            )
+        })?)
+        .map_err(internal)?;
+        if probe(driver, &current, &recovery.action).await? != recovery.expected_state {
+            return Err(PocError::new(
+                "staleRecovery",
+                "The TV state changed after this operation. Its recorded recovery no longer applies; inspect the current state and prepare a new action.",
+            ));
+        }
+        self.prepare(driver, &current, recovery.action).await
+    }
+}
+fn state_label(action: &Action, before: &str) -> String {
+    match action {
+        Action::Package { .. } => {
+            if let Ok(s) = serde_json::from_str::<PackageState>(before) {
+                let enabled = match s.enabled {
+                    Some(0) => "default",
+                    Some(1) => "enabled",
+                    Some(2..=4) => "disabled",
+                    _ => "unknown",
+                };
+                format!(
+                    "Currently {} for this profile; enabled state: {enabled}; version {}.",
+                    if s.installed == Some(true) {
+                        "installed"
+                    } else if s.installed == Some(false) {
+                        "removed"
+                    } else {
+                        "unknown"
+                    },
+                    s.version
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "unknown".into())
+                )
+            } else {
+                "Current package state unavailable.".into()
+            }
+        }
+        Action::Shell { .. } => {
+            "Arbitrary shell commands have no general readback or automatic undo.".into()
+        }
+        _ => format!("Current value: {before}"),
+    }
+}
+
+fn internal(e: impl std::fmt::Display) -> PocError {
+    PocError::new("workspace", e.to_string())
+}
+fn kind(a: &Action) -> &str {
+    match a {
+        Action::Package { .. } => "package",
+        Action::Shell { .. } => "shell",
+        Action::Setting { .. } => "setting",
+        Action::DefaultHome { .. } => "launcher",
+    }
+}
+fn home_query(user: u32) -> String {
+    format!(
+        "cmd package resolve-activity --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME"
+    )
+}
+async fn protect_home(d: &mut dyn ShellDriver, t: &Target, package: &str) -> Result<()> {
+    if [
+        "android",
+        "com.android.systemui",
+        "com.android.shell",
+        "com.android.settings",
+        "com.android.permissioncontroller",
+        "com.google.android.permissioncontroller",
+    ]
+    .contains(&package)
+    {
+        return Err(PocError::new(
+            "protected",
+            "This system component is protected from this operation.",
+        ));
+    }
+    let home = d.shell(t, &home_query(t.profile_id)).await?;
+    if !home.success() {
+        return Err(PocError::new(
+            "unsupported",
+            "Cannot establish the active Home app. This action is unavailable until Home can be inspected.",
+        ));
+    }
+    let component = home
+        .stdout
+        .lines()
+        .find(|v| component_arg(v.trim()).is_ok())
+        .ok_or_else(|| {
+            PocError::new(
+                "unsupported",
+                "No unambiguous active Home app was reported.",
+            )
+        })?;
+    if component.trim().split('/').next() == Some(package) {
+        return Err(PocError::new(
+            "protected",
+            "Choose and verify a replacement Home app before changing the active launcher.",
+        ));
+    }
+    Ok(())
+}
+async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String> {
+    let command = match a {
+        Action::Package { package, .. } => format!("dumpsys package {}", package_arg(package)?),
+        Action::Setting { namespace, key, .. } => {
+            validate_setting(namespace, key, None)?;
+            format!(
+                "settings --user {} get {} {}",
+                t.profile_id,
+                namespace,
+                shell_quote(key)
+            )
+        }
+        Action::DefaultHome { .. } => home_query(t.profile_id),
+        Action::Shell { .. } => return Ok(String::new()),
+    };
+    let output = d.shell(t, &command).await?;
+    if !output.success() {
+        return Err(PocError::new(
+            "inspection",
+            format!("Cannot inspect the current state: {}", output.combined()),
+        ));
+    }
+    match a {
+        Action::Package { .. } => {
+            serde_json::to_string(&parse_package_state(&output.stdout, t.profile_id))
+                .map_err(internal)
+        }
+        Action::DefaultHome { .. } => Ok(output
+            .stdout
+            .lines()
+            .find(|v| component_arg(v.trim()).is_ok())
+            .unwrap_or("")
+            .trim()
+            .into()),
+        _ => Ok(output.stdout.trim().into()),
+    }
+}
+fn verified(a: &Action, after: &str) -> bool {
+    match a {
+        Action::Package { action, .. } => {
+            let Ok(s) = serde_json::from_str::<PackageState>(after) else {
+                return false;
+            };
+            match action {
+                PackageAction::Enable => s.enabled == Some(1),
+                PackageAction::ResetEnabled => s.enabled == Some(0),
+                PackageAction::Disable => s.enabled == Some(3),
+                PackageAction::Remove => s.installed == Some(false),
+                PackageAction::Restore => s.installed == Some(true),
+                PackageAction::ForceStop => s.stopped == Some(true),
+                PackageAction::ClearData | PackageAction::ClearCache => false,
+            }
+        }
+        Action::Setting { value, .. } => after == value.as_deref().unwrap_or("null"),
+        Action::DefaultHome { component } => after == component,
+        Action::Shell { .. } => false,
+    }
+}
+fn validate_setting(namespace: &str, key: &str, value: Option<&str>) -> Result<()> {
+    let supported = matches!(
+        (namespace, key),
+        (
+            "global",
+            "window_animation_scale" | "transition_animation_scale" | "animator_duration_scale"
+        ) | ("system", "screen_brightness" | "volume_music")
+    );
+    if !supported {
+        return Err(PocError::new(
+            "input",
+            "Choose a setting from the supported catalog.",
+        ));
+    }
+    if let Some(v) = value {
+        let valid = if key.ends_with("_scale") {
+            ["0", "0.5", "1", "1.5", "2", "5", "10"].contains(&v)
+        } else {
+            v.parse::<u16>().is_ok_and(|n| n <= 255)
+        };
+        if !valid {
+            return Err(PocError::new("input", "Choose a supported setting value."));
+        }
+    }
+    Ok(())
+}
+fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, String)> {
+    let mut losses = Vec::new();
+    let result = match a {
+        Action::Package { package, action } => {
+            let p = package_arg(package)?;
+            let (title, command, effect) = match action {
+                PackageAction::Enable => (
+                    "Enable app",
+                    format!("pm enable --user {user} {p}"),
+                    "Allow the app to run in this profile.",
+                ),
+                PackageAction::ResetEnabled => (
+                    "Restore default app state",
+                    format!("pm default-state --user {user} {p}"),
+                    "Let the package's default enabled state apply.",
+                ),
+                PackageAction::Disable => (
+                    "Disable app",
+                    format!("pm disable-user --user {user} {p}"),
+                    "Hide and stop the app in this profile. Its data stays on the TV.",
+                ),
+                PackageAction::ForceStop => (
+                    "Force stop app",
+                    format!("am force-stop --user {user} {p}"),
+                    "Stop the app and its current playback or background work.",
+                ),
+                PackageAction::Remove => {
+                    losses.push("App data for this profile will be deleted. Installing the APK again does not restore it.".into());
+                    (
+                        "Remove app from profile",
+                        format!("pm uninstall --user {user} {p}"),
+                        "Remove this app for the selected profile. Other profiles are not requested to change.",
+                    )
+                }
+                PackageAction::Restore => (
+                    "Restore existing package",
+                    format!("cmd package install-existing --user {user} {p}"),
+                    "Re-add a package that remains on the TV. Deleted app data is not restored.",
+                ),
+                PackageAction::ClearData => {
+                    losses.push("Sign-ins, settings, downloads and other app data in this profile will be deleted.".into());
+                    (
+                        "Clear app data",
+                        format!("pm clear --user {user} {p}"),
+                        "Reset the app for this profile. This cannot be undone.",
+                    )
+                }
+                PackageAction::ClearCache => (
+                    "Clear app cache",
+                    format!("pm clear --cache-only --user {user} {p}"),
+                    "Ask Android to clear the app's cache. Older firmware may not support this option.",
+                ),
+            };
+            (format!("{title} · {package}"), effect.into(), command)
+        }
+        Action::Shell { command } => {
+            if command.trim().is_empty() || command.len() > 8192 || command.contains('\0') {
+                return Err(PocError::new(
+                    "input",
+                    "Enter a nonempty command up to 8 KiB.",
+                ));
+            }
+            losses.push("Shell commands can change the whole TV, including other profiles. There is no automatic undo. Do not include passwords or pairing codes; command text is retained in local history.".into());
+            (
+                "Run shell command".into(),
+                "Run exactly the command shown using the connected ADB shell identity.".into(),
+                command.clone(),
+            )
+        }
+        Action::Setting {
+            namespace,
+            key,
+            value,
+        } => {
+            validate_setting(namespace, key, value.as_deref())?;
+            let command = if let Some(v) = value {
+                format!(
+                    "settings --user {user} put {namespace} {} {}",
+                    shell_quote(key),
+                    shell_quote(v)
+                )
+            } else {
+                format!(
+                    "settings --user {user} delete {namespace} {}",
+                    shell_quote(key)
+                )
+            };
+            (
+                format!("Change {key}"),
+                if namespace == "global" {
+                    "This is a TV-wide setting and affects every profile."
+                } else {
+                    "Change the selected profile's setting; firmware may ignore this value."
+                }
+                .into(),
+                command,
+            )
+        }
+        Action::DefaultHome { component } => {
+            let c = component_arg(component)?;
+            ("Set default Home app".into(),"Request this Home activity for the profile. OEM firmware may reject it or show a TV chooser. Test the physical Home button afterwards.".into(),format!("cmd package set-home-activity --user {user} {c}"))
+        }
+    };
+    Ok((result.0, result.1, losses, result.2))
+}

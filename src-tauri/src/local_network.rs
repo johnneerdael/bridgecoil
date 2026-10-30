@@ -30,7 +30,7 @@ fn require_grant(granted: bool) -> crate::Result<()> {
     } else {
         Err(adb_core::backend::PocError::new(
             "permission",
-            "Allow local network access in Android Settings → Apps → ADB Studio → Permissions, then retry.",
+            "Allow local network access in Android Settings → Apps → Bridgecoil → Permissions, then retry.",
         ))
     }
 }
@@ -72,4 +72,19 @@ mod tests {
         assert!(e.message.contains("Settings"));
         assert!(require_grant(true).is_ok());
     }
+}
+
+#[cfg(target_os = "android")]
+pub async fn set_appearance(app: &AppHandle, dark: bool) -> crate::Result<()> {
+    let handle = app.state::<LanHandle<tauri::Wry>>().0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        handle.run_mobile_plugin::<serde_json::Value>(
+            "setAppearance",
+            serde_json::json!({ "dark": dark }),
+        )
+    })
+    .await
+    .map_err(|e| crate::err(e))?
+    .map_err(|e| crate::err(e))?;
+    Ok(())
 }

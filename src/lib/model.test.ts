@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 import { canInstall, errorMessage, type Device, type Selection } from "./model";
 const device = {
   id: "a",
+  deviceId: "device-a",
+  profileId: 0,
+  serial: "test",
+  build: "test",
+  manufacturer: "test",
   model: "TV",
   endpoint: "tv:123",
   encrypted: true,

@@ -1,0 +1,70 @@
+/* Bridgecoil 1.0 — semantic tokens. Prefer data-theme=dark|light on the root. */
+:root,
+[data-theme="dark"] {
+  --bc-canvas: #101318;
+  --bc-surface: #191e26;
+  --bc-raised: #232b36;
+  --bc-hover: #2c3542;
+  --bc-border: #465366;
+  --bc-text: #f2f5f9;
+  --bc-muted: #b0bdcf;
+  --bc-subtle: #8190a5;
+  --bc-primary: #d4f56b;
+  --bc-onPrimary: #172107;
+  --bc-primarySoft: #2a351d;
+  --bc-secondary: #aab8ff;
+  --bc-secondarySoft: #293149;
+  --bc-success: #75dabd;
+  --bc-successSoft: #1b352f;
+  --bc-warning: #e9c473;
+  --bc-warningSoft: #3a3020;
+  --bc-danger: #ffa2b2;
+  --bc-dangerSoft: #40262f;
+  --bc-focus: #d4f56b;
+  --bc-controlBorder: #6b7c95;
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --bc-canvas: #f1f4f8;
+  --bc-surface: #ffffff;
+  --bc-raised: #e8edf4;
+  --bc-hover: #dfe6ef;
+  --bc-border: #8290a3;
+  --bc-text: #17202e;
+  --bc-muted: #4c5b70;
+  --bc-subtle: #617086;
+  --bc-primary: #436000;
+  --bc-onPrimary: #ffffff;
+  --bc-primarySoft: #e7f0d3;
+  --bc-secondary: #4053a5;
+  --bc-secondarySoft: #e8ecfc;
+  --bc-success: #11614d;
+  --bc-successSoft: #ddf3ea;
+  --bc-warning: #73500b;
+  --bc-warningSoft: #fff0cf;
+  --bc-danger: #a02643;
+  --bc-dangerSoft: #fce5eb;
+  --bc-focus: #436000;
+  --bc-controlBorder: #758298;
+  color-scheme: light;
+}
+:root {
+  --bc-font-brand: "Manrope", sans-serif;
+  --bc-font-ui: "Inter", system-ui, sans-serif;
+  --bc-font-mono: "IBM Plex Mono", monospace;
+  --bc-radius-control: 10px;
+  --bc-radius-panel: 16px;
+  --bc-radius-dialog: 22px;
+  --bc-space-unit: 4px;
+  --bc-motion-fast: 120ms;
+  --bc-motion-standard: 180ms;
+  --bc-motion-panel: 240ms;
+  --bc-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --bc-motion-fast: 0ms;
+    --bc-motion-standard: 0ms;
+    --bc-motion-panel: 0ms;
+  }
+}

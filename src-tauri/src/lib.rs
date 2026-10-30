@@ -1,4 +1,5 @@
 mod local_network;
+mod workspace;
 use adb_core::{
     apk::{self, ApkInfo},
     backend::{Client, DeviceInfo, InstallProgress, PocError},
@@ -13,6 +14,7 @@ use tauri::{Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_fs::FsExt;
 use tempfile::NamedTempFile;
+use workspace::*;
 
 type Result<T> = std::result::Result<T, PocError>;
 struct Selected {
@@ -34,6 +36,20 @@ struct SelectionInfo {
 }
 fn err(e: impl std::fmt::Display) -> PocError {
     PocError::new("file", e.to_string())
+}
+#[tauri::command]
+async fn set_appearance(app: tauri::AppHandle, dark: bool) -> Result<()> {
+    #[cfg(target_os = "android")]
+    local_network::set_appearance(&app, dark).await?;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    app.set_theme(Some(if dark {
+        tauri::Theme::Dark
+    } else {
+        tauri::Theme::Light
+    }));
+    #[cfg(target_os = "ios")]
+    let _ = (app, dark);
+    Ok(())
 }
 #[tauri::command]
 async fn connection_status(state: State<'_, Backend>) -> Result<Option<DeviceInfo>> {
@@ -234,9 +250,22 @@ pub fn run() {
                 data.join("identity"),
             ))));
             app.manage(Selections::default());
+            app.manage(adb_core::workspace::engine::Workspace::new(
+                adb_core::workspace::history::History::open(&data.join("history.sqlite3"))?,
+            ));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            workspace_query,
+            prepare_action,
+            apply_action,
+            discard_review,
+            list_history,
+            clear_history,
+            prepare_recovery,
+            select_profile,
+            remote_action,
+            set_appearance,
             connection_status,
             pair_device,
             connect_device,
@@ -245,5 +274,5 @@ pub fn run() {
             install_apk
         ])
         .run(tauri::generate_context!())
-        .expect("failed to run ADB Studio");
+        .expect("failed to run Bridgecoil");
 }

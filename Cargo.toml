@@ -4,6 +4,7 @@ resolver = "2"
 
 [profile.dev]
 debug = 0
+incremental = false
 
 [profile.dev.package.rsa]
 opt-level = 3

@@ -37,6 +37,11 @@ type Result<T> = std::result::Result<T, PocError>;
 #[serde(rename_all = "camelCase")]
 pub struct DeviceInfo {
     pub id: String,
+    pub device_id: String,
+    pub profile_id: u32,
+    pub serial: String,
+    pub build: String,
+    pub manufacturer: String,
     pub endpoint: String,
     pub model: String,
     pub android_version: String,
@@ -104,16 +109,77 @@ impl Client {
             socket.set_nodelay(true).map_err(connection_error)?;
             let mut wire=Connection::connect_tls(MaybeTls::plain(TokioTcp::new(socket)),key,&[Feature::ShellV2,Feature::StatV2,Feature::SendrecvV2],&tls).await.map_err(connection_error)?;
             let encrypted=wire.transport().is_tls();
-            if !encrypted && !allow_legacy {return Err(PocError::new("legacyApproval","This port uses unencrypted legacy ADB. Enable the explicit legacy option only on a trusted local network."));}
-            let output=command(&mut wire,"getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.version.sdk; getprop ro.product.cpu.abilist").await?;
-            if output.0!=Some(0) {return Err(PocError::new("connection","Connected but device inspection failed."));}
+            if !encrypted&&!allow_legacy{return Err(PocError::new("legacyApproval","This port uses unencrypted legacy ADB. Enable the legacy option only on a trusted local network."));}
+            let output=command(&mut wire,"getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.version.sdk; getprop ro.product.cpu.abilist; getprop ro.serialno; getprop ro.build.fingerprint; getprop ro.product.manufacturer; getprop persist.adb.wifi.guid").await?;
+            if output.0!=Some(0){return Err(PocError::new("connection","Connected but device inspection failed."));}
             let lines:Vec<_>=output.1.lines().map(str::trim).collect();
-            let info=DeviceInfo{id:Uuid::new_v4().to_string(),endpoint:endpoint.clone(),model:lines.first().filter(|s|!s.is_empty()).unwrap_or(&"Android device").to_string(),android_version:lines.get(1).unwrap_or(&"Unknown").to_string(),sdk:lines.get(2).and_then(|v|v.parse().ok()).unwrap_or(0),abis:lines.get(3).unwrap_or(&"").split(',').filter(|v|!v.is_empty()).map(str::to_owned).collect(),encrypted};
+            let field=|n:usize|lines.get(n).copied().unwrap_or("").to_owned();
+            let id=Uuid::new_v4().to_string();let serial=field(4);let manufacturer=field(6);let guid=field(7);
+            let device_id=crate::workspace::driver::device_identity(if guid.is_empty(){&serial}else{&guid},&manufacturer,&id);
+            let info=DeviceInfo{id,device_id,profile_id:0,serial,manufacturer,build:field(5),endpoint:endpoint.clone(),model:lines.first().filter(|v|!v.is_empty()).unwrap_or(&"Android device").to_string(),android_version:field(1),sdk:field(2).parse().unwrap_or(0),abis:field(3).split(',').filter(|v|!v.is_empty()).map(str::to_owned).collect(),encrypted};
             Ok(Active{wire,info})
-        }).await.map_err(|_|PocError::new("timeout","Connection timed out. Check the TV's connection port, network and approval prompt."))??;
+        }).await.map_err(|_|PocError::new("timeout","Connection timed out. Check the TV's connection port, local-network permission and approval prompt."))??;
         let info = result.info.clone();
         self.active = Some(result);
         Ok(info)
+    }
+    pub fn current_target(&self) -> Option<crate::workspace::types::Target> {
+        self.active
+            .as_ref()
+            .map(|a| crate::workspace::types::Target {
+                device_id: a.info.device_id.clone(),
+                session_id: a.info.id.clone(),
+                profile_id: a.info.profile_id,
+            })
+    }
+    pub fn select_profile(
+        &mut self,
+        target: &crate::workspace::types::Target,
+        profile_id: u32,
+    ) -> Result<DeviceInfo> {
+        crate::workspace::types::validate_target(self.current_target().as_ref(), target)?;
+        let active = self
+            .active
+            .as_mut()
+            .ok_or_else(|| PocError::new("staleTarget", "Device disconnected."))?;
+        if active.info.profile_id != profile_id {
+            active.info.profile_id = profile_id;
+            active.info.id = Uuid::new_v4().to_string();
+        }
+        Ok(active.info.clone())
+    }
+    pub async fn execute_target(
+        &mut self,
+        target: &crate::workspace::types::Target,
+        cmd: &str,
+    ) -> Result<crate::workspace::driver::ShellOutput> {
+        crate::workspace::types::validate_target(self.current_target().as_ref(), target)?;
+        if cmd.contains('\0') || cmd.len() > 65536 {
+            return Err(PocError::new(
+                "input",
+                "Command is invalid or exceeds 64 KiB.",
+            ));
+        }
+        let mut active = self
+            .active
+            .take()
+            .ok_or_else(|| PocError::new("staleTarget", "Device disconnected."))?;
+        match timeout(
+            Duration::from_secs(30),
+            command_output(&mut active.wire, cmd),
+        )
+        .await
+        {
+            Ok(Ok(output)) => {
+                self.active = Some(active);
+                Ok(output)
+            }
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err(PocError::new(
+                "timeout",
+                "Device operation timed out. Reconnect before retrying.",
+            )),
+        }
     }
     pub async fn install(
         &mut self,
@@ -184,7 +250,7 @@ impl Client {
             }
             progress(InstallProgress{stage:"installing".into(),sent:actual.bytes,total:actual.bytes});
             installer_started=true;
-            let output=command(&mut active.wire,&format!("pm install -r --user 0 {}",shell_quote(&remote))).await?;
+            let output=command(&mut active.wire,&format!("pm install -r --user {} {}",active.info.profile_id,shell_quote(&remote))).await?;
             if !install_succeeded(output.0,&output.1) {return Err(PocError::new("installRejected",format!("Android rejected the installation: {}",output.1.trim())));}
             progress(InstallProgress{stage:"verifying".into(),sent:actual.bytes,total:actual.bytes});
             let output=command(&mut active.wire,&format!("dumpsys package {}",shell_quote(&actual.package))).await?;
@@ -237,28 +303,62 @@ pub fn installed_version(output: &str) -> Option<u64> {
     })
 }
 async fn command(wire: &mut Wire, cmd: &str) -> Result<(Option<u8>, String)> {
+    let output = command_output(wire, cmd).await?;
+    Ok((output.exit_code, output.combined()))
+}
+async fn command_output(
+    wire: &mut Wire,
+    cmd: &str,
+) -> Result<crate::workspace::driver::ShellOutput> {
     use libadb::shell::v2::{self, Frame};
     let mut rx = vec![0u8; 65536];
     let mut shell = v2::open(wire, cmd, &mut rx)
         .await
         .map_err(connection_error)?;
     shell.close_stdin().await.map_err(connection_error)?;
-    let mut output = Vec::new();
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
     let exit = loop {
         match shell.read_frame().await.map_err(connection_error)? {
-            Frame::Stdout(b) | Frame::Stderr(b) => {
-                if output.len() + b.len() > 1024 * 1024 {
+            Frame::Stdout(b) => {
+                if stdout.len() + stderr.len() + b.len() > 1024 * 1024 {
                     return Err(PocError::new(
                         "outputLimit",
-                        "TV output exceeded the 1 MiB limit.",
+                        "Device output exceeded the 1 MiB limit.",
                     ));
                 }
-                output.extend_from_slice(&b);
+                stdout.extend_from_slice(&b);
+            }
+            Frame::Stderr(b) => {
+                if stdout.len() + stderr.len() + b.len() > 1024 * 1024 {
+                    return Err(PocError::new(
+                        "outputLimit",
+                        "Device output exceeded the 1 MiB limit.",
+                    ));
+                }
+                stderr.extend_from_slice(&b);
             }
             Frame::Exit(code) => break code,
             _ => {}
         }
     };
     shell.close().await.map_err(connection_error)?;
-    Ok((Some(exit), String::from_utf8_lossy(&output).into_owned()))
+    Ok(crate::workspace::driver::ShellOutput {
+        exit_code: Some(exit),
+        stdout: String::from_utf8_lossy(&stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&stderr).into_owned(),
+    })
+}
+#[async_trait::async_trait]
+impl crate::workspace::driver::ShellDriver for Client {
+    fn current_target(&self) -> Option<crate::workspace::types::Target> {
+        Client::current_target(self)
+    }
+    async fn shell(
+        &mut self,
+        target: &crate::workspace::types::Target,
+        command: &str,
+    ) -> Result<crate::workspace::driver::ShellOutput> {
+        self.execute_target(target, command).await
+    }
 }

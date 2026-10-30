@@ -10,7 +10,7 @@ configs:
 settingGroups:
   app:
     base:
-      PRODUCT_NAME: ADB Studio
+      PRODUCT_NAME: Bridgecoil
       PRODUCT_BUNDLE_IDENTIFIER: nl.neerdael.adbstudio.poc
 targetTemplates:
   app:

@@ -1,6 +1,15 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import Modal from "./lib/Modal.svelte";
+  import WorkspaceScreen from "./lib/workspace/WorkspaceScreen.svelte";
+  import Icon from "./lib/workspace/Icon.svelte";
+  import { destinations, type Destination } from "./lib/workspace/client";
+  import {
+    parseTheme,
+    applyTheme,
+    themeKey,
+    type ThemePreference,
+  } from "./lib/theme/theme";
   import { invoke, isTauri } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import {
@@ -10,7 +19,25 @@
     type Selection,
   } from "./lib/model";
   const native = isTauri();
-  let page = $state<"connect" | "install">("connect");
+  let theme = $state<ThemePreference>(
+    parseTheme(localStorage.getItem(themeKey)),
+  );
+  let systemDark = $state(false);
+  $effect(() => {
+    const dark = applyTheme(theme, systemDark) === "dark";
+    localStorage.setItem(themeKey, theme);
+    if (native) void invoke("set_appearance", { dark }).catch(console.error);
+  });
+  onMount(() => {
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!media) return;
+    systemDark = media.matches;
+    const changed = (event: MediaQueryListEvent) =>
+      (systemDark = event.matches);
+    media.addEventListener("change", changed);
+    return () => media.removeEventListener("change", changed);
+  });
+  let page = $state<Destination>("connect");
   let step = $state<"pair" | "connect">("pair");
   let pairEndpoint = $state("");
   let code = $state("");
@@ -114,8 +141,8 @@
         allowLegacy: legacy,
       });
       localStorage.setItem("adb.connectionEndpoint", endpoint.trim());
-      notice = "Connected. Choose an APK to install.";
-      page = "install";
+      notice = "Connected. Your device workspace is ready.";
+      page = "device";
     });
   }
   async function disconnect() {
@@ -171,7 +198,7 @@
     messagePage = 0;
     feedbackOpen = true;
   }
-  function navigate(next: "connect" | "install") {
+  function navigate(next: Destination) {
     page = next;
     menuOpen = false;
   }
@@ -201,9 +228,19 @@
       ></button
     >
     <div class="brand">
-      <strong>ADB Studio</strong><small
-        >{device ? label(device.model, 36) : "Android TV workspace"}</small
-      >
+      <div class="brand-wordmark" aria-label="Bridgecoil">
+        <img
+          class="logo-dark"
+          src="/brand/bridgecoil-horizontal-dark.svg"
+          alt=""
+        />
+        <img
+          class="logo-light"
+          src="/brand/bridgecoil-horizontal-light.svg"
+          alt=""
+        />
+      </div>
+      <small>{device ? label(device.model, 36) : "Android TV workspace"}</small>
     </div>
     <button
       class="connection-badge"
@@ -229,17 +266,25 @@
         ></button
       >{/if}
     <header class="page-heading">
-      <h1>{page === "connect" ? "Connect a device" : "Install an app"}</h1>
-      <button
-        class="help-trigger"
-        aria-label={page === "connect"
-          ? "Finding the debugging options"
-          : "About APK installation"}
-        onclick={() => {
-          if (page === "connect") helpOpen = true;
-          else installHelpOpen = true;
-        }}>Help <span aria-hidden="true">?</span></button
-      >
+      <h1>
+        {page === "connect"
+          ? "Connect a device"
+          : page === "install"
+            ? "Install an app"
+            : destinations.find((d) => d.id === page)?.label}
+      </h1>
+      {#if page === "connect" || page === "install"}
+        <button
+          class="help-trigger"
+          aria-label={page === "connect"
+            ? "Finding the debugging options"
+            : "About APK installation"}
+          onclick={() => {
+            if (page === "connect") helpOpen = true;
+            else installHelpOpen = true;
+          }}>Help <span aria-hidden="true">?</span></button
+        >
+      {/if}
     </header>
     {#if error || notice}<aside
         class="feedback"
@@ -262,7 +307,20 @@
         <button class="text-action" onclick={showFeedback}>Details</button>
       </aside>{/if}
     <div class="page-content">
-      {#if page === "connect"}
+      {#if page !== "connect" && page !== "install"}
+        <WorkspaceScreen
+          {page}
+          {device}
+          ondevice={(d) => {
+            if (JSON.stringify(d) !== JSON.stringify(device)) {
+              device = d;
+              selection = null;
+              confirmed = false;
+            }
+          }}
+          onnavigate={navigate}
+        />
+      {:else if page === "connect"}
         {#if device}
           <section class="center-state">
             <div class="state-icon" aria-hidden="true">✓</div>
@@ -488,7 +546,7 @@
               Select a standalone APK using the native file picker.
             </p>
             <p class="target-caption">
-              Target: {label(device.model, 55)} · Owner
+              Target: {label(device.model, 55)} · Profile {device.profileId}
             </p>
             <button class="primary" onclick={pick} disabled={busy || !native}
               >{busy ? busyLabel : "Choose APK file"}<span aria-hidden="true"
@@ -509,12 +567,20 @@
   onclose={() => (menuOpen = false)}
 >
   <nav class="drawer-menu" aria-label="Main navigation">
+    {#each destinations as destination}<button
+        class:active={page === destination.id}
+        aria-current={page === destination.id ? "page" : undefined}
+        onclick={() => navigate(destination.id)}
+        ><Icon name={destination.id} /><span
+          >{destination.label}<small>{destination.note}</small></span
+        ></button
+      >{/each}
     <button
       class:active={page === "connect"}
       aria-label="Connect device"
       aria-current={page === "connect" ? "page" : undefined}
       onclick={() => navigate("connect")}
-      ><span aria-hidden="true">▣</span><span
+      ><Icon name="pair" /><span
         >Connect device<small>Pair and manage the connection</small></span
       ></button
     ><button
@@ -522,11 +588,24 @@
       aria-label="Install app"
       aria-current={page === "install" ? "page" : undefined}
       onclick={() => navigate("install")}
-      ><span aria-hidden="true">↓</span><span
+      ><Icon name="install" /><span
         >Install app<small>Choose and review an APK</small></span
       ></button
     >
   </nav>
+  <fieldset class="theme-picker">
+    <legend>Appearance</legend>
+    <div>
+      {#each ["system", "light", "dark"] as choice}
+        <button
+          class:chosen={theme === choice}
+          aria-pressed={theme === choice}
+          onclick={() => (theme = choice as ThemePreference)}
+          >{choice[0].toUpperCase() + choice.slice(1)}</button
+        >
+      {/each}
+    </div>
+  </fieldset>
 </Modal>
 <Modal
   open={helpOpen}
@@ -569,7 +648,7 @@
       </div>
       <div>
         <dt>Profile</dt>
-        <dd>Owner · user 0</dd>
+        <dd>Profile {device.profileId}</dd>
       </div>
     </dl>
     <button

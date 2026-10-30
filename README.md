@@ -1,15 +1,17 @@
-# ADB Studio — connection and install POC
+# Bridgecoil
 
 A Tauri 2 app with a Rust backend and a mobile-first Svelte interface. This first version prioritizes direct ADB pairing, connection and installation of a standalone APK selected through a native file picker. The broader approved workspace design remains in `docs/superpowers/specs/`.
 
-## What works in this POC
+The current implementation adds the five workspace areas through a hamburger menu, Bridgecoil's supplied typography/palette/assets, System/Light/Dark appearance and bounded page layouts. The broader implementation is in progress: app labels/icons, split sets/signature review, discovery, physical key mapping/startup, artifact transfers and full platform acceptance are not complete. The retained branded APK is a milestone build, not the final workspace build.
+
+## Connection and install foundation
 
 - Direct pairing-code exchange and separate connection endpoint, without a desktop ADB server or external adb executable in the app.
 - Persistent, app-private RSA host identity. A new installation must be paired with the TV independently.
 - TLS wireless-debugging connections; legacy unencrypted connections require an explicit option.
 - Device model, Android version, SDK and ABI inspection.
 - Native APK selection, app-private staging, binary-manifest package/version inspection and SHA-256 fingerprint.
-- Streamed transfer, install/update for Owner (Android user 0), and installed-version readback before reporting success.
+- Streamed transfer, install/update for the selected Android profile, and installed-version readback before reporting success.
 - Per-stage progress, structured failures, stale-session rejection and unknown-outcome handling. No automatic uninstall or installation retry.
 
 These are implemented code paths, not a claim of complete physical-device acceptance. See `docs/validation/POC.md` for the actual validation matrix.
@@ -67,7 +69,7 @@ This creates an unsigned simulator app, not a physical-device IPA. A physical iP
 npm run build:desktop
 ```
 
-This creates `target/debug/bundle/macos/ADB Studio.app`. Local debug builds are not store releases or notarized distributions.
+This creates `target/debug/bundle/macos/Bridgecoil.app`. Local debug builds are not store releases or notarized distributions.
 
 ## Current boundaries
 

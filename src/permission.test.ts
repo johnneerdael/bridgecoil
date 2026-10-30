@@ -30,9 +30,7 @@ it("explains native LAN denial and never connects after denied pairing", async (
     target: { value: "012345" },
   });
   await fireEvent.submit(
-    screen
-      .getByRole("button", { name: "Pair TV" })
-      .closest("form")!,
+    screen.getByRole("button", { name: "Pair TV" }).closest("form")!,
   );
   const alert = await screen.findByRole("alert");
   expect(alert.textContent).toContain("Local network access is off");

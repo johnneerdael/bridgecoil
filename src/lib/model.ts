@@ -1,5 +1,10 @@
 export type Device = {
   id: string;
+  deviceId: string;
+  profileId: number;
+  serial: string;
+  build: string;
+  manufacturer: string;
   model: string;
   endpoint: string;
   encrypted: boolean;
