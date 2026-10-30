@@ -1,0 +1,7 @@
+{
+  "sourceSha256": "2d22e17a3f4c9c00f9189726071905e2fffe11f39eedb6fdb7d7440220ac2e27",
+  "jarSha256": "8e64268b240587794785b4519a3cb50278fb3197d231c91a863373efa6c91023",
+  "compileSdk": 36,
+  "buildTools": "36.1.0",
+  "minSdk": 24
+}

@@ -61,7 +61,7 @@ it("browses an app and prepares its selected-profile action without executing it
   const query = vi
     .fn()
     .mockResolvedValueOnce({
-      items: ["org.demo"],
+      items: [{ package: "org.demo", label: "Player", icon: null }],
       page: 0,
       pageSize: 4,
       total: 1,
@@ -83,9 +83,7 @@ it("browses an app and prepares its selected-profile action without executing it
     onreview,
     oninstall: vi.fn(),
   });
-  await fireEvent.click(
-    await screen.findByRole("button", { name: "org.demo" }),
-  );
+  await fireEvent.click(await screen.findByRole("button", { name: /Player/ }));
   await fireEvent.click(await screen.findByRole("button", { name: "actions" }));
   await fireEvent.click(screen.getByRole("button", { name: "Disable" }));
   await waitFor(() => expect(onreview).toHaveBeenCalledWith(review));

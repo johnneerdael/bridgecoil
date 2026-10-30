@@ -8,6 +8,7 @@
     type PackageAction,
     type Page,
     type PackageDetail,
+    type AppMetadata,
   } from "./client";
   import Modal from "../Modal.svelte";
   import Output from "./Output.svelte";
@@ -35,7 +36,8 @@
   let refresh = $state(0);
   let busy = $state(false);
   let error = $state("");
-  let result = $state<Page<string>>({
+  type AppPage = Page<AppMetadata> & { metadataNote?: string | null };
+  let result = $state<AppPage>({
     items: [],
     total: 0,
     page: 0,
@@ -70,7 +72,7 @@
     result = { items: [], total: 0, page: 0, pageSize: 4 };
     detail = null;
     void api
-      .query<Page<string>>(target, q)
+      .query<AppPage>(target, q)
       .then((r) => {
         if (!cancelled) result = r;
       })
@@ -162,23 +164,31 @@
     <label class="sr-only" for="app-search">Search apps</label><input
       id="app-search"
       bind:value={search}
-      placeholder="Search package IDs"
+      placeholder="Search app names"
     /><button class="secondary" disabled={busy} type="submit">Search</button>
   </form>
   <p class="subtle">
     Profile {device.profileId} · {busy
       ? "Reading apps…"
-      : `${result.total} apps`} · Select an app to inspect it
+      : `${result.total} apps`}{result.metadataNote
+      ? " · Some app details unavailable"
+      : ""}
   </p>
   {#if error}<p class="error-text" role="status">{error}</p>{/if}
   <div class="row-list">
-    {#each result.items as packageId}<button
+    {#each result.items as app}<button
         class="list-row"
         disabled={busy}
-        onclick={() => inspect(packageId)}
-        ><Icon name="apps" /><span class="truncate">{packageId}</span><Icon
-          name="chevron-right"
-        /></button
+        onclick={() => inspect(app.package)}
+        >{#if app.icon}<img
+            class="app-icon"
+            src={`data:image/png;base64,${app.icon}`}
+            alt=""
+          />{:else}<Icon name="apps" />{/if}<span class="truncate"
+          ><strong>{app.label || app.package}</strong>{#if app.label}<small
+              >{app.package}</small
+            >{/if}</span
+        ><Icon name="chevron-right" /></button
       >{/each}
     {#if !busy && !result.items.length}<p class="empty-caption">
         No apps match this view.
@@ -193,7 +203,12 @@
   />
 </section>
 <Modal open={!!detail} title="Application" onclose={() => (detail = null)}>
-  {#if detail}<h3 class="break-word">{detail.package}</h3>
+  {#if detail}<h3 class="break-word">
+      {detail.metadata?.label || detail.package}
+    </h3>
+    {#if detail.metadata?.label}<p class="subtle break-word">
+        {detail.package}
+      </p>{/if}
     <div class="segmented">
       {#each ["overview", "actions", "permissions", "raw"] as section}<button
           class:chosen={tab === section}
@@ -270,10 +285,18 @@
         onpage={(n) => (actionPage = n)}
       />
     {:else if tab === "permissions"}<Output
-        text={detail.permissions.join("\n") ||
+        text={detail.metadata?.permissions
+          ?.map(
+            (p) =>
+              `${p.granted ? "Granted" : "Not granted"} · ${p.name}${p.protection === 1 ? " · runtime" : ""}`,
+          )
+          .join("\n") ||
+          detail.permissions.join("\n") ||
           "No permission details reported."}
       />
-    {:else}<Output text={detail.raw} />{/if}
+    {:else}<Output
+        text={`Signing certificate SHA-256:\n${detail.metadata?.signers?.join("\n") || "Not reported"}\n\n${detail.raw}`}
+      />{/if}
     {#if error}<p class="error-text" role="alert">{error}</p>{/if}
   {/if}
 </Modal>

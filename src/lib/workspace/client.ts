@@ -90,7 +90,17 @@ export type RemoteAction =
   | { kind: "text"; text: string }
   | { kind: "launch"; component: string };
 export type Profile = { id: number; name: string; running: boolean };
+export type AppMetadata = {
+  package: string;
+  label: string | null;
+  icon: string | null;
+  activities?: string[];
+  permissions?: { name: string; granted: boolean; protection: number | null }[];
+  signers?: string[];
+  error?: string | null;
+};
 export type PackageDetail = {
+  metadata?: AppMetadata | null;
   package: string;
   state: {
     installed: boolean | null;

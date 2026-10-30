@@ -20,6 +20,20 @@ impl ShellOutput {
 #[async_trait]
 pub trait ShellDriver: Send {
     fn current_target(&self) -> Option<Target>;
+    async fn labels(
+        &mut self,
+        _target: &Target,
+        _packages: &[String],
+    ) -> Result<Option<Vec<super::metadata::Metadata>>, PocError> {
+        Ok(None)
+    }
+    async fn metadata(
+        &mut self,
+        _target: &Target,
+        _packages: &[String],
+    ) -> Result<Option<Vec<super::metadata::Metadata>>, PocError> {
+        Ok(None)
+    }
     async fn shell(&mut self, target: &Target, command: &str) -> Result<ShellOutput, PocError>;
 }
 pub fn device_identity(serial: &str, manufacturer: &str, session: &str) -> String {

@@ -1,8 +1,9 @@
+use super::metadata::Metadata;
 use super::{commands::*, driver::*, engine::parse_package_state, types::*};
 use crate::{backend::PocError, shell_quote};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 type Result<T> = std::result::Result<T, PocError>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
@@ -162,10 +163,61 @@ pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Valu
                 );
                 packages.retain(|p| !installed.contains(p));
             }
+            let mut label_note = None;
+            let labels = match d.labels(t, &packages).await {
+                Ok(Some(rows)) => rows,
+                Ok(None) => Vec::new(),
+                Err(e) => {
+                    validate_target(d.current_target().as_ref(), t)?;
+                    label_note = Some(e.message);
+                    Vec::new()
+                }
+            };
+            let labels: HashMap<_, _> =
+                labels.into_iter().map(|m| (m.package.clone(), m)).collect();
+            let label = |p: &String| {
+                labels
+                    .get(p)
+                    .and_then(|m| m.label.as_deref())
+                    .unwrap_or(p)
+                    .to_lowercase()
+            };
             let needle = search.to_lowercase();
-            packages.retain(|s| s.to_lowercase().contains(&needle));
-            Ok(json!(paged(packages, page, page_size)?))
+            packages.retain(|p| p.to_lowercase().contains(&needle) || label(p).contains(&needle));
+            packages.sort_by_cached_key(|p| (label(p), p.clone()));
+            let ids = paged(packages, page, page_size)?;
+            let details = match d.metadata(t, &ids.items).await {
+                Ok(Some(rows)) => rows,
+                Ok(None) => Vec::new(),
+                Err(e) => {
+                    validate_target(d.current_target().as_ref(), t)?;
+                    label_note = Some(e.message);
+                    Vec::new()
+                }
+            };
+            let details: HashMap<_, _> = details
+                .into_iter()
+                .map(|m| (m.package.clone(), m))
+                .collect();
+            let items: Vec<_> = ids
+                .items
+                .into_iter()
+                .map(|p| {
+                    details
+                        .get(&p)
+                        .cloned()
+                        .or_else(|| labels.get(&p).cloned())
+                        .unwrap_or_else(|| Metadata {
+                            package: p,
+                            ..Default::default()
+                        })
+                })
+                .collect();
+            Ok(
+                json!({"items":items,"total":ids.total,"page":ids.page,"pageSize":ids.page_size,"metadataNote":label_note.map(|_|"Some app details could not be read. Package IDs remain available.")}),
+            )
         }
+
         Query::Package { package } => {
             let p = package_arg(&package)?;
             let raw = checked(d, t, &format!("dumpsys package {p}")).await?;
@@ -187,10 +239,23 @@ pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Valu
                 .take(200)
                 .map(str::to_owned)
                 .collect();
+            let metadata = match d.metadata(t, std::slice::from_ref(&package)).await {
+                Ok(Some(rows)) => rows.into_iter().next(),
+                _ => {
+                    validate_target(d.current_target().as_ref(), t)?;
+                    None
+                }
+            };
+            if let Some(m) = &metadata {
+                activities.extend(m.activities.clone());
+                activities.sort();
+                activities.dedup();
+            }
             Ok(
-                json!({"package":package,"state":state,"versionName":version_name,"activities":activities,"permissions":permissions,"raw":raw}),
+                json!({"package":package,"state":state,"versionName":version_name,"activities":activities,"permissions":permissions,"raw":raw,"metadata":metadata}),
             )
         }
+
         Query::Launchers => {
             let homes=checked(d,t,&format!("cmd package query-activities --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME")).await?;
             let current=checked(d,t,&format!("cmd package resolve-activity --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME")).await?;

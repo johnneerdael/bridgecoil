@@ -63,12 +63,14 @@ struct Active {
 pub struct Client {
     key_dir: PathBuf,
     active: Option<Active>,
+    label_cache: Option<(String, std::time::Instant, String)>,
 }
 impl Client {
     pub fn new(key_dir: PathBuf) -> Self {
         Self {
             key_dir,
             active: None,
+            label_cache: None,
         }
     }
     pub fn status(&self) -> Option<DeviceInfo> {
@@ -180,6 +182,72 @@ impl Client {
                 "Device operation timed out. Reconnect before retrying.",
             )),
         }
+    }
+    pub async fn inspect_metadata(
+        &mut self,
+        target: &crate::workspace::types::Target,
+        packages: &[String],
+    ) -> Result<Vec<crate::workspace::metadata::Metadata>> {
+        crate::workspace::types::validate_target(self.current_target().as_ref(), target)?;
+        if packages.is_empty() {
+            return Ok(Vec::new());
+        }
+        if packages.len() > 32 {
+            return Err(PocError::new(
+                "input",
+                "Inspect at most 32 packages at once.",
+            ));
+        }
+        let arguments = packages
+            .iter()
+            .map(|p| crate::workspace::commands::package_arg(p))
+            .collect::<Result<Vec<_>>>()?
+            .join(" ");
+        let output = self.run_inspector(target, &arguments).await?;
+        crate::workspace::metadata::parse_metadata(&output, packages)
+    }
+    async fn run_inspector(
+        &mut self,
+        target: &crate::workspace::types::Target,
+        arguments: &str,
+    ) -> Result<String> {
+        crate::workspace::types::validate_target(self.current_target().as_ref(), target)?;
+        const JAR: &[u8] = include_bytes!("../assets/bridgecoil-inspector.jar");
+        use sha2::Digest;
+        let hash = hex::encode(sha2::Sha256::digest(JAR));
+        let remote = format!("/data/local/tmp/bridgecoil-inspector-{hash}.jar");
+        let mut active = self
+            .active
+            .take()
+            .ok_or_else(|| PocError::new("connection", "Device disconnected."))?;
+        let staged = timeout(Duration::from_secs(15), async {
+            let mut buffer = vec![0u8; 66000];
+            let mut sync = libadb::sync::open(&mut active.wire, &mut buffer)
+                .await
+                .map_err(connection_error)?;
+            sync.send_start(&remote, 0o100600)
+                .await
+                .map_err(connection_error)?;
+            for chunk in JAR.chunks(65536) {
+                sync.send_data(chunk).await.map_err(connection_error)?;
+            }
+            sync.send_done(0).await.map_err(connection_error)?;
+            sync.quit().await.map_err(connection_error)
+        })
+        .await
+        .map_err(|_| {
+            PocError::new(
+                "timeout",
+                "App metadata staging timed out. Reconnect to continue.",
+            )
+        })?;
+        staged?;
+        self.active = Some(active);
+        let output=self.execute_target(target,&format!("CLASSPATH={} app_process /system/bin nl.neerdael.bridgecoil.BridgecoilInspector {} {}",shell_quote(&remote),target.profile_id,arguments)).await?;
+        if !output.success() {
+            return Err(PocError::new("metadata", output.combined()));
+        }
+        Ok(output.stdout)
     }
     pub async fn install(
         &mut self,
@@ -351,6 +419,30 @@ async fn command_output(
 }
 #[async_trait::async_trait]
 impl crate::workspace::driver::ShellDriver for Client {
+    async fn labels(
+        &mut self,
+        target: &crate::workspace::types::Target,
+        packages: &[String],
+    ) -> Result<Option<Vec<crate::workspace::metadata::Metadata>>> {
+        crate::workspace::types::validate_target(self.current_target().as_ref(), target)?;
+        if let Some((session, when, raw)) = &self.label_cache
+            && session == &target.session_id
+            && when.elapsed() < Duration::from_secs(30)
+        {
+            return crate::workspace::metadata::parse_metadata(raw, packages).map(Some);
+        }
+        let output = self.run_inspector(target, "--labels").await?;
+        let rows = crate::workspace::metadata::parse_metadata(&output, packages)?;
+        self.label_cache = Some((target.session_id.clone(), std::time::Instant::now(), output));
+        Ok(Some(rows))
+    }
+    async fn metadata(
+        &mut self,
+        target: &crate::workspace::types::Target,
+        packages: &[String],
+    ) -> Result<Option<Vec<crate::workspace::metadata::Metadata>>> {
+        self.inspect_metadata(target, packages).await.map(Some)
+    }
     fn current_target(&self) -> Option<crate::workspace::types::Target> {
         Client::current_target(self)
     }
