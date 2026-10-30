@@ -109,17 +109,15 @@
         >Launcher, setup and diagnostics</small
       ></button
     >
-    <button class="tool-tile" onclick={() => onnavigate("install")}
-      ><Icon name="install" /><strong>Install an APK</strong><small
-        >Choose a file on this phone</small
+    <button class="tool-tile" onclick={() => onnavigate("connect")}
+      ><Icon name="pair" /><strong>Connection setup</strong><small
+        >Pair or connect a device</small
       ></button
     >
   </div>
   <div class="page-footer">
     <button class="secondary" disabled={busy} onclick={() => reload++}
       >{busy ? "Inspecting…" : "Refresh"}</button
-    ><button class="secondary" onclick={() => onnavigate("connect")}
-      >Connection</button
     >
   </div>
 </section>

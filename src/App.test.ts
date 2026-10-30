@@ -65,10 +65,10 @@ it("uses a dismissible hamburger menu instead of permanent bottom tabs", async (
   expect(
     await screen.findByRole("dialog", { name: "Navigation" }),
   ).toBeTruthy();
-  await fireEvent.click(screen.getByRole("button", { name: "Install app" }));
-  expect(
-    screen.getByRole("heading", { level: 1, name: "Install an app" }),
-  ).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Install app" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Connect device" })).toBeNull();
+  await fireEvent.click(screen.getByRole("button", { name: /^Apps/ }));
+  expect(screen.getByRole("heading", { level: 1, name: "Apps" })).toBeTruthy();
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(document.querySelector(".bottom-nav")).toBeNull();
 });

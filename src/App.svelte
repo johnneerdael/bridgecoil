@@ -38,6 +38,9 @@
     return () => media.removeEventListener("change", changed);
   });
   let page = $state<Destination>("connect");
+  const activeDestination = $derived(
+    page === "connect" ? "device" : page === "install" ? "apps" : page,
+  );
   let step = $state<"pair" | "connect">("pair");
   let pairEndpoint = $state("");
   let code = $state("");
@@ -568,30 +571,14 @@
 >
   <nav class="drawer-menu" aria-label="Main navigation">
     {#each destinations as destination}<button
-        class:active={page === destination.id}
-        aria-current={page === destination.id ? "page" : undefined}
+        class:active={activeDestination === destination.id}
+        aria-label={destination.label}
+        aria-current={activeDestination === destination.id ? "page" : undefined}
         onclick={() => navigate(destination.id)}
         ><Icon name={destination.id} /><span
           >{destination.label}<small>{destination.note}</small></span
         ></button
       >{/each}
-    <button
-      class:active={page === "connect"}
-      aria-label="Connect device"
-      aria-current={page === "connect" ? "page" : undefined}
-      onclick={() => navigate("connect")}
-      ><Icon name="pair" /><span
-        >Connect device<small>Pair and manage the connection</small></span
-      ></button
-    ><button
-      class:active={page === "install"}
-      aria-label="Install app"
-      aria-current={page === "install" ? "page" : undefined}
-      onclick={() => navigate("install")}
-      ><Icon name="install" /><span
-        >Install app<small>Choose and review an APK</small></span
-      ></button
-    >
   </nav>
   <fieldset class="theme-picker">
     <legend>Appearance</legend>
