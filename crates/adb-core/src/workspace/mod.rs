@@ -1,4 +1,5 @@
 pub mod app_ops;
+pub mod bulk;
 pub mod commands;
 pub mod driver;
 pub mod engine;

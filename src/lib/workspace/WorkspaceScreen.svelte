@@ -2,6 +2,9 @@
   import type { Device } from "../model";
   import {
     nativePlatform,
+    targetOf,
+    sameTarget,
+    type BulkReview,
     type Destination,
     type Operation,
     type Review,
@@ -12,6 +15,7 @@
   import ToolsPage from "./ToolsPage.svelte";
   import HistoryPage from "./HistoryPage.svelte";
   import ActionReview from "./ActionReview.svelte";
+  import BulkActionReview from "./BulkReview.svelte";
   import Modal from "../Modal.svelte";
   import Output from "./Output.svelte";
   let {
@@ -27,6 +31,7 @@
   } = $props();
   const api = nativePlatform((d) => ondevice(d));
   let review = $state<Review | null>(null);
+  let bulkReview = $state<BulkReview | null>(null);
   let outcome = $state<Operation | null>(null);
   let reload = $state(0);
   let appFilter = $state("all"),
@@ -44,14 +49,29 @@
       appPage = 0;
       if (review) void api.discard(review.id).catch(() => {});
       review = null;
-      outcome = null;
+      if (bulkReview) void api.discardBulk(bulkReview.id).catch(() => {});
+      bulkReview = null;
+      if (device) outcome = null;
     }
   });
   function close() {
     if (review) void api.discard(review.id).catch(() => {});
     review = null;
   }
+  function acceptReview(r: Review) {
+    if (device && sameTarget(targetOf(device), r.target)) review = r;
+    else void api.discard(r.id).catch(() => {});
+  }
+  function acceptBulk(r: BulkReview) {
+    if (device && sameTarget(targetOf(device), r.target)) bulkReview = r;
+    else void api.discardBulk(r.id).catch(() => {});
+  }
+  function closeBulk() {
+    if (bulkReview) void api.discardBulk(bulkReview.id).catch(() => {});
+    bulkReview = null;
+  }
   function result(r: Operation) {
+    if (device && !sameTarget(targetOf(device), r.target)) return;
     outcome = r;
     reload++;
   }
@@ -59,7 +79,7 @@
 
 {#if page === "history"}{#key reload}<HistoryPage
       {api}
-      onreview={(r) => (review = r)}
+      onreview={acceptReview}
     />{/key}
 {:else if !device}<section class="center-state">
     <h2>Connect your device</h2>
@@ -81,11 +101,12 @@
     {:else if page === "apps"}<AppsPage
         {device}
         {api}
+        onbulk={acceptBulk}
         bind:filter={appFilter}
         bind:search={appSearch}
         bind:submitted={appSubmitted}
         bind:page={appPage}
-        onreview={(r) => (review = r)}
+        onreview={acceptReview}
         oninstall={() => onnavigate("install")}
       />
     {:else if page === "remote"}<RemotePage
@@ -99,10 +120,17 @@
     {:else if page === "tools"}<ToolsPage
         {device}
         {api}
-        onreview={(r) => (review = r)}
+        onreview={acceptReview}
         oninstall={() => onnavigate("install")}
       />{/if}
   {/key}{/if}
+<BulkActionReview
+  review={bulkReview}
+  {api}
+  deviceName={device?.model ?? "Original target"}
+  onclose={closeBulk}
+  onresult={result}
+/>
 <ActionReview
   {review}
   {api}
@@ -115,6 +143,12 @@
   title="Operation result"
   onclose={() => (outcome = null)}
   >{#if outcome}<h3>{outcome.title}</h3>
+    <p class="target-caption">
+      {device && sameTarget(targetOf(device), outcome.target)
+        ? device.model
+        : `Device ${outcome.target.deviceId.slice(-8)}`} · Profile {outcome
+        .target.profileId}
+    </p>
     <p class={`outcome ${outcome.status}`}>{outcome.status}</p>
     <Output
       text={outcome.error ||

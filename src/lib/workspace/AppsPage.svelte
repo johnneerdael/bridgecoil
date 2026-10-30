@@ -9,6 +9,7 @@
     type Page,
     type PackageDetail,
     type AppMetadata,
+    type BulkReview,
   } from "./client";
   import Modal from "../Modal.svelte";
   import Output from "./Output.svelte";
@@ -19,6 +20,7 @@
     device,
     api,
     onreview,
+    onbulk,
     oninstall,
     filter = $bindable("all"),
     search = $bindable(""),
@@ -28,12 +30,36 @@
     device: Device;
     api: Platform;
     onreview: (r: Review) => void;
+    onbulk: (r: BulkReview) => void;
     oninstall: () => void;
     filter?: string;
     search?: string;
     submitted?: string;
     page?: number;
   } = $props();
+  const pageSize = 3;
+  let selecting = $state(false),
+    selected = $state<string[]>([]),
+    bulkAction = $state<PackageAction>("disable");
+  function toggle(id: string) {
+    selected = selected.includes(id)
+      ? selected.filter((p) => p !== id)
+      : selected.length < 32
+        ? [...selected, id]
+        : selected;
+  }
+  async function reviewBulk() {
+    if (!selected.length || busy) return;
+    busy = true;
+    error = "";
+    try {
+      onbulk(await api.prepareBulk(targetOf(device), selected, bulkAction));
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      busy = false;
+    }
+  }
   let refresh = $state(0);
   let busy = $state(false);
   let error = $state("");
@@ -42,7 +68,7 @@
     items: [],
     total: 0,
     page: 0,
-    pageSize: 4,
+    pageSize,
   });
   let detail = $state<PackageDetail | null>(null);
   let tab = $state("overview");
@@ -71,13 +97,13 @@
       filter,
       search: submitted,
       page,
-      pageSize: 4,
+      pageSize,
     };
     refresh;
     let cancelled = false;
     busy = true;
     error = "";
-    result = { items: [], total: 0, page: 0, pageSize: 4 };
+    result = { items: [], total: 0, page: 0, pageSize };
     detail = null;
     void api
       .query<AppPage>(target, q)
@@ -148,6 +174,17 @@
   }
 </script>
 
+{#snippet appSummary(app: AppMetadata)}
+  {#if app.icon}<img
+      class="app-icon"
+      src={`data:image/png;base64,${app.icon}`}
+      alt=""
+    />{:else}<Icon name="apps" />{/if}<span class="truncate"
+    ><strong>{app.label || app.package}</strong>{#if app.label}<small
+        >{app.package}</small
+      >{/if}</span
+  >
+{/snippet}
 <section class="feature-page">
   <div class="toolbar">
     <label class="sr-only" for="app-filter">App filter</label><select
@@ -174,32 +211,58 @@
     <label class="sr-only" for="app-search">Search apps</label><input
       id="app-search"
       bind:value={search}
-      placeholder="Search app names"
-    /><button class="secondary" disabled={busy} type="submit">Search</button>
+      placeholder="Find an app"
+    /><button class="secondary" disabled={busy} type="submit">Search</button
+    ><button
+      class="secondary"
+      type="button"
+      disabled={busy}
+      onclick={() => {
+        selecting = !selecting;
+        if (!selecting) selected = [];
+      }}>{selecting ? "Done" : "Select"}</button
+    >
   </form>
-  <p class="subtle">
-    Profile {device.profileId} · {busy
-      ? "Reading apps…"
-      : `${result.total} apps`}{result.metadataNote
-      ? " · Some app details unavailable"
-      : ""}
-  </p>
+  {#if selecting}<div class="toolbar">
+      <label class="sr-only" for="bulk-action">Bulk app action</label><select
+        id="bulk-action"
+        bind:value={bulkAction}
+        >{#each actions as action}<option value={action.id}
+            >{action.label}</option
+          >{/each}</select
+      ><button
+        class="secondary"
+        disabled={busy || !selected.length}
+        onclick={reviewBulk}>Review {selected.length} apps</button
+      >
+    </div>
+  {:else}<p class="subtle">
+      Profile {device.profileId} · {busy
+        ? "Reading apps…"
+        : `${result.total} apps`}{result.metadataNote
+        ? " · Some app details unavailable"
+        : ""}
+    </p>{/if}
   {#if error}<p class="error-text" role="status">{error}</p>{/if}
   <div class="row-list">
-    {#each result.items as app}<button
-        class="list-row"
-        disabled={busy}
-        onclick={() => inspect(app.package)}
-        >{#if app.icon}<img
-            class="app-icon"
-            src={`data:image/png;base64,${app.icon}`}
-            alt=""
-          />{:else}<Icon name="apps" />{/if}<span class="truncate"
-          ><strong>{app.label || app.package}</strong>{#if app.label}<small
-              >{app.package}</small
-            >{/if}</span
-        ><Icon name="chevron-right" /></button
-      >{/each}
+    {#each result.items as app}
+      {#if selecting}<label class="checkbox list-row bulk-choice"
+          ><input
+            type="checkbox"
+            checked={selected.includes(app.package)}
+            disabled={busy ||
+              (!selected.includes(app.package) && selected.length >= 32)}
+            aria-label={`Select ${app.label || app.package}`}
+            onchange={() => toggle(app.package)}
+          />{@render appSummary(app)}</label
+        >
+      {:else}<button
+          class="list-row"
+          disabled={busy}
+          onclick={() => inspect(app.package)}
+          >{@render appSummary(app)}<Icon name="chevron-right" /></button
+        >{/if}
+    {/each}
     {#if !busy && !result.items.length}<p class="empty-caption">
         No apps match this view.
       </p>{/if}
@@ -207,7 +270,7 @@
   <Pager
     {page}
     total={result.total}
-    size={4}
+    size={pageSize}
     {busy}
     onpage={(n) => (page = n)}
   />

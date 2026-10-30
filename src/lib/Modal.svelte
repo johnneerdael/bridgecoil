@@ -6,12 +6,14 @@
     onclose,
     children,
     variant = "dialog",
+    dismissible = true,
   }: {
     open: boolean;
     title: string;
     onclose: () => void;
     children: Snippet;
     variant?: "dialog" | "drawer";
+    dismissible?: boolean;
   } = $props();
   let element = $state<HTMLDialogElement>();
   const titleId = `dialog-${crypto.randomUUID()}`;
@@ -21,7 +23,7 @@
     else if (!open && element.open) element.close();
   });
   function backdrop(event: MouseEvent) {
-    if (event.target !== element || !element) return;
+    if (!dismissible || event.target !== element || !element) return;
     const r = element.getBoundingClientRect();
     if (
       event.clientX < r.left ||
@@ -39,13 +41,20 @@
   class:drawer={variant === "drawer"}
   aria-labelledby={titleId}
   {onclose}
+  oncancel={(event) => {
+    event.preventDefault();
+    if (dismissible) onclose();
+  }}
   onclick={backdrop}
 >
   <div class="modal-panel">
     <header class="modal-heading">
       <h2 id={titleId}>{title}</h2>
-      <button class="icon-button" onclick={onclose} aria-label="Close dialog"
-        >×</button
+      <button
+        class="icon-button"
+        onclick={onclose}
+        disabled={!dismissible}
+        aria-label="Close dialog">×</button
       >
     </header>
     <div class="modal-body">{@render children()}</div>

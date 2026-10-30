@@ -9,6 +9,7 @@ import { afterEach, beforeAll, it, expect, vi } from "vitest";
 import AppsPage from "./AppsPage.svelte";
 import RemotePage from "./RemotePage.svelte";
 import ActionReview from "./ActionReview.svelte";
+import BulkActionReview from "./BulkReview.svelte";
 import type { Platform, Review, Operation } from "./client";
 import type { Device } from "../model";
 afterEach(cleanup);
@@ -81,6 +82,7 @@ it("browses an app and prepares its selected-profile action without executing it
     device,
     api: { query, prepare, apply } as unknown as Platform,
     onreview,
+    onbulk: vi.fn(),
     oninstall: vi.fn(),
   });
   await fireEvent.click(await screen.findByRole("button", { name: /Player/ }));
@@ -148,4 +150,82 @@ it("a new review loses the old confirmation before any apply can happen", async 
       .disabled,
   ).toBe(true);
   expect(apply).not.toHaveBeenCalled();
+});
+
+it("bulk selection prepares only selected packages and never applies during review", async () => {
+  const bulk = {
+    id: "bulk",
+    target: review.target,
+    items: [{ package: "org.demo", review }],
+    excluded: [],
+    expiresMs: Date.now() + 10000,
+  };
+  const prepareBulk = vi.fn().mockResolvedValue(bulk),
+    applyBulk = vi.fn(),
+    onbulk = vi.fn();
+  const query = vi
+    .fn()
+    .mockResolvedValue({
+      items: [{ package: "org.demo", label: "Player", icon: null }],
+      total: 1,
+      page: 0,
+      pageSize: 3,
+    });
+  render(AppsPage, {
+    device,
+    api: { query, prepareBulk, applyBulk } as unknown as Platform,
+    onreview: vi.fn(),
+    onbulk,
+    oninstall: vi.fn(),
+  });
+  await screen.findByRole("button", { name: /Player/ });
+  await fireEvent.click(screen.getByRole("button", { name: "Select" }));
+  await fireEvent.click(
+    screen.getByRole("checkbox", { name: "Select Player" }),
+  );
+  await fireEvent.click(screen.getByRole("button", { name: "Review 1 apps" }));
+  await waitFor(() => expect(onbulk).toHaveBeenCalledWith(bulk));
+  expect(prepareBulk).toHaveBeenCalledWith(
+    review.target,
+    ["org.demo"],
+    "disable",
+  );
+  expect(applyBulk).not.toHaveBeenCalled();
+});
+it("a running bulk review keeps cancellation available until the active item finishes", async () => {
+  let finish!: (operation: Operation) => void;
+  const applyBulk = vi
+      .fn()
+      .mockReturnValue(new Promise<Operation>((resolve) => (finish = resolve))),
+    cancelBulk = vi.fn().mockResolvedValue(undefined);
+  const bulk = {
+    id: "bulk",
+    target: review.target,
+    items: [{ package: "org.demo", review }],
+    excluded: [],
+    expiresMs: Date.now() + 10000,
+  };
+  render(BulkActionReview, {
+    review: bulk,
+    api: { applyBulk, cancelBulk } as unknown as Platform,
+    deviceName: "TV",
+    onclose: vi.fn(),
+    onresult: vi.fn(),
+  });
+  await fireEvent.click(
+    screen.getByRole("checkbox", { name: /Apply the included/ }),
+  );
+  await fireEvent.click(
+    screen.getByRole("button", { name: "Apply 1 changes" }),
+  );
+  expect(
+    (screen.getByRole("button", { name: "Close dialog" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  await fireEvent.click(
+    screen.getByRole("button", { name: "Cancel remaining items" }),
+  );
+  expect(cancelBulk).toHaveBeenCalledWith("bulk");
+  finish({ ...operation, status: "cancelled" });
+  await waitFor(() => expect(applyBulk).toHaveBeenCalledTimes(1));
 });

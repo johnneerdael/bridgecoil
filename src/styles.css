@@ -1282,3 +1282,12 @@ textarea {
 .capitalize {
   text-transform: capitalize;
 }
+
+.bulk-choice {
+  margin: 0;
+  align-items: center;
+  min-height: 54px;
+}
+.bulk-choice .truncate {
+  flex: 1;
+}

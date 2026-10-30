@@ -2,7 +2,8 @@ use crate::{Backend, Result, Selections, err};
 use adb_core::{
     backend::{DeviceInfo, PocError},
     workspace::{
-        engine::{Action, Review, Workspace},
+        bulk::{Bulk, BulkReview},
+        engine::{Action, PackageAction, Review, Workspace},
         history::now_ms,
         queries::{self, Query},
         types::*,
@@ -10,6 +11,53 @@ use adb_core::{
 };
 use serde::Deserialize;
 use tauri::State;
+
+#[tauri::command]
+pub async fn prepare_bulk(
+    target: Target,
+    packages: Vec<String>,
+    action: PackageAction,
+    backend: State<'_, Backend>,
+    workspace: State<'_, Workspace>,
+    bulk: State<'_, Bulk>,
+) -> Result<BulkReview> {
+    bulk.prepare(
+        &workspace,
+        &mut *backend.0.lock().await,
+        &target,
+        packages,
+        action,
+    )
+    .await
+}
+#[tauri::command]
+pub async fn apply_bulk(
+    review_id: String,
+    stop_after_failure: bool,
+    backend: State<'_, Backend>,
+    workspace: State<'_, Workspace>,
+    bulk: State<'_, Bulk>,
+) -> Result<OperationRecord> {
+    bulk.apply(
+        &workspace,
+        &mut *backend.0.lock().await,
+        &review_id,
+        stop_after_failure,
+    )
+    .await
+}
+#[tauri::command]
+pub fn cancel_bulk(review_id: String, bulk: State<'_, Bulk>) -> Result<()> {
+    bulk.cancel(&review_id)
+}
+#[tauri::command]
+pub fn discard_bulk(
+    review_id: String,
+    workspace: State<'_, Workspace>,
+    bulk: State<'_, Bulk>,
+) -> Result<()> {
+    bulk.discard(&workspace, &review_id)
+}
 
 #[tauri::command]
 pub async fn workspace_query(

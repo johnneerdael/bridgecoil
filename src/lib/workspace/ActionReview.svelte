@@ -43,6 +43,7 @@
 </script>
 
 <Modal
+  dismissible={!busy}
   open={!!review}
   title="Review change"
   onclose={() => {

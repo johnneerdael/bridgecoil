@@ -250,12 +250,17 @@ pub fn run() {
                 data.join("identity"),
             ))));
             app.manage(Selections::default());
+            app.manage(adb_core::workspace::bulk::Bulk::default());
             app.manage(adb_core::workspace::engine::Workspace::new(
                 adb_core::workspace::history::History::open(&data.join("history.sqlite3"))?,
             ));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            prepare_bulk,
+            apply_bulk,
+            cancel_bulk,
+            discard_bulk,
             workspace_query,
             prepare_action,
             apply_action,

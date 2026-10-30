@@ -34,7 +34,8 @@ export type Operation = {
     | "verified"
     | "failed"
     | "partial"
-    | "unknown";
+    | "unknown"
+    | "cancelled";
   output: string;
   error: string | null;
   recovery: unknown;
@@ -51,6 +52,20 @@ export type Review = {
   commands: string[];
   expiresMs: number;
 };
+export type BulkReview = {
+  id: string;
+  target: Target;
+  items: { package: string; review: Review }[];
+  excluded: { package: string; reason: string }[];
+  expiresMs: number;
+};
+export function sameTarget(a: Target, b: Target) {
+  return (
+    a.deviceId === b.deviceId &&
+    a.sessionId === b.sessionId &&
+    a.profileId === b.profileId
+  );
+}
 export type PackageAction =
   | "enable"
   | "disable"
@@ -118,6 +133,14 @@ export type PackageDetail = {
 };
 export type Platform = {
   readonly native: boolean;
+  prepareBulk(
+    target: Target,
+    packages: string[],
+    action: PackageAction,
+  ): Promise<BulkReview>;
+  applyBulk(id: string, stopAfterFailure: boolean): Promise<Operation>;
+  cancelBulk(id: string): Promise<void>;
+  discardBulk(id: string): Promise<void>;
   query<T>(target: Target, query: Query): Promise<T>;
   prepare(target: Target, action: Action): Promise<Review>;
   apply(id: string): Promise<Operation>;
@@ -149,6 +172,12 @@ export function nativePlatform(
   }
   return {
     native: isTauri(),
+    prepareBulk: (target, packages, action) =>
+      call("prepare_bulk", { target, packages, action }),
+    applyBulk: (reviewId, stopAfterFailure) =>
+      call("apply_bulk", { reviewId, stopAfterFailure }),
+    cancelBulk: (reviewId) => call("cancel_bulk", { reviewId }),
+    discardBulk: (reviewId) => call("discard_bulk", { reviewId }),
     query: (target, query) => call("workspace_query", { target, query }),
     prepare: (target, action) => call("prepare_action", { target, action }),
     apply: (reviewId) => call("apply_action", { reviewId }),

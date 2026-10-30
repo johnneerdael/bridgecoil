@@ -28,6 +28,7 @@ pub enum OperationStatus {
     Failed,
     Partial,
     Unknown,
+    Cancelled,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
