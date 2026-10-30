@@ -23,12 +23,6 @@ pub fn valid_package(value: &str) -> bool {
                 })
         })
 }
-fn number(value: &str) -> Option<u64> {
-    value
-        .strip_prefix("0x")
-        .and_then(|v| u64::from_str_radix(v, 16).ok())
-        .or_else(|| value.parse().ok())
-}
 pub fn inspect(path: &Path) -> Result<ApkInfo, String> {
     let mut file = File::open(path).map_err(|e| e.to_string())?;
     let bytes = file.metadata().map_err(|e| e.to_string())?.len();
@@ -64,44 +58,7 @@ pub fn inspect(path: &Path) -> Result<ApkInfo, String> {
     if data.len() > 2 * 1024 * 1024 {
         return Err("APK manifest exceeds the limit.".into());
     }
-    let doc = std::panic::catch_unwind(|| axmldecoder::parse(&data))
-        .map_err(|_| "Malformed Android manifest.")?
-        .map_err(|_| "Could not decode the APK manifest.")?;
-    let Some(axmldecoder::Node::Element(root)) = doc.get_root() else {
-        return Err("APK manifest has no root element.".into());
-    };
-    if root.get_tag() != "manifest" {
-        return Err("Invalid APK manifest root.".into());
-    }
-    let attrs = root.get_attributes();
-    let package = attrs
-        .get("package")
-        .filter(|v| valid_package(v))
-        .ok_or("APK has an invalid package identifier.")?
-        .clone();
-    if attrs.contains_key("split") {
-        return Err(
-            "This POC installs standalone APKs. Choose the complete APK rather than a split."
-                .into(),
-        );
-    }
-    let low = attrs
-        .get("android:versionCode")
-        .and_then(|v| number(v))
-        .ok_or("APK version code is missing or unreadable.")?;
-    let high = attrs
-        .get("android:versionCodeMajor")
-        .and_then(|v| number(v))
-        .unwrap_or(0);
-    let min_sdk = root.get_children().iter().find_map(|n| match n {
-        axmldecoder::Node::Element(e) if e.get_tag() == "uses-sdk" => e
-            .get_attributes()
-            .get("android:minSdkVersion")
-            .and_then(|v| number(v))
-            .and_then(|v| u32::try_from(v).ok()),
-        _ => None,
-    });
-    let version_name = attrs.get("android:versionName").cloned();
+    let metadata = crate::manifest::parse(&data)?;
     drop(manifest);
     let mut abis: Vec<_> = zip
         .file_names()
@@ -115,10 +72,10 @@ pub fn inspect(path: &Path) -> Result<ApkInfo, String> {
     abis.sort();
     abis.dedup();
     Ok(ApkInfo {
-        package,
-        version_code: (high << 32) | low,
-        version_name,
-        min_sdk,
+        package: metadata.package,
+        version_code: metadata.version_code,
+        version_name: metadata.version_name,
+        min_sdk: metadata.min_sdk,
         abis,
         bytes,
         sha256: hex::encode(hash.finalize()),

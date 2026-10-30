@@ -47,3 +47,12 @@ fn reads_actual_binary_manifest() {
     assert!(info.abis.is_empty());
     assert_eq!(info.sha256.len(), 64);
 }
+
+#[test]
+fn valid_long_utf8_version_name_is_supported() {
+    let p =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/long-name.apk");
+    let info = apk::inspect(&p).expect("valid AAPT-built manifest with long UTF-8 strings");
+    assert_eq!(info.version_name, Some("v".repeat(260)));
+    assert_eq!(info.version_code, 8);
+}

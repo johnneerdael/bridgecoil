@@ -1,6 +1,7 @@
 pub mod apk;
 pub mod backend;
 pub mod identity;
+mod manifest;
 pub fn validate_endpoint(value: &str) -> Result<String, String> {
     let value = value.trim();
     let (host, port) = value

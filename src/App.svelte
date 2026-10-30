@@ -22,6 +22,7 @@
   let error = $state("");
   let notice = $state("");
   let unknown = $state(false);
+  let permissionDenied = $state(false);
   let progress = $state<{
     stage: string;
     sent: number;
@@ -71,10 +72,13 @@
     error = "";
     notice = "";
     unknown = false;
+    permissionDenied = false;
     try {
       await action();
     } catch (e) {
       error = errorMessage(e);
+      permissionDenied =
+        !!e && typeof e === "object" && "kind" in e && e.kind === "permission";
       unknown =
         !!e &&
         typeof e === "object" &&
@@ -186,7 +190,9 @@
         <strong
           >{unknown
             ? "Installation outcome unknown"
-            : "Could not complete the action"}</strong
+            : permissionDenied
+              ? "Local network access is off"
+              : "Could not complete the action"}</strong
         >
         <p>{error}</p>
         {#if unknown}<p>

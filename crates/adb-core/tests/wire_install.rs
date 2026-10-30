@@ -6,12 +6,16 @@ use std::{
     sync::{Arc, Mutex},
     thread,
 };
-fn send(s: &mut TcpStream, cmd: &[u8; 4], a: u32, b: u32, data: &[u8]) {
+fn packet(s: &mut TcpStream, cmd: &[u8; 4], a: u32, b: u32, data: &[u8]) -> std::io::Result<()> {
     let c = u32::from_le_bytes(*cmd);
     for n in [c, a, b, data.len() as u32, 0, c ^ u32::MAX] {
-        s.write_all(&n.to_le_bytes()).unwrap();
+        s.write_all(&n.to_le_bytes())?;
     }
-    s.write_all(data).unwrap();
+    s.write_all(data)?;
+    Ok(())
+}
+fn send(s: &mut TcpStream, cmd: &[u8; 4], a: u32, b: u32, data: &[u8]) {
+    packet(s, cmd, a, b, data).unwrap();
 }
 fn read(s: &mut TcpStream) -> Option<([u8; 4], u32, u32, Vec<u8>)> {
     let mut h = [0; 24];
@@ -111,7 +115,16 @@ fn peer(listener: TcpListener, seen: Arc<Mutex<Seen>>, interrupt: bool) {
                     send(&mut s, b"WRTE", remote, local, &frame(3, &[0]));
                 }
             }
-            b"CLSE" => send(&mut s, b"CLSE", remote, a, &[]),
+            b"CLSE" => {
+                if let Err(e) = packet(&mut s, b"CLSE", remote, a, &[]) {
+                    match e.kind() {
+                        std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset => {
+                            return;
+                        }
+                        _ => panic!("close acknowledgement: {e}"),
+                    }
+                }
+            }
             _ => {}
         }
     }

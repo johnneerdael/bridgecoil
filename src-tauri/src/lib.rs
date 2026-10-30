@@ -1,3 +1,4 @@
+mod local_network;
 use adb_core::{
     apk::{self, ApkInfo},
     backend::{Client, DeviceInfo, InstallProgress, PocError},
@@ -39,16 +40,24 @@ async fn connection_status(state: State<'_, Backend>) -> Result<Option<DeviceInf
     Ok(state.0.lock().await.status())
 }
 #[tauri::command]
-async fn pair_device(endpoint: String, code: String, state: State<'_, Backend>) -> Result<String> {
+async fn pair_device(
+    app: tauri::AppHandle,
+    endpoint: String,
+    code: String,
+    state: State<'_, Backend>,
+) -> Result<String> {
+    local_network::ensure(&app).await?;
     state.0.lock().await.pair(endpoint, code).await
 }
 #[tauri::command]
 async fn connect_device(
+    app: tauri::AppHandle,
     endpoint: String,
     allow_legacy: bool,
     state: State<'_, Backend>,
     selections: State<'_, Selections>,
 ) -> Result<DeviceInfo> {
+    local_network::ensure(&app).await?;
     selections.0.lock().map_err(err)?.clear();
     state.0.lock().await.connect(endpoint, allow_legacy).await
 }
@@ -208,6 +217,7 @@ fn serde_payload(id: &str, progress: InstallProgress) -> ProgressEvent {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(local_network::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {

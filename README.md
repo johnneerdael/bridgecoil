@@ -48,7 +48,7 @@ npm run android -- init --ci
 npm run android -- build --debug --target aarch64 --apk --ci
 ```
 
-The first artifact is an ARM64 debug APK. Other ABIs need their own builds. The source includes a generated Android project with INTERNET permission. Real network policy and file-provider behavior still need testing on the target phones.
+The first artifact is an ARM64 debug APK. Other ABIs need their own builds. The source includes a generated Android project with INTERNET permission and Android 17 local-network declaration/request handling. Real network policy and file-provider behavior still need testing on the target phones.
 
 ### iOS
 
@@ -71,12 +71,13 @@ This creates `target/debug/bundle/macos/ADB Studio.app`. Local debug builds are 
 
 ## Current boundaries
 
-- Manual IP/hostname and port entry; automatic mDNS discovery follows later.
+- Manual IP/hostname and port entry; automatic mDNS discovery follows later. Android 17 requests local-network access just before pairing/connection, and denial points to app permission settings.
 - One active device, Owner/user 0, standalone APKs up to 1 GiB. Split APK sets and AABs are rejected/deferred.
 - Metadata inspection does not authenticate an APK publisher or pre-verify signing compatibility. Android's package installer enforces update/signature policy; the POC never uninstalls to work around a rejection.
 - APKs are copied into app-private temporary storage, and removed when a selection is replaced, used or the app exits normally. Abrupt process termination can leave a cache file; clear the app cache if needed.
 - Host keys are kept in app-private storage with restrictive Unix permissions. Production secure-vault/backup policy needs further platform work; do not treat this as a hardware-backed keystore.
 - The libadb TLS profile follows ADB's host-authentication model; encryption is not independent cryptographic authentication of the target TV.
+- Legacy transport still requires the TV’s shell_v2 capability. Older daemons without it are not supported by this POC.
 - No background install guarantee or automatic replay after disconnection.
 - Remote remapping, guided Shizuku/Termux installation, launcher changes and the full toolkit remain on the approved roadmap rather than appearing as simulated buttons in the POC.
 - No packages or settings on the user's TV were changed during automated POC validation.
