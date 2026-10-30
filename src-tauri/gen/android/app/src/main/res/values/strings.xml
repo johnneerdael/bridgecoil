@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">"ADB Studio"</string>
+    <string name="main_activity_title">"ADB Studio"</string>
+</resources>
