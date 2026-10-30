@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { startNative } from "./lib/native-startup";
   import Modal from "./lib/Modal.svelte";
   import WorkspaceScreen from "./lib/workspace/WorkspaceScreen.svelte";
   import Icon from "./lib/workspace/Icon.svelte";
@@ -19,6 +20,7 @@
     type Selection,
   } from "./lib/model";
   const native = isTauri();
+  let nativeReady = $state(false);
   let theme = $state<ThemePreference>(
     parseTheme(localStorage.getItem(themeKey)),
   );
@@ -26,7 +28,8 @@
   $effect(() => {
     const dark = applyTheme(theme, systemDark) === "dark";
     localStorage.setItem(themeKey, theme);
-    if (native) void invoke("set_appearance", { dark }).catch(console.error);
+    if (native && nativeReady)
+      void invoke("set_appearance", { dark }).catch(console.error);
   });
   onMount(() => {
     const media = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -62,7 +65,7 @@
   } | null>(null);
   let confirmed = $state(false);
   const ready = $derived(
-    native && canInstall(device, selection, busy) && confirmed,
+    native && nativeReady && canInstall(device, selection, busy) && confirmed,
   );
   const formatBytes = (n: number) =>
     n >= 1048576
@@ -70,34 +73,38 @@
       : `${Math.round(n / 1024)} KB`;
   onMount(() => {
     let dispose: UnlistenFn | undefined;
-    let stopped = false;
+    const controller = new AbortController();
     endpoint = localStorage.getItem("adb.connectionEndpoint") ?? "";
     if (native) {
-      void invoke<Device | null>("connection_status")
-        .then((v) => {
-          if (!stopped) device = v;
+      void startNative(
+        () => invoke<Device | null>("connection_status"),
+        () =>
+          listen<NonNullable<typeof progress>>("install-progress", (event) => {
+            if (event.payload.selectionId === selection?.id)
+              progress = event.payload;
+          }),
+        controller.signal,
+      )
+        .then((result) => {
+          if (controller.signal.aborted) {
+            result.unlisten();
+            return;
+          }
+          dispose = result.unlisten;
+          device = result.status;
+          nativeReady = true;
         })
         .catch((e) => {
-          if (!stopped) error = errorMessage(e);
-        });
-      void listen<NonNullable<typeof progress>>("install-progress", (e) => {
-        if (e.payload.selectionId === selection?.id) progress = e.payload;
-      })
-        .then((fn) => {
-          if (stopped) fn();
-          else dispose = fn;
-        })
-        .catch((e) => {
-          if (!stopped) error = errorMessage(e);
+          if (!controller.signal.aborted) error = errorMessage(e);
         });
     }
     return () => {
-      stopped = true;
+      controller.abort();
       dispose?.();
     };
   });
   async function run(label: string, action: () => Promise<void>) {
-    if (busy || !native) return;
+    if (busy || !native || !nativeReady) return;
     busy = true;
     busyLabel = label;
     error = "";
@@ -225,7 +232,7 @@
       class="icon-button menu-toggle"
       onclick={() => (menuOpen = true)}
       aria-label="Open navigation"
-      disabled={busy}
+      disabled={busy || (native && !nativeReady)}
       ><svg viewBox="0 0 24 24" aria-hidden="true"
         ><path d="M4 6h16M4 12h16M4 18h16" /></svg
       ></button
@@ -256,9 +263,11 @@
       disabled={busy}
       ><span class="status-dot" class:online={device}></span>{busy
         ? "Working…"
-        : device
-          ? "Connected"
-          : "Not connected"}</button
+        : native && !nativeReady
+          ? "Starting…"
+          : device
+            ? "Connected"
+            : "Not connected"}</button
     >
   </header>
   <main id="main">
@@ -536,7 +545,7 @@
                   class="secondary"
                   aria-label="Choose another APK"
                   onclick={pick}
-                  disabled={busy || !native}>Change file</button
+                  disabled={busy || !native || !nativeReady}>Change file</button
                 >
               </div>
             </section>
@@ -551,7 +560,10 @@
             <p class="target-caption">
               Target: {label(device.model, 55)} · Profile {device.profileId}
             </p>
-            <button class="primary" onclick={pick} disabled={busy || !native}
+            <button
+              class="primary"
+              onclick={pick}
+              disabled={busy || !native || !nativeReady}
               >{busy ? busyLabel : "Choose APK file"}<span aria-hidden="true"
                 >＋</span
               ></button
