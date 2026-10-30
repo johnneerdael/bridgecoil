@@ -14,6 +14,7 @@
   import Output from "./Output.svelte";
   import Pager from "./Pager.svelte";
   import Icon from "./Icon.svelte";
+  import AppOps from "./AppOps.svelte";
   let {
     device,
     api,
@@ -47,7 +48,7 @@
   let tab = $state("overview");
   let actionPage = $state(0);
   let permissionPage = $state(0);
-  let allPermissions = $state(false);
+  let accessTab = $state("runtime");
   const runtimePermissions = $derived(
     detail?.metadata?.permissions?.filter((p) => p.protection === 1) ?? [],
   );
@@ -107,7 +108,7 @@
         tab = "overview";
         actionPage = 0;
         permissionPage = 0;
-        allPermissions = false;
+        accessTab = "runtime";
       }
     } catch (e) {
       error = errorMessage(e);
@@ -295,15 +296,21 @@
       />
     {:else if tab === "permissions"}
       <div class="segmented">
-        <button
-          class:chosen={!allPermissions}
-          onclick={() => (allPermissions = false)}>Runtime access</button
-        ><button
-          class:chosen={allPermissions}
-          onclick={() => (allPermissions = true)}>All permissions</button
-        >
+        {#each [["runtime", "Runtime"], ["special", "Special access"], ["all", "All permissions"]] as [id, label]}<button
+            class:chosen={accessTab === id}
+            onclick={() => (accessTab = id)}>{label}</button
+          >{/each}
       </div>
-      {#if allPermissions}<Output
+      {#if accessTab === "special"}<AppOps
+          {api}
+          target={targetOf(device)}
+          packageId={detail.package}
+          onreview={(review) => {
+            detail = null;
+            onreview(review);
+          }}
+        />
+      {:else if accessTab === "all"}<Output
           text={detail.metadata?.permissions
             ?.map(
               (p) =>

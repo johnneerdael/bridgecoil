@@ -190,3 +190,36 @@ async fn recovery_rejects_state_changed_since_the_verified_operation() {
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().kind, "staleRecovery");
 }
+
+#[tokio::test]
+async fn app_op_reviews_the_stored_package_mode_and_verifies_only_that_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(dir.path());
+    let mut d = fake(vec![
+        ok("SYSTEM_ALERT_WINDOW: ignore"),
+        ok("SYSTEM_ALERT_WINDOW: ignore"),
+        ok(""),
+        ok("Uid mode: SYSTEM_ALERT_WINDOW: ignore\nSYSTEM_ALERT_WINDOW: allow"),
+    ]);
+    let p = w
+        .prepare(
+            &mut d,
+            &target(),
+            Action::AppOp {
+                package: "org.demo".into(),
+                op: "SYSTEM_ALERT_WINDOW".into(),
+                mode: "allow".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(p.effect.contains("not effective access"));
+    let r = w.apply(&mut d, &p.id).await.unwrap();
+    assert_eq!(r.status, OperationStatus::Verified);
+    assert!(r.recovery.is_some());
+    assert!(
+        d.commands
+            .iter()
+            .any(|c| c == "cmd appops set --user 10 'org.demo' SYSTEM_ALERT_WINDOW allow")
+    );
+}

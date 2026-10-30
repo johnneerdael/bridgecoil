@@ -30,6 +30,11 @@ pub enum PackageAction {
     rename_all_fields = "camelCase"
 )]
 pub enum Action {
+    AppOp {
+        package: String,
+        op: String,
+        mode: String,
+    },
     Package {
         package: String,
         action: PackageAction,
@@ -168,6 +173,14 @@ impl Workspace {
                 } else {
                     Some(before.clone())
                 },
+            });
+        }
+        if let Action::AppOp { package, op, .. } = &action {
+            let prior: super::app_ops::Mode = serde_json::from_str(&before).map_err(internal)?;
+            recovery = Some(Action::AppOp {
+                package: package.clone(),
+                op: op.clone(),
+                mode: prior.package_mode,
             });
         }
         if let Action::Permission {
@@ -359,6 +372,15 @@ impl Workspace {
 }
 fn state_label(action: &Action, before: &str) -> String {
     match action {
+        Action::AppOp { .. } => serde_json::from_str::<super::app_ops::Mode>(before)
+            .map(|s| {
+                format!(
+                    "Stored package mode: {}. UID override: {}.",
+                    s.package_mode,
+                    s.uid_mode.as_deref().unwrap_or("none reported")
+                )
+            })
+            .unwrap_or_else(|_| "Policy unknown".into()),
         Action::Package { .. } => {
             if let Ok(s) = serde_json::from_str::<PackageState>(before) {
                 let enabled = match s.enabled {
@@ -397,6 +419,7 @@ fn internal(e: impl std::fmt::Display) -> PocError {
 }
 fn kind(a: &Action) -> &str {
     match a {
+        Action::AppOp { .. } => "appOp",
         Action::Package { .. } => "package",
         Action::Shell { .. } => "shell",
         Action::Setting { .. } => "setting",
@@ -487,6 +510,9 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
         return Ok(if entry.granted { "granted" } else { "denied" }.into());
     }
     let command = match a {
+        Action::AppOp { package, op, .. } => {
+            super::app_ops::probe_command(t.profile_id, package, op)?
+        }
         Action::Package { package, .. } => format!("dumpsys package {}", package_arg(package)?),
         Action::Setting { namespace, key, .. } => {
             validate_setting(namespace, key, None)?;
@@ -509,6 +535,9 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
         ));
     }
     match a {
+        Action::AppOp { op, .. } => {
+            serde_json::to_string(&super::app_ops::parse(&output.stdout, op)?).map_err(internal)
+        }
         Action::Package { .. } => {
             serde_json::to_string(&parse_package_state(&output.stdout, t.profile_id))
                 .map_err(internal)
@@ -525,6 +554,8 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
 }
 fn verified(a: &Action, after: &str) -> bool {
     match a {
+        Action::AppOp { mode, .. } => serde_json::from_str::<super::app_ops::Mode>(after)
+            .is_ok_and(|s| &s.package_mode == mode),
         Action::Package { action, .. } => {
             let Ok(s) = serde_json::from_str::<PackageState>(after) else {
                 return false;
@@ -574,6 +605,17 @@ fn validate_setting(namespace: &str, key: &str, value: Option<&str>) -> Result<(
 fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, String)> {
     let mut losses = Vec::new();
     let result = match a {
+        Action::AppOp { package, op, mode } => {
+            let command = super::app_ops::command(user, package, op, mode)?;
+            losses.push("Special access can expose private activity, allow overlays or change background behavior. Android permissions, UID policy and firmware may override the stored package mode.".into());
+            (
+                format!("Change {op} for {package}"),
+                format!(
+                    "Set the stored policy to {mode} for profile {user}. Readback verifies the stored policy, not effective access."
+                ),
+                command,
+            )
+        }
         Action::Permission {
             package,
             permission,

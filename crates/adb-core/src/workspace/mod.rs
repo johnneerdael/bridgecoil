@@ -1,3 +1,4 @@
+pub mod app_ops;
 pub mod commands;
 pub mod driver;
 pub mod engine;

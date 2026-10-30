@@ -2,7 +2,7 @@
 
 A Tauri 2 app with a Rust backend and a mobile-first Svelte interface. This first version prioritizes direct ADB pairing, connection and installation of a standalone APK selected through a native file picker. The broader approved workspace design remains in `docs/superpowers/specs/`.
 
-The current implementation adds the five workspace areas through a hamburger menu, Bridgecoil's supplied typography/palette/assets, System/Light/Dark appearance and bounded page layouts. The broader implementation is in progress: app labels/icons, split sets/signature review, discovery, physical key mapping/startup, artifact transfers and full platform acceptance are not complete. The retained branded APK is a milestone build, not the final workspace build.
+The current implementation adds the five workspace areas through a hamburger menu, Bridgecoil's supplied typography/palette/assets, System/Light/Dark appearance and bounded page layouts. The broader implementation is in progress: app labels/icons and reviewed runtime/special-access controls now have implementation and fixture tests; their OEM runtime compatibility remains unverified. Split sets/signature review, discovery, physical key mapping/startup, artifact transfers and full platform acceptance remain incomplete. The retained branded APK is a milestone build, not the final workspace build.
 
 ## Connection and install foundation
 

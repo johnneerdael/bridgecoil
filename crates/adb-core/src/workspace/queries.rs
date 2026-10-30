@@ -62,6 +62,9 @@ pub enum Query {
     Package {
         package: String,
     },
+    AppOps {
+        package: String,
+    },
     Launchers,
     Toolkit,
     Diagnostics {
@@ -111,6 +114,22 @@ pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Valu
         Query::Profiles => Ok(json!(parse_profiles(
             &checked(d, t, "pm list users").await?
         ))),
+        Query::AppOps { package } => {
+            package_arg(&package)?;
+            let mut rows = Vec::new();
+            for (op, name) in super::app_ops::CATALOG {
+                let command = super::app_ops::probe_command(user, &package, op)?;
+                let result = checked(d, t, &command)
+                    .await
+                    .and_then(|raw| super::app_ops::parse(&raw, op));
+                validate_target(d.current_target().as_ref(), t)?;
+                match result {
+                    Ok(mode) => rows.push(json!({"op":op,"name":name,"mode":mode,"error":null})),
+                    Err(e) => rows.push(json!({"op":op,"name":name,"mode":null,"error":e.message})),
+                }
+            }
+            Ok(json!(rows))
+        }
         Query::Device => {
             let output=checked(d,t,"id; printf '\\n---STORAGE---\\n'; df -k /data; printf '\\n---BOOT---\\n'; cat /proc/sys/kernel/random/boot_id; printf '\\n---UPTIME---\\n'; cat /proc/uptime").await?;
             let identity = output.split("---STORAGE---").next().unwrap_or("").trim();

@@ -65,7 +65,8 @@ export type Action =
   | { kind: "shell"; command: string }
   | { kind: "defaultHome"; component: string }
   | { kind: "setting"; namespace: string; key: string; value: string | null }
-  | { kind: "permission"; package: string; permission: string; grant: boolean };
+  | { kind: "permission"; package: string; permission: string; grant: boolean }
+  | { kind: "appOp"; package: string; op: string; mode: string };
 export type Query =
   | {
       kind:
@@ -84,6 +85,7 @@ export type Query =
       pageSize: number;
     }
   | { kind: "package"; package: string }
+  | { kind: "appOps"; package: string }
   | { kind: "diagnostics"; section: string }
   | { kind: "files"; path: string; page: number; pageSize: number };
 export type RemoteAction =
