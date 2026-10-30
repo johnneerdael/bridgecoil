@@ -1,7 +1,7 @@
 {
   "name": "adb-studio-poc",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -12,7 +12,9 @@
     "android": "node scripts/tauri.mjs android",
     "ios": "node scripts/tauri.mjs ios",
     "desktop": "node scripts/tauri.mjs dev",
-    "build:desktop": "node scripts/tauri.mjs build --debug --bundles app"
+    "build:desktop": "node scripts/tauri.mjs build --debug --bundles app",
+    "test:rust": "node scripts/cargo.mjs test --workspace",
+    "lint:rust": "node scripts/cargo.mjs clippy --workspace --all-targets -- -D warnings"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4",

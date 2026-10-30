@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import Modal from "./lib/Modal.svelte";
   import { invoke, isTauri } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import {
@@ -152,330 +153,342 @@
     confirmed = false;
     progress = null;
   }
+
+  let menuOpen = $state(false);
+  let helpOpen = $state(false);
+  let deviceOpen = $state(false);
+  let fileOpen = $state(false);
+  let feedbackOpen = $state(false);
+  let previewOpen = $state(false);
+  let installHelpOpen = $state(false);
+  let keyboard = $state(false);
+  let messagePage = $state(0);
+  const messageText = $derived(error || notice);
+  const messagePages = $derived(
+    Math.max(1, Math.ceil(messageText.length / 400)),
+  );
+  function showFeedback() {
+    messagePage = 0;
+    feedbackOpen = true;
+  }
+  function navigate(next: "connect" | "install") {
+    page = next;
+    menuOpen = false;
+  }
+  function focusInput(event: FocusEvent) {
+    keyboard =
+      event.target instanceof HTMLInputElement &&
+      event.target.type !== "checkbox";
+  }
+  const label = (value: string | undefined, max = 100) =>
+    value && value.length > max ? value.slice(0, max) + "…" : value;
 </script>
 
-<div class="workspace">
+<div
+  class="workspace"
+  class:keyboard
+  onfocusin={focusInput}
+  onfocusout={() => (keyboard = false)}
+>
   <header class="topbar">
-    <a class="brand" href="#main" aria-label="ADB Studio"
-      ><span class="brand-mark">a›</span><span
-        >ADB Studio<small>CONNECTION & INSTALL POC</small></span
-      ></a
-    ><span class="build-tag">Early build</span>
-  </header>
-  <div class="devicebar">
-    <span class="tv" aria-hidden="true">▣</span>
-    <div>
-      <strong>{device?.model ?? "No TV connected"}</strong><small
-        >{device
-          ? `${device.endpoint} · ${device.encrypted ? "TLS connection" : "Legacy · unencrypted"}`
-          : "Your TV, connected directly."}</small
+    <button
+      class="icon-button menu-toggle"
+      onclick={() => (menuOpen = true)}
+      aria-label="Open navigation"
+      disabled={busy}
+      ><svg viewBox="0 0 24 24" aria-hidden="true"
+        ><path d="M4 6h16M4 12h16M4 18h16" /></svg
+      ></button
+    >
+    <div class="brand">
+      <strong>ADB Studio</strong><small
+        >{device ? label(device.model, 36) : "Android TV workspace"}</small
       >
     </div>
-    <span
+    <button
+      class="connection-badge"
       class:online={device}
-      class="status-dot"
-      aria-label={device ? "Connected" : "Disconnected"}
-    ></span>
-  </div>
+      aria-label={`Connection status: ${device ? "Connected" : "Not connected"}`}
+      onclick={() => {
+        if (device) deviceOpen = true;
+        else page = "connect";
+      }}
+      disabled={busy}
+      ><span class="status-dot" class:online={device}></span>{busy
+        ? "Working…"
+        : device
+          ? "Connected"
+          : "Not connected"}</button
+    >
+  </header>
   <main id="main">
-    {#if !native}<aside class="message info">
-        <strong>Native app required</strong>
-        <p>
-          This is the interface preview. Run the Tauri app to pair, connect and
-          choose an APK using your native file picker. No device results are
-          simulated here.
-        </p>
-      </aside>{/if}
-    {#if error}<aside class="message failure" role="alert">
-        <strong
-          >{unknown
-            ? "Installation outcome unknown"
-            : permissionDenied
-              ? "Local network access is off"
-              : "Could not complete the action"}</strong
-        >
-        <p>{error}</p>
-        {#if unknown}<p>
-            Reconnect and check the installed app on your TV before trying
-            again.
-          </p>{/if}
-      </aside>{/if}
-    {#if notice}<aside class="message success" role="status">
-        <p>{notice}</p>
-      </aside>{/if}
-    {#if page === "connect"}
-      <div class="eyebrow">01 / CONNECT</div>
-      <h1>Bring your TV<br /> into reach.</h1>
-      <p class="intro">
-        Pair once. Connect directly. Install the apps you choose.
-      </p>
-      {#if device}
-        <section class="connected-panel">
-          <div class="large-icon" aria-hidden="true">▣</div>
-          <h2>{device.model}</h2>
-          <p>Android {device.androidVersion} · SDK {device.sdk || "unknown"}</p>
-          <p class="subtle">{device.abis.join(" · ")}</p>
-          <button
-            class="primary"
-            onclick={() => (page = "install")}
-            disabled={busy}
-            >Install an app <span aria-hidden="true">→</span></button
-          ><button class="secondary" onclick={disconnect} disabled={busy}
-            >Disconnect</button
+    {#if !native}<button
+        class="preview-notice"
+        onclick={() => (previewOpen = true)}
+        ><strong>Native app required</strong><span>Preview only · details</span
+        ></button
+      >{/if}
+    <header class="page-heading">
+      <h1>{page === "connect" ? "Connect a device" : "Install an app"}</h1>
+      <button
+        class="help-trigger"
+        aria-label={page === "connect"
+          ? "Finding the debugging options"
+          : "About APK installation"}
+        onclick={() => {
+          if (page === "connect") helpOpen = true;
+          else installHelpOpen = true;
+        }}>Help <span aria-hidden="true">?</span></button
+      >
+    </header>
+    {#if error || notice}<aside
+        class="feedback"
+        class:failure={error}
+        class:success={!error}
+        role={error ? "alert" : "status"}
+      >
+        <div>
+          <strong
+            >{error
+              ? unknown
+                ? "Installation outcome unknown"
+                : permissionDenied
+                  ? "Local network access is off"
+                  : "Action needs attention"
+              : "Done"}</strong
           >
-        </section>
-      {:else}
-        <div class="steps" role="group" aria-label="Connection step">
-          <button
-            class:chosen={step === "pair"}
-            aria-pressed={step === "pair"}
-            onclick={() => (step = "pair")}
-            disabled={busy}><span>1</span> Pair TV</button
-          ><button
-            class:chosen={step === "connect"}
-            aria-pressed={step === "connect"}
-            onclick={() => (step = "connect")}
-            disabled={busy}><span>2</span> Connect</button
-          >
+          <p>{messageText.slice(0, 200)}</p>
         </div>
-        {#if step === "pair"}
-          <section class="form-section">
-            <h2>Pair with a code</h2>
+        <button class="text-action" onclick={showFeedback}>Details</button>
+      </aside>{/if}
+    <div class="page-content">
+      {#if page === "connect"}
+        {#if device}
+          <section class="center-state">
+            <div class="state-icon" aria-hidden="true">✓</div>
+            <h2>Connection ready</h2>
+            <p>{label(device.model, 60)}</p>
             <p class="subtle">
-              On the TV: Developer options → Wireless debugging → Pair device
-              with pairing code. Keep that screen open.
+              Android {device.androidVersion} · {device.encrypted
+                ? "TLS connection"
+                : "Legacy · unencrypted"}
             </p>
-            <form
-              onsubmit={(e) => {
-                e.preventDefault();
-                void pair();
-              }}
-            >
-              <label for="pair-address"
-                >Pairing address <span>IP or hostname : pairing port</span
-                ></label
-              ><input
-                id="pair-address"
-                bind:value={pairEndpoint}
-                placeholder="192.168.1.42:37123"
-                autocomplete="off"
-                autocapitalize="off"
-                spellcheck="false"
-                disabled={busy}
-              /><label for="pair-code">Six-digit pairing code</label><input
-                class="code-input"
-                id="pair-code"
-                bind:value={code}
-                placeholder="000000"
-                inputmode="numeric"
-                pattern="[0-9]{6}"
-                maxlength="6"
-                autocomplete="off"
-                disabled={busy}
-              /><button
-                class="primary"
-                type="submit"
-                disabled={!native ||
-                  busy ||
-                  !pairEndpoint.trim() ||
-                  !/^[0-9]{6}$/.test(code)}
-              >
-                {busy ? busyLabel : "Pair TV"}
-                <span aria-hidden="true">→</span></button
-              >
-            </form>
             <button
-              class="text-action"
-              onclick={() => (step = "connect")}
+              class="primary"
+              onclick={() => (page = "install")}
               disabled={busy}
-              >Already paired, or using legacy network debugging?</button
+              >Install an app <span aria-hidden="true">→</span></button
+            ><button
+              class="secondary"
+              onclick={() => (deviceOpen = true)}
+              disabled={busy}>Connection details</button
             >
           </section>
         {:else}
-          <section class="form-section">
-            <h2>Connect to your TV</h2>
-            <p class="subtle">
-              Use the address on the TV’s main Wireless debugging screen. Its
-              port is different from the pairing port.
-            </p>
-            <form
-              onsubmit={(e) => {
-                e.preventDefault();
-                void connect();
-              }}
-            >
-              <label for="connect-address"
-                >Connection address <span>IP or hostname : connection port</span
-                ></label
-              ><input
-                id="connect-address"
-                bind:value={endpoint}
-                placeholder="192.168.1.42:40215"
-                autocomplete="off"
-                autocapitalize="off"
-                spellcheck="false"
-                disabled={busy}
-              /><label class="checkbox"
-                ><input
-                  type="checkbox"
-                  bind:checked={legacy}
-                  disabled={busy}
-                /><span
-                  >Allow legacy, unencrypted ADB<small
-                    >Only for an already enabled TV on a trusted local network.
-                    You may need to approve access on the TV.</small
-                  ></span
-                ></label
+          <section class="connection-flow">
+            <div class="steps" role="group" aria-label="Connection step">
+              <button
+                class:chosen={step === "pair"}
+                aria-pressed={step === "pair"}
+                onclick={() => (step = "pair")}
+                disabled={busy}><span>1</span> Pair TV</button
               ><button
-                class="primary"
-                type="submit"
-                disabled={!native || busy || !endpoint.trim()}
-                >{busy ? busyLabel : "Connect to TV"}<span aria-hidden="true"
-                  >→</span
-                ></button
+                class:chosen={step === "connect"}
+                aria-pressed={step === "connect"}
+                onclick={() => (step = "connect")}
+                disabled={busy}><span>2</span> Connect</button
               >
-            </form>
+            </div>
+            {#if step === "pair"}
+              <p class="connection-hint">
+                Open <strong>Pair device with pairing code</strong> in your TV’s Wireless
+                debugging settings.
+              </p>
+              <form
+                onsubmit={(e) => {
+                  e.preventDefault();
+                  void pair();
+                }}
+              >
+                <label for="pair-address"
+                  >Pairing address <span>IP or hostname : pairing port</span
+                  ></label
+                ><input
+                  id="pair-address"
+                  bind:value={pairEndpoint}
+                  placeholder="192.168.1.42:37123"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  disabled={busy}
+                />
+                <label for="pair-code">Six-digit pairing code</label><input
+                  id="pair-code"
+                  class="code-input"
+                  bind:value={code}
+                  placeholder="000000"
+                  inputmode="numeric"
+                  pattern="[0-9]{6}"
+                  maxlength="6"
+                  autocomplete="off"
+                  disabled={busy}
+                />
+                <button
+                  class="primary"
+                  type="submit"
+                  disabled={!native ||
+                    busy ||
+                    !pairEndpoint.trim() ||
+                    !/^[0-9]{6}$/.test(code)}
+                  >{busy ? busyLabel : "Pair TV"}<span aria-hidden="true"
+                    >→</span
+                  ></button
+                >
+              </form>
+              <p class="field-note">
+                Keep the TV’s pairing screen open. Already paired? Choose
+                Connect above.
+              </p>
+            {:else}
+              <p class="connection-hint">
+                Use the address on the <strong
+                  >main Wireless debugging screen</strong
+                >. Its port differs from the pairing port.
+              </p>
+              <form
+                onsubmit={(e) => {
+                  e.preventDefault();
+                  void connect();
+                }}
+              >
+                <label for="connect-address"
+                  >Connection address <span
+                    >IP or hostname : connection port</span
+                  ></label
+                ><input
+                  id="connect-address"
+                  bind:value={endpoint}
+                  placeholder="192.168.1.42:40215"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  disabled={busy}
+                />
+                <label class="checkbox"
+                  ><input
+                    type="checkbox"
+                    bind:checked={legacy}
+                    disabled={busy}
+                  /><span
+                    >Allow legacy, unencrypted ADB<small
+                      >For an already enabled TV on a trusted local network.</small
+                    ></span
+                  ></label
+                >
+                <button
+                  class="primary"
+                  type="submit"
+                  disabled={!native || busy || !endpoint.trim()}
+                  >{busy ? busyLabel : "Connect to TV"}<span aria-hidden="true"
+                    >→</span
+                  ></button
+                >
+              </form>
+            {/if}
           </section>
         {/if}
-        <details class="help">
-          <summary>Finding the debugging options</summary>
-          <p>
-            On most TVs, enable Developer options by repeatedly selecting
-            Android TV OS build under Settings → System → About. Menu names
-            vary. Both devices need local network access.
-          </p>
-          <p>
-            If your TV only provides older network debugging, enable it on the
-            TV first, then use Connect with the legacy option. This app cannot
-            enable debugging on an unauthorised device.
-          </p>
-          <p>
-            This POC uses manual addresses. Automatic discovery will follow.
-          </p>
-        </details>
-      {/if}
-    {:else}
-      <div class="eyebrow">02 / INSTALL</div>
-      <h1>A new app.<br /> On your TV.</h1>
-      <p class="intro">
-        Choose a standalone APK. Review it before anything changes.
-      </p>
-      {#if !device}<section class="empty-state">
-          <div class="large-icon" aria-hidden="true">⇄</div>
-          <h2>Connect your TV first</h2>
-          <p class="subtle">
-            Pair and connect to choose where the app is installed.
-          </p>
-          <button class="primary" onclick={() => (page = "connect")}
-            >Set up connection <span aria-hidden="true">→</span></button
-          >
-        </section>
       {:else}
-        <div class="target-line">
-          <span class="status-dot online"></span><span
-            >{device.model}<small>Install for Owner · Android user 0</small
-            ></span
-          ><button
-            class="text-action"
-            onclick={() => (page = "connect")}
-            disabled={busy}>Change</button
-          >
-        </div>
-        {#if selection}
-          <section class="apk-review">
-            <div class="apk-heading">
-              <span class="file-icon" aria-hidden="true">↓</span>
-              <div>
-                <h2>{selection.package}</h2>
-                <p>
-                  {selection.versionName ?? `Version ${selection.versionCode}`} ·
-                  {formatBytes(selection.bytes)}
-                </p>
-              </div>
-            </div>
-            <dl>
-              <div>
-                <dt>Version code</dt>
-                <dd>{selection.versionCode}</dd>
-              </div>
-              <div>
-                <dt>Minimum SDK</dt>
-                <dd>{selection.minSdk ?? "Not specified"}</dd>
-              </div>
-              <div>
-                <dt>Architecture</dt>
-                <dd>
-                  {selection.abis.length
-                    ? selection.abis.join(", ")
-                    : "No native-library restriction"}
-                </dd>
-              </div>
-              <div>
-                <dt>Target</dt>
-                <dd>{device.model} · Owner</dd>
-              </div>
-            </dl>
-            <details class="technical">
-              <summary>File fingerprint</summary><code>{selection.sha256}</code>
-              <p>
-                Metadata is read from the selected file. This POC does not
-                authenticate the APK’s publisher.
-              </p>
-            </details>
-            <div class="message info">
-              <p>
-                Android checks signing and update compatibility. An existing app
-                is updated in place when compatible; this POC will never
-                uninstall it automatically.
-              </p>
-            </div>
-            <label class="checkbox"
-              ><input
-                type="checkbox"
-                bind:checked={confirmed}
-                disabled={busy}
-              /><span
-                >Install this APK on {device.model}<small
-                  >I chose and trust the source of this file.</small
-                ></span
-              ></label
-            >
-            {#if progress}<div class="transfer" role="status">
-                <div>
-                  <strong
-                    >{progress.stage === "uploading"
-                      ? "Transferring APK"
-                      : progress.stage === "installing"
-                        ? "Installing on TV"
-                        : "Verifying installed version"}</strong
-                  ><span
-                    >{formatBytes(progress.sent)} / {formatBytes(
-                      progress.total,
-                    )}</span
-                  >
-                </div>
-                <progress max={progress.total || 1} value={progress.sent}
-                ></progress>
-                <p class="subtle">
-                  Keep the app open and the TV connected. An interruption may
-                  leave the result unknown.
-                </p>
-              </div>{/if}
-            <button class="primary" onclick={install} disabled={!ready}
-              >{busy ? busyLabel : "Install on TV"}<span aria-hidden="true"
-                >↑</span
-              ></button
-            ><button class="secondary" onclick={pick} disabled={busy || !native}
-              >Choose another APK</button
+        {#if !device}
+          <section class="center-state">
+            <div class="state-icon" aria-hidden="true">⇄</div>
+            <h2>Connect your device first</h2>
+            <p class="subtle">Choose where the app will be installed.</p>
+            <button class="primary" onclick={() => (page = "connect")}
+              >Set up connection <span aria-hidden="true">→</span></button
             >
           </section>
+        {:else if selection}
+          {#if busy && progress}
+            <section class="center-state">
+              <div class="state-icon" aria-hidden="true">↑</div>
+              <h2>
+                {progress.stage === "uploading"
+                  ? "Transferring APK"
+                  : progress.stage === "installing"
+                    ? "Installing app"
+                    : "Verifying installation"}
+              </h2>
+              <p>{label(selection.package, 80)}</p>
+              <div class="transfer">
+                <progress max={progress.total || 1} value={progress.sent}
+                ></progress><span
+                  >{formatBytes(progress.sent)} / {formatBytes(
+                    progress.total,
+                  )}</span
+                >
+              </div>
+              <p class="subtle">Keep the app open and the device connected.</p>
+            </section>
+          {:else}
+            <section class="install-review">
+              <div class="apk-heading">
+                <span class="file-icon" aria-hidden="true">↓</span>
+                <div>
+                  <h2>{label(selection.package, 90)}</h2>
+                  <p>
+                    {label(
+                      selection.versionName ??
+                        `Version ${selection.versionCode}`,
+                      60,
+                    )} · {formatBytes(selection.bytes)}
+                  </p>
+                </div>
+              </div>
+              <p class="target-caption">On {label(device.model, 45)} · Owner</p>
+              <button
+                class="text-action file-details"
+                onclick={() => (fileOpen = true)}
+                >File details & fingerprint <span aria-hidden="true">↗</span
+                ></button
+              >
+              <p class="install-note">
+                Android checks update compatibility. No app is removed
+                automatically.
+              </p>
+              <label class="checkbox"
+                ><input
+                  type="checkbox"
+                  bind:checked={confirmed}
+                  disabled={busy}
+                /><span
+                  >Install this APK on this device<small
+                    >I chose and trust the file source.</small
+                  ></span
+                ></label
+              >
+              <div class="install-actions">
+                <button class="primary" onclick={install} disabled={!ready}
+                  >{busy ? busyLabel : "Install app"}<span aria-hidden="true"
+                    >↑</span
+                  ></button
+                ><button
+                  class="secondary"
+                  aria-label="Choose another APK"
+                  onclick={pick}
+                  disabled={busy || !native}>Change file</button
+                >
+              </div>
+            </section>
+          {/if}
         {:else}
-          <section class="choose-file">
-            <div class="large-icon" aria-hidden="true">⇧</div>
+          <section class="center-state">
+            <div class="state-icon" aria-hidden="true">⇧</div>
             <h2>Choose your APK</h2>
             <p class="subtle">
-              Use your device’s file picker.<br />The file is inspected before
-              installation.
+              Select a standalone APK using the native file picker.
+            </p>
+            <p class="target-caption">
+              Target: {label(device.model, 55)} · Owner
             </p>
             <button class="primary" onclick={pick} disabled={busy || !native}
               >{busy ? busyLabel : "Choose APK file"}<span aria-hidden="true"
@@ -484,32 +497,171 @@
             >
           </section>
         {/if}
-        <p class="footnote">
-          Standalone APKs up to 1 GiB. Split APK sets and Android App Bundles
-          are outside this first POC. Unsupported files are rejected.
-        </p>
       {/if}
-    {/if}
+    </div>
   </main>
-  <nav class="bottom-nav" aria-label="Main navigation">
+</div>
+
+<Modal
+  open={menuOpen}
+  title="Navigation"
+  variant="drawer"
+  onclose={() => (menuOpen = false)}
+>
+  <nav class="drawer-menu" aria-label="Main navigation">
     <button
       class:active={page === "connect"}
+      aria-label="Connect device"
       aria-current={page === "connect" ? "page" : undefined}
-      onclick={() => (page = "connect")}
-      disabled={busy}
-      ><svg viewBox="0 0 24 24" aria-hidden="true"
-        ><rect x="3" y="4" width="18" height="13" rx="2" /><path
-          d="M8 21h8M12 17v4"
-        /></svg
-      >Connect</button
+      onclick={() => navigate("connect")}
+      ><span aria-hidden="true">▣</span><span
+        >Connect device<small>Pair and manage the connection</small></span
+      ></button
     ><button
       class:active={page === "install"}
+      aria-label="Install app"
       aria-current={page === "install" ? "page" : undefined}
-      onclick={() => (page = "install")}
-      disabled={busy}
-      ><svg viewBox="0 0 24 24" aria-hidden="true"
-        ><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" /></svg
-      >Install APK</button
+      onclick={() => navigate("install")}
+      ><span aria-hidden="true">↓</span><span
+        >Install app<small>Choose and review an APK</small></span
+      ></button
     >
   </nav>
-</div>
+</Modal>
+<Modal
+  open={helpOpen}
+  title="Finding the debugging options"
+  onclose={() => (helpOpen = false)}
+>
+  <p>
+    On most TVs, enable Developer options by repeatedly selecting Android TV OS
+    build under Settings → System → About. Menu names vary. Both devices need
+    local network access.
+  </p>
+  <p>
+    If your TV only provides older network debugging, enable it on the TV first,
+    then use Connect with the legacy option. This app cannot enable debugging on
+    an unauthorised device.
+  </p>
+  <p>
+    This version uses manual addresses. Copy the pairing and connection ports
+    from their separate TV screens.
+  </p>
+</Modal>
+<Modal
+  open={deviceOpen}
+  title="Device connection"
+  onclose={() => (deviceOpen = false)}
+>
+  {#if device}<h3>{label(device.model, 120)}</h3>
+    <dl>
+      <div>
+        <dt>Address</dt>
+        <dd>{device.endpoint}</dd>
+      </div>
+      <div>
+        <dt>Transport</dt>
+        <dd>{device.encrypted ? "TLS" : "Legacy · unencrypted"}</dd>
+      </div>
+      <div>
+        <dt>Android</dt>
+        <dd>{device.androidVersion} · SDK {device.sdk || "unknown"}</dd>
+      </div>
+      <div>
+        <dt>Profile</dt>
+        <dd>Owner · user 0</dd>
+      </div>
+    </dl>
+    <button
+      class="secondary"
+      onclick={() => {
+        deviceOpen = false;
+        void disconnect();
+      }}
+      disabled={busy}>Disconnect</button
+    >{/if}
+</Modal>
+<Modal
+  open={fileOpen}
+  title="APK file details"
+  onclose={() => (fileOpen = false)}
+>
+  {#if selection}<dl>
+      <div>
+        <dt>Package</dt>
+        <dd>{label(selection.package, 255)}</dd>
+      </div>
+      <div>
+        <dt>Version code</dt>
+        <dd>{selection.versionCode}</dd>
+      </div>
+      <div>
+        <dt>Minimum SDK</dt>
+        <dd>{selection.minSdk ?? "Not specified"}</dd>
+      </div>
+      <div>
+        <dt>Architecture</dt>
+        <dd>
+          {selection.abis.length
+            ? selection.abis.slice(0, 4).join(", ")
+            : "No native-library restriction"}
+        </dd>
+      </div>
+      <div>
+        <dt>Size</dt>
+        <dd>{formatBytes(selection.bytes)}</dd>
+      </div>
+    </dl>
+    <h3>SHA-256 fingerprint</h3>
+    <code class="fingerprint">{selection.sha256}</code>
+    <p class="subtle">
+      Metadata inspection does not authenticate the APK publisher.
+    </p>{/if}
+</Modal>
+<Modal
+  open={feedbackOpen}
+  title={error ? "Action details" : "Completed action"}
+  onclose={() => (feedbackOpen = false)}
+>
+  <p class="message-detail">
+    {messageText.slice(messagePage * 400, (messagePage + 1) * 400)}
+  </p>
+  {#if unknown}<p>
+      Reconnect and inspect the installed app before retrying.
+    </p>{/if}
+  {#if messagePages > 1}<div class="pagination">
+      <button
+        class="secondary"
+        disabled={messagePage === 0}
+        onclick={() => messagePage--}>Previous</button
+      ><span>{messagePage + 1} / {messagePages}</span><button
+        class="secondary"
+        disabled={messagePage + 1 >= messagePages}
+        onclick={() => messagePage++}>Next</button
+      >
+    </div>{/if}
+</Modal>
+<Modal
+  open={previewOpen}
+  title="Native app required"
+  onclose={() => (previewOpen = false)}
+  ><p>
+    This is the interface preview. Run the installed Tauri app to pair, connect
+    and choose an APK with the native file picker. No device results are
+    simulated here.
+  </p></Modal
+>
+<Modal
+  open={installHelpOpen}
+  title="About APK installation"
+  onclose={() => (installHelpOpen = false)}
+  ><p>
+    Choose a standalone APK, inspect the package and target device, then confirm
+    installation. Android checks signing and update compatibility.
+  </p>
+  <p>
+    Existing apps are never automatically uninstalled. Split APK sets and
+    Android App Bundles are not supported by this build. The current file limit
+    is 1 GiB.
+  </p></Modal
+>
