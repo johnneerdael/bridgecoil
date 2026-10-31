@@ -250,6 +250,13 @@ async fn a_learned_button_opens_its_app() {
     let shown = top(&mut c, &t).await;
     println!("top {}", shown.trim());
     assert!(shown.contains("com.android.settings"));
+    assert!(
+        state["log"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|l| l.as_str().unwrap().contains(" opened "))
+    );
 
     let pause = Action::Mappings {
         change: MappingChange::Pause { paused: true },
@@ -278,4 +285,18 @@ async fn a_learned_button_opens_its_app() {
     let snap = inspect(&mut c, &t).await.unwrap();
     println!("listener {} monitor {}", snap.listener, snap.monitor);
     assert!(snap.listener);
+    assert!(snap.listener);
+    if std::env::var("BC_KEEP").is_ok() {
+        return;
+    }
+    let remove = Action::Mappings {
+        change: MappingChange::RemoveAll,
+    };
+    let review = w.prepare(&mut c, &t, remove).await.unwrap();
+    assert_eq!(
+        w.apply(&mut c, &review.id).await.unwrap().status,
+        OperationStatus::Verified
+    );
+    let left = c.shell(&t, "pidof getevent").await.unwrap().stdout;
+    assert_eq!(left.trim(), "", "nothing is left running");
 }

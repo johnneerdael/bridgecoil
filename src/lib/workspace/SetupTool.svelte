@@ -154,13 +154,18 @@
           A different app is using the Shizuku name on this TV, so Shizuku-Next
           can't be installed. Porter can sit alongside it.
         </p>{/if}
+      {#if snapshot.shizuku === "unknown"}<p class="subtle">
+          Bridgecoil couldn't check which helper app is installed. Tap refresh
+          to try again.
+        </p>{/if}
       {#each managers as manager}<div class="setup-choice">
           <strong>{manager.name}</strong>
           <p class="subtle">{manager.note}</p>
           <button
             class="secondary"
             disabled={busy ||
-              (manager.id === "shizukuNext" && snapshot.shizuku === "other")}
+              (manager.id === "shizukuNext" &&
+                ["other", "unknown"].includes(snapshot.shizuku))}
             aria-label={`Install ${manager.name}`}
             onclick={() => install(manager.id)}>Install</button
           >
@@ -204,6 +209,11 @@
           disabled={busy}
           onclick={() => install("termuxBoot")}>Install Termux:Boot</button
         >
+      {:else if !snapshot.canConfigureTerminal}<p class="error-text">
+          This TV blocks the access Bridgecoil needs to set up Termux, so button
+          mappings can't be kept running here. You can still use them until the
+          TV restarts.
+        </p>
       {:else}<button
           class="primary"
           disabled={busy}

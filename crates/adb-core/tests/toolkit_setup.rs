@@ -133,11 +133,12 @@ async fn recognises_each_manager_by_certificate() {
 }
 
 #[tokio::test]
-async fn an_unreadable_certificate_is_not_trusted() {
+async fn an_unreadable_certificate_is_neither_trusted_nor_blamed_on_another_app() {
     let mut d = device(vec![(SHIZUKU, NEXT)], "");
     d.no_metadata = true;
     let snap = inspect(&mut d, &target()).await.unwrap();
-    assert_eq!(snap.shizuku, ShizukuSlot::Other);
+    assert_eq!(snap.shizuku, ShizukuSlot::Unknown);
+    assert_eq!(snap.manager, None);
 }
 
 #[tokio::test]

@@ -4,7 +4,10 @@ echo "shizukuServer=$(pidof shizuku_server)"
 echo "porterServer=$(pidof porter_server)"
 if [ -r /data/local/tmp/bridgecoil/listener.pid ]; then
   read -r listener < /data/local/tmp/bridgecoil/listener.pid
-  kill -0 "$listener" 2>/dev/null && echo "listener=$listener"
+  case "$listener" in
+    ""|*[!0-9]*) ;;
+    *) kill -0 "$listener" 2>/dev/null && echo "listener=$listener" ;;
+  esac
 fi
 run-as com.termux sh 2>/dev/null <<'INNER'
 files=/data/data/com.termux/files

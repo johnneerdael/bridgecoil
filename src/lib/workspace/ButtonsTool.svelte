@@ -158,13 +158,18 @@
       // The log keeps a rolling tail, so find where the test began rather than trusting a count.
       const seen = testLast ? fresh.log.lastIndexOf(testLast) : -1;
       const fresher = fresh.log.slice(seen >= 0 ? seen + 1 : testFrom);
-      const hit = fresher
+      const newest = fresher
         .reverse()
-        .map((line) => fresh.mappings.find((m) => line.endsWith(m.component)))
-        .find(Boolean);
-      testResult = hit
-        ? `It worked: ${hit.label} opened.`
-        : "The TV didn't see a press of a mapped button.";
+        .map((line) => ({
+          failed: line.includes(" failed "),
+          mapping: fresh.mappings.find((m) => line.endsWith(` ${m.component}`)),
+        }))
+        .find((entry) => entry.mapping);
+      testResult = !newest
+        ? "The TV didn't see a press of a mapped button."
+        : newest.failed
+          ? `The TV saw the press but couldn't open ${newest.mapping!.label}.`
+          : `It worked: ${newest.mapping!.label} opened.`;
     });
 </script>
 

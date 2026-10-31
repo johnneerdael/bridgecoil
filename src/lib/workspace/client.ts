@@ -123,7 +123,7 @@ export type ToolStatus = {
 export type Stage =
   "manager" | "server" | "terminal" | "shell" | "access" | "startup" | "done";
 export type ToolkitSnapshot = {
-  shizuku: "empty" | "shizukuNext" | "porterCompat" | "other";
+  shizuku: "empty" | "shizukuNext" | "porterCompat" | "other" | "unknown";
   shizukuVersion: string | null;
   porter: ToolStatus;
   termux: ToolStatus;

@@ -45,6 +45,8 @@ pub enum ShizukuSlot {
     ShizukuNext,
     PorterCompat,
     Other,
+    /// Installed, but its certificate couldn't be read this time.
+    Unknown,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -126,12 +128,14 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
     .map(str::to_owned)
     .collect();
     let metadata = match d.metadata(t, &wanted).await {
-        Ok(Some(rows)) => rows,
+        Ok(Some(rows)) => Some(rows),
         _ => {
             validate_target(d.current_target().as_ref(), t)?;
-            Vec::new()
+            None
         }
     };
+    let readable = metadata.is_some();
+    let metadata = metadata.unwrap_or_default();
     let status = |package: &str, signer: &str| {
         let row = metadata.iter().find(|m| m.package == package);
         ToolStatus {
@@ -158,7 +162,8 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
         (false, ..) => ShizukuSlot::Empty,
         (_, true, _) => ShizukuSlot::ShizukuNext,
         (_, _, true) => ShizukuSlot::PorterCompat,
-        _ => ShizukuSlot::Other,
+        _ if readable => ShizukuSlot::Other,
+        _ => ShizukuSlot::Unknown,
     };
     let output = d.shell(t, facts_command()).await?;
     let facts = parse_facts(&output.stdout);

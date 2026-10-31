@@ -92,6 +92,22 @@ it("flags commands that can lose data or lock someone out", () => {
     expect(command.warning, command.id).toBeTruthy();
 });
 
+it("treats switching off an app as risky, because it can lock you out", () => {
+  const disable = all.find((c) => c.id === "disable-app")!;
+  expect(disable.effect).toBe("danger");
+  expect(disable.warning).toMatch(/Settings/);
+});
+
+it("targets the connected profile rather than assuming the first", () => {
+  for (const id of ["disable-app", "enable-app", "clear-app", "uninstall-app"]) {
+    const command = all.find((c) => c.id === id)!;
+    expect(
+      buildCommand(command, { ...defaults(command), app: "org.demo", profile: "10" }),
+      id,
+    ).toContain("--user 10");
+  }
+});
+
 it("quotes picked values so they stay one argument", () => {
   expect(shellQuote("a b")).toBe("'a b'");
   expect(shellQuote("it's")).toBe(`'it'"'"'s'`);
@@ -145,4 +161,18 @@ it("warns before a dangerous command", async () => {
     await screen.findByRole("button", { name: /^Delete an app's data/ }),
   );
   expect(await screen.findByRole("note")).toBeTruthy();
+});
+
+it("uses the device's profile when running", async () => {
+  const api = platform();
+  render(CommandsTool, {
+    device: { ...device, profileId: 10 },
+    api,
+    onreview: vi.fn(),
+  });
+  await fireEvent.click(await screen.findByRole("button", { name: /^Apps/ }));
+  await fireEvent.click(
+    await screen.findByRole("button", { name: /^Delete an app's data/ }),
+  );
+  await screen.findByText("pm clear --user 10 org.demo");
 });

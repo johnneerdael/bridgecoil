@@ -138,7 +138,14 @@ it("installs what Termux needs before preparing it", async () => {
   ).toBeTruthy();
   cleanup();
   open(
-    platform(snapshot({ ...running, termux: official, termuxBoot: official })),
+    platform(
+      snapshot({
+        ...running,
+        termux: official,
+        termuxBoot: official,
+        canConfigureTerminal: true,
+      }),
+    ),
   );
   expect(
     await screen.findByRole("button", { name: "Prepare Termux" }),
@@ -241,3 +248,28 @@ it("is honest about restarts when finished", async () => {
   await fireEvent.click(screen.getByRole("button", { name: "Remap buttons" }));
   expect(onbuttons).toHaveBeenCalled();
 });
+
+it("stops and explains when a TV blocks setting up Termux", async () => {
+  open(
+    platform(
+      snapshot({
+        manager: "porter",
+        porter: official,
+        serverRunning: true,
+        termux: official,
+        termuxBoot: official,
+        canConfigureTerminal: false,
+        stage: "terminal",
+      }),
+    ),
+  );
+  expect(await screen.findByText(/blocks/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Prepare Termux" })).toBeNull();
+});
+
+it("offers a retry instead of blaming another app when it couldn't check", async () => {
+  open(platform(snapshot({ shizuku: "unknown" })));
+  expect(await screen.findByText(/couldn't check/)).toBeTruthy();
+  expect(screen.queryByText(/different app is using/)).toBeNull();
+});
+

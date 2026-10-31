@@ -118,9 +118,11 @@ export const catalog: CommandGroup[] = [
         id: "disable-app",
         title: "Switch an app off",
         about: "Hides the app and stops it running. Its data stays on the TV.",
-        effect: "change",
+        effect: "danger",
+        warning:
+          "Switching off Settings or your launcher can leave you unable to get back in without this app.",
         options: [app("The app to switch off.")],
-        build: (v) => `pm disable-user --user 0 ${q(v.app)}`,
+        build: (v) => `pm disable-user --user ${v.profile} ${q(v.app)}`,
       },
       {
         id: "enable-app",
@@ -128,7 +130,7 @@ export const catalog: CommandGroup[] = [
         about: "Reverses switching an app off.",
         effect: "change",
         options: [app("The app to switch on.")],
-        build: (v) => `pm enable --user 0 ${q(v.app)}`,
+        build: (v) => `pm enable --user ${v.profile} ${q(v.app)}`,
       },
       {
         id: "clear-app",
@@ -137,7 +139,7 @@ export const catalog: CommandGroup[] = [
         effect: "danger",
         warning: "Sign-ins, settings and downloads in this app are deleted.",
         options: [app("The app to reset.")],
-        build: (v) => `pm clear --user 0 ${q(v.app)}`,
+        build: (v) => `pm clear --user ${v.profile} ${q(v.app)}`,
       },
       {
         id: "uninstall-app",
@@ -147,7 +149,7 @@ export const catalog: CommandGroup[] = [
         warning:
           "Its data is deleted. Removing a system app can break the TV, so check Apps for its rating first.",
         options: [app("The app to remove.")],
-        build: (v) => `pm uninstall --user 0 ${q(v.app)}`,
+        build: (v) => `pm uninstall --user ${v.profile} ${q(v.app)}`,
       },
     ],
   },
@@ -361,7 +363,7 @@ export const catalog: CommandGroup[] = [
         build: (v) => `settings put global ota_disable_automatic_update ${v.state}`,
       },
       {
-        id: "stay-on-usb",
+        id: "show-touches",
         title: "Show touches for debugging",
         about: "Shows a dot wherever input lands on screen.",
         effect: "change",
@@ -413,7 +415,7 @@ export const catalog: CommandGroup[] = [
 ];
 
 export function defaults(command: Command): Values {
-  const values: Values = {};
+  const values: Values = { profile: "0" };
   for (const option of command.options ?? [])
     values[option.id] = option.kind === "choice" ? option.choices[0].value : "";
   return values;

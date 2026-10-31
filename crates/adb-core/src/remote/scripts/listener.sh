@@ -2,6 +2,8 @@
 # Written by Bridgecoil, which can pause or remove it. Generated for this TV's own buttons.
 dir=/data/local/tmp/bridgecoil
 pid_file=$dir/listener.pid
+events_file=$dir/events.pid
+log=$dir/listener.log
 running() {
   [ -r "$pid_file" ] || return 1
   read -r pid < "$pid_file"
@@ -16,21 +18,27 @@ case "$1" in
   --status) running; exit $? ;;
   --start)
     running && exit 0
-    [ "$(wc -c < "$dir/listener.log" 2>/dev/null || echo 0)" -gt 100000 ] && mv -f "$dir/listener.log" "$dir/listener.log.old"
-    nohup sh "$0" --run >> "$dir/listener.log" 2>&1 < /dev/null &
+    nohup sh "$0" --run >> "$log" 2>&1 < /dev/null &
     exit 0
     ;;
   --stop)
-    if running; then
-      for child in $(pgrep -P "$pid"); do kill "$child" 2>/dev/null; done
-      kill "$pid"
+    # getevent goes first: ending it ends every part of the pipeline, on any Android version.
+    if [ -r "$events_file" ]; then
+      read -r events < "$events_file"
+      case "$events" in ""|*[!0-9]*) ;; *) kill "$events" 2>/dev/null ;; esac
     fi
-    rm -f "$pid_file"
+    running && kill "$pid"
+    rm -f "$pid_file" "$events_file"
+    rmdir "$dir/run.lock" 2>/dev/null
     exit 0
     ;;
   --run) ;;
   *) exit 2 ;;
 esac
+# The app and the boot monitor can both ask for a start, and two listeners would open apps twice.
+if ! mkdir "$dir/run.lock" 2>/dev/null; then
+  running && exit 0
+fi
 echo $$ > "$pid_file"
 echo "$(date +%s) started"
 set -f
@@ -38,7 +46,11 @@ paths=" "
 path=
 scan=
 scan_device=
-getevent -l 2>/dev/null | while read -r line; do
+{
+  getevent -l 2>/dev/null &
+  echo $! > "$events_file"
+  wait
+} | while read -r line; do
   set -- $line
   case "$line" in
     "add device"*) path=$4; continue ;;
@@ -74,10 +86,17 @@ getevent -l 2>/dev/null | while read -r line; do
       esac
       scan=
       if [ -n "$target" ] && [ ! -f "$dir/paused" ]; then
-        echo "$(date +%s) $source:$3 $target"
-        (sleep 0.2; am start -n "$target" >/dev/null 2>&1) &
+        [ "$(wc -c < "$log" 2>/dev/null || echo 0)" -gt 100000 ] && : > "$log"
+        (
+          sleep 0.2
+          case "$(am start -n "$target" 2>&1)" in
+            *Error*|*Exception*) echo "$(date +%s) failed $target" ;;
+            *) echo "$(date +%s) opened $target" ;;
+          esac
+        ) &
       fi
       ;;
   esac
 done
+rmdir "$dir/run.lock" 2>/dev/null
 echo "$(date +%s) stopped"

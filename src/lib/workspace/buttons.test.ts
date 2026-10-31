@@ -218,3 +218,17 @@ it("says so when a test press never arrived", async () => {
   );
   expect(await screen.findByText(/didn't see a press/)).toBeTruthy();
 });
+
+it("doesn't call a failed launch a success", async () => {
+  const current = state({ running: true, mappings: [saved], log: ["1 started"] });
+  open(platform(current));
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Test a button" }),
+  );
+  current.log = [...current.log, "2 failed org.demo/.Main"];
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "I pressed it" }),
+  );
+  expect(await screen.findByText(/couldn't open Player/)).toBeTruthy();
+});
+

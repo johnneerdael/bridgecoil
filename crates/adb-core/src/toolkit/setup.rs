@@ -136,7 +136,9 @@ pub fn plan(step: SetupStep) -> SetupPlan {
         SetupStep::InstallMonitor => make(
             "Keep mappings running".into(),
             "Add a Termux:Boot script that restarts your button mappings after a restart, retrying less often while the manager is unavailable.",
-            &[],
+            &[
+                "If the manager refuses three times, the script stops until the next restart, so it can't keep showing prompts on the TV.",
+            ],
             format!(
                 "{}{}MONITOR",
                 include_str!("scripts/install_monitor.sh"),

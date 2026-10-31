@@ -50,7 +50,7 @@
   }
   async function choose(next: Command) {
     command = next;
-    values = defaults(next);
+    values = { ...defaults(next), profile: String(device.profileId) };
     error = "";
     if (!next.options?.some((o) => o.kind === "app")) return;
     try {

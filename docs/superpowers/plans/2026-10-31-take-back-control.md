@@ -52,6 +52,7 @@ The certificate is pinned, so a release signed by anyone else is refused even if
 - [x] **G. Remote UI.** Learn, map, test, pause, remove, health.
 - [x] **H. Command builder.** Task 15: a catalog of labelled commands with explained options, picked from dropdowns, previewed, reviewed and run with no typing.
 - [x] **I. End-to-end emulator run.** Proven with `tests/toolkit_live.rs` for both managers. A real key press opened the mapped app, pause silenced it, and after a cold reboot the Termux:Boot monitor restored the listener within 60 seconds of the manager returning.
+- [x] **Independent review.** No Critical findings. Fixed all five Important issues: endless prompts from the boot monitor, a listener that could outlive removal on older Android, an unflagged lockout risk and hardcoded profile in Commands, a stale monitor lock, and a dead end on TVs that block `run-as`.
 - [ ] **J. On a real TV.** Needs the owner. Pairing, the access prompt, start at boot and a physical remote.
 
 ## Verification
