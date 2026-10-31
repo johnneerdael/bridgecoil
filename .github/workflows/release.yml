@@ -16,8 +16,9 @@ on:
 permissions:
   contents: read
 
+# Per branch, so a test build can't take the place of a queued release, or the other way round.
 concurrency:
-  group: release
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
