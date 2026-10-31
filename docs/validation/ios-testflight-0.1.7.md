@@ -23,15 +23,15 @@
 | Apple upload | `UPLOAD SUCCEEDED with no errors`; delivery `3d682772-5b56-428d-93a8-4ec2f8e54ea2` |
 | Apple processing | `VALID`, confirmed using altool delivery status and the App Store Connect app/builds relationship |
 | Initial TestFlight availability | `MISSING_EXPORT_COMPLIANCE` for internal and external testing; not yet install-ready |
-| Current TestFlight status | `Ready to Submit`, observed in App Store Connect after the owner excluded France for this beta |
+| Current TestFlight status | `Waiting for Review`, observed in App Store Connect on 31 October 2026 after the owner submitted the build; associated with `Bridgecoil External Beta` |
 | Beta information | Description, feedback email, marketing/privacy URLs, review notes and private review contact saved and checked after reload; sign-in not required |
 | What to Test | Version/build-specific notes published and read back exactly by [run 41224939045](https://github.com/johnneerdael/bridgecoil/actions/runs/41224939045), without rebuilding or uploading another IPA |
 
 ## Remaining acceptance
 
-The owner selected invitation-only external testing outside France. The app bundles `libadb` TLS/pairing and `ureq` with Rustls, so its implementation is not limited to Apple's operating-system crypto APIs. No exemption flag was inserted simply to bypass the questionnaire. The initial compliance block is no longer shown; TestFlight reports `Ready to Submit`. This observation does not establish eligibility for a different distribution scope.
+The owner selected invitation-only external testing outside France. The app bundles `libadb` TLS/pairing and `ureq` with Rustls, so its implementation is not limited to Apple's operating-system crypto APIs. No exemption flag was inserted simply to bypass the questionnaire. The initial compliance block is no longer shown; the build progressed through `Ready to Submit` to `Waiting for Review`. This observation does not establish eligibility for a different distribution scope.
 
-Empty **Bridgecoil Internal** and **Bridgecoil External Beta** groups were created. Internal automatic distribution is disabled. The external group's build-addition wizard is prepared for 3.1 with the saved notes loaded, sign-in not required and automatic tester notification disabled. The final **Submit for Review** action has not been taken; the group still has zero builds and zero testers. No invitations or public link were enabled. Review contacts remain private in App Store Connect.
+**Bridgecoil Internal** and **Bridgecoil External Beta** groups were created. Internal automatic distribution was disabled at creation. The external review wizard was prepared for 3.1 with the saved notes loaded, sign-in not required and automatic tester notification disabled. The owner then submitted the build; App Store Connect confirms `Waiting for Review` and associates it with **Bridgecoil External Beta**. No invitations or public link were enabled by the preparation automation. Review contacts remain private in App Store Connect. Apple beta-review approval and tester access have not been verified.
 
 No physical iPhone/iPad installation, LAN prompt, pairing, APK/file picker, capture/export or background/reconnect acceptance was performed. Follow [the physical-device checklist](../ios-beta.md#physical-device-acceptance).
 

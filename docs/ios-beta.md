@@ -6,7 +6,7 @@ This establishes current source-build support. Physical-iPhone permission handli
 
 ## First signed delivery
 
-[Run 41218436962](https://github.com/johnneerdael/bridgecoil/actions/runs/41218436962) built and verified version **0.1.7 (3.1)** with the configured Apple Distribution certificate and an App Store provisioning profile. Apple validation and upload completed without errors. Apple processing returned `VALID`; TestFlight now shows **Ready to Submit**. The owner excluded France for this beta. Beta information and review contacts are saved, and [run 41224939045](https://github.com/johnneerdael/bridgecoil/actions/runs/41224939045) published and verified the build's What to Test notes. External beta review submission, tester assignment and physical-device acceptance remain pending.
+[Run 41218436962](https://github.com/johnneerdael/bridgecoil/actions/runs/41218436962) built and verified version **0.1.7 (3.1)** with the configured Apple Distribution certificate and an App Store provisioning profile. Apple validation and upload completed without errors. Apple processing returned `VALID`. On 31 October 2026, the owner submitted the build for external beta review; App Store Connect shows **Waiting for Review**, associated with **Bridgecoil External Beta**. The owner excluded France for this beta. Beta information and review contacts are saved, and [run 41224939045](https://github.com/johnneerdael/bridgecoil/actions/runs/41224939045) published and verified the build's What to Test notes. Apple's approval, tester access and physical-device acceptance remain separate steps.
 
 ## Run the workflow
 
