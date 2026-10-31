@@ -76,7 +76,13 @@ This run found what no emulator could:
 
 A button keeps its normal action until the app it opens is off. A button Android has no key code for, shown as `keyCode=0`, has no normal action, so a mapping is already a full replacement.
 
-Not proven here: pairing on a TV, and a full remap with **Turn off** on a button that opens an app.
+**TCL Smart TV Pro, Android 14, 32-bit, on Wi-Fi. 2026-10-31.** This TV already runs the owner's own remote script and Shevery, so only pairing was tried.
+
+| Step | Result |
+|---|---|
+| Pair with a code, then connect | Passed. The device page showed Wireless ADB · TLS |
+
+Not proven on any TV yet: a full remap with **Turn off** on a button that opens an app, start at boot through wireless debugging, Clean up and the launcher handover.
 
 ## Afterwards
 
