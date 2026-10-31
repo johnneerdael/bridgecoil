@@ -3,6 +3,7 @@ pub mod backend;
 pub mod identity;
 mod manifest;
 pub mod ratings;
+pub mod toolkit;
 pub mod workspace;
 pub fn validate_endpoint(value: &str) -> Result<String, String> {
     let value = value.trim();

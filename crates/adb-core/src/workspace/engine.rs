@@ -10,6 +10,10 @@ use crate::{
     backend::PocError,
     ratings::{Level, store::Ratings},
     shell_quote,
+    toolkit::{
+        inventory::{facts_command, parse_facts},
+        setup::{self, SetupStep},
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -72,6 +76,9 @@ pub enum Action {
     },
     FileCreateFolder {
         path: String,
+    },
+    Setup {
+        step: SetupStep,
     },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -400,7 +407,8 @@ impl Workspace {
                             action: PackageAction::ClearData | PackageAction::ClearCache,
                             ..
                         }
-                ) {
+                ) || matches!(p.action, Action::Setup { step } if !setup::has_readback(step))
+                {
                     row.status = OperationStatus::Sent;
                 } else {
                     match probe(driver, target, &p.action).await {
@@ -506,6 +514,7 @@ fn state_label(action: &Action, before: &str) -> String {
         Action::Shell { .. } => {
             "Arbitrary shell commands have no general readback or automatic undo.".into()
         }
+        Action::Setup { .. } => "Checked on the TV just now.".into(),
         Action::Permission { .. } => format!("Current permission: {before}"),
         Action::FileDelete { .. } | Action::FileMove { .. } | Action::FileCreateFolder { .. } => {
             serde_json::from_str::<Vec<files::PathState>>(before)
@@ -530,6 +539,7 @@ fn kind(a: &Action) -> &str {
         Action::FileDelete { .. } | Action::FileMove { .. } | Action::FileCreateFolder { .. } => {
             "file"
         }
+        Action::Setup { .. } => "setup",
     }
 }
 fn file_paths(a: &Action) -> Vec<&str> {
@@ -641,6 +651,7 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
             )
         }
         Action::DefaultHome { .. } => home_query(t.profile_id),
+        Action::Setup { .. } => facts_command().to_owned(),
         Action::Shell { .. } => return Ok(String::new()),
         Action::Permission { .. }
         | Action::FileDelete { .. }
@@ -662,6 +673,7 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
             serde_json::to_string(&parse_package_state(&output.stdout, t.profile_id))
                 .map_err(internal)
         }
+        Action::Setup { .. } => Ok(parse_facts(&output.stdout).summary()),
         Action::DefaultHome { .. } => Ok(output
             .stdout
             .lines()
@@ -702,6 +714,7 @@ fn verified(a: &Action, after: &str) -> bool {
                 .and_then(|states| files::state_of(states, path).ok())
                 .is_some_and(|state| state.exists == exists)
         }
+        Action::Setup { step } => setup::verified(*step, &parse_facts(after)),
         Action::FileMove { from, to } => serde_json::from_str::<Vec<files::PathState>>(after)
             .ok()
             .as_deref()
@@ -896,6 +909,11 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
                 format!("Create {path} on the TV."),
                 format!("mkdir {}", shell_quote(path)),
             )
+        }
+        Action::Setup { step } => {
+            let plan = setup::plan(*step);
+            losses.extend(plan.losses);
+            (plan.title, plan.effect, plan.command)
         }
         Action::DefaultHome { component } => {
             let c = component_arg(component)?;

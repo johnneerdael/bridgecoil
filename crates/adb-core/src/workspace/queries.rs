@@ -4,7 +4,10 @@ use crate::ratings::{
     groups::{Group, group_for},
 };
 use super::{commands::*, driver::*, engine::parse_package_state, files, types::*};
-use crate::backend::PocError;
+use crate::{
+    backend::PocError,
+    toolkit::{inventory, setup},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -71,6 +74,7 @@ pub enum Query {
     },
     Launchers,
     Toolkit,
+    VerifyShell,
     Diagnostics {
         section: String,
     },
@@ -361,11 +365,11 @@ pub async fn query_rated(
                 json!({"homes":parse_components(&homes),"current":parse_components(&current).first()}),
             )
         }
-        Query::Toolkit => {
-            let packages =
-                parse_packages(&checked(d, t, &format!("pm list packages --user {user}")).await?);
-            let tools:Vec<_>=[("Shizuku","moe.shizuku.privileged.api"),("Termux","com.termux"),("Termux:Boot","com.termux.boot")].into_iter().map(|(name,package)|json!({"name":name,"package":package,"installed":packages.iter().any(|p|p==package),"authorized":"unknown","running":"unknown","startup":"unknown"})).collect();
-            Ok(json!(tools))
+        Query::Toolkit => Ok(json!(inventory::inspect(d, t).await?)),
+        Query::VerifyShell => {
+            let raw = checked(d, t, setup::verify_shell_command()).await?;
+            let route = raw.lines().find_map(|l| l.trim().strip_prefix("route="));
+            Ok(json!({"route":route.unwrap_or("none")}))
         }
         Query::Diagnostics { section } => {
             let command = match section.as_str() {
