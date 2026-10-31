@@ -1,0 +1,28 @@
+Bridgecoil is an iPhone/iPad controller for a separate Android TV / Google TV over the local network. No app account, subscription or sign-in is required, so no demo login is needed.
+
+Hardware and setup:
+- A compatible Android TV / Google TV on the same local network is required for live device operations.
+- On the TV, enable Developer options and the debugging method supported by its firmware. For modern pairing, open Wireless debugging and its pairing-code screen; leave Wi-Fi enabled.
+- Launch Bridgecoil on iOS, allow Local Network access, choose Add device, select the discovered service or enter its endpoint, and enter the TV's code. Pairing and connection use separate endpoints.
+- Confirm the connected TV and Android profile before testing a change. Older firmware may expose legacy ADB, which is explicitly labelled as unencrypted and requires consent.
+
+Suggested review flow:
+1. Inspect the Device page and installed Apps.
+2. Use the Remote for navigation on the TV.
+3. Select a package, inspect its details and review a reversible change. Check the per-operation result in History and use recovery where supported.
+4. Pick an APK or upload file using the native Files picker, then review the Android target and operation. Save a TV file or screenshot back through Files.
+
+APK installation and optional helper apps operate on the selected Android TV. Advanced button mapping setup uses Shizuku-Next or Porter, Termux and Termux:Boot on that Android target. The controller presents the setup and permission steps, and checks their results. These helpers are not required for basic browsing and ordinary remote controls.
+
+Device-specific limits:
+- Power, voice and some vendor keys may not be accessible. A mapped action can follow the original button action.
+- Some firmware restricts helper access or restart persistence. The UI reports the setup/verification state.
+- Protected streaming content can appear black in screen captures.
+- Returning from the background may require reconnecting on iOS.
+
+The guide describes the workflows. Its current screenshots were captured from the Android controller against an Android TV 16 emulator; they are identified as such. This first iOS beta is intended to validate iOS-specific LAN permissions, Files providers and lifecycle behavior on testers' devices.
+
+Guide: https://johnneerdael.github.io/bridgecoil/guide.html
+Source and issues: https://github.com/johnneerdael/bridgecoil
+
+The intended distribution scope for this beta excludes France.

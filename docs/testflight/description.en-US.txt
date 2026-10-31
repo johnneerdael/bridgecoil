@@ -1,0 +1,17 @@
+Bridgecoil is a visual ADB workspace for Android TV and Google TV, controlled from your iPhone or iPad.
+
+Connect to a TV on your local network, inspect installed apps, use an on-screen remote, manage files, and review device changes before applying them. Tools include launcher setup, physical remote-button mappings, screenshots, recordings, logs and explained commands. History keeps operation results and supported recovery actions together.
+
+This early iOS beta focuses on local-network discovery and pairing, native Files integration, device controls and reconnect behavior. Features depend on the TV's Android version, firmware and permissions. Advanced persistent mappings use optional helper apps installed on the Android TV through a guided setup.
+
+This invitation-only beta is intended for testers outside France.
+
+Getting started:
+1. Use a compatible Android TV / Google TV that you own or are authorized to manage.
+2. Put the controller and TV on the same local network. Enable the TV's debugging options; keep Wi-Fi enabled for modern Wireless debugging.
+3. Open Bridgecoil, allow Local Network access and add the TV. Enter the pairing code shown by the TV, then connect.
+4. Check the selected device and Android profile before making a change.
+
+No Bridgecoil account or desktop ADB server is required. Review each operation's effect and recovery limits. Some remote buttons cannot be captured, mapped actions may follow the original action, and protected video may appear black in captures.
+
+Guide: https://johnneerdael.github.io/bridgecoil/guide.html

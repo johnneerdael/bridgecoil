@@ -1,0 +1,11 @@
+First iOS beta — please test with an Android TV / Google TV you are authorized to manage.
+
+- Local Network permission: grant/deny, recovery from Settings, discovery, code pairing and connection.
+- Confirm the selected device/profile, inspect apps and try a reviewed reversible change. Check results and supported recovery in History.
+- On-screen remote navigation and app shortcuts.
+- APK/file selection from local Files and iCloud Drive, picker cancellation, uploads, downloads and saving captures back to Files.
+- Background/foreground transitions, reconnecting and checking interrupted operation state before retrying.
+- iPhone/iPad layout, rotation, large text and light/dark appearance.
+- Optional TV helper setup and physical-button mapping, including the original button action and separate restart-persistence checks.
+
+Please report controller model/iOS version, TV model/Android version, the steps and the observed result. Remove pairing codes, credentials, private keys and personal file contents from feedback. Firmware capabilities vary; protected video can produce black captures. Review effects and recovery limits before changing system apps or the launcher.
