@@ -33,10 +33,7 @@ public final class BridgecoilInspector {
             Class<?> threadClass = Class.forName("android.app.ActivityThread");
             Object thread = threadClass.getMethod("systemMain").invoke(null);
             Context context = (Context) threadClass.getMethod("getSystemContext").invoke(thread);
-            Constructor<UserHandle> constructor = UserHandle.class.getDeclaredConstructor(int.class);
-            constructor.setAccessible(true);
-            UserHandle handle = constructor.newInstance(user);
-            context = (Context) Context.class.getMethod("createContextAsUser", UserHandle.class, int.class).invoke(context, handle, 0);
+            context = contextFor(context, user);
             PackageManager pm = context.getPackageManager();
             JSONArray items = new JSONArray();
             if (args.length == 2 && args[1].equals("--labels")) {
@@ -102,6 +99,17 @@ public final class BridgecoilInspector {
         }
         System.out.println("__BRIDGECOIL_JSON__" + response.toString());
         System.exit(0);
+    }
+    private static Context contextFor(Context system, int user) throws Exception {
+        Constructor<UserHandle> constructor = UserHandle.class.getDeclaredConstructor(int.class);
+        constructor.setAccessible(true);
+        UserHandle handle = constructor.newInstance(user);
+        try {
+            return (Context) Context.class.getMethod("createContextAsUser", UserHandle.class, int.class).invoke(system, handle, 0);
+        } catch (NoSuchMethodException older) {
+            // Older Android, including the Android 9 boxes people still use as TVs, only has this form.
+            return (Context) Context.class.getMethod("createPackageContextAsUser", String.class, int.class, UserHandle.class).invoke(system, "android", 0, handle);
+        }
     }
     private static String bound(String s, int limit) { return s.length() > limit ? s.substring(0, limit) : s; }
     private static String icon(Drawable drawable) throws Exception {

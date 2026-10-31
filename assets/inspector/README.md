@@ -8,4 +8,6 @@ The label index is capped at 1024 entries and 96 characters per label. Detailed 
 
 Installed signing fingerprints come from Android PackageManager, not from authenticating a user-selected APK. APK signing compatibility review remains a separate implementation task. See the official [PackageManager API](https://developer.android.com/reference/android/content/pm/PackageManager) and [AOSP package shell implementation](https://android.googlesource.com/platform/frameworks/base/+/main/services/core/java/com/android/server/pm/PackageManagerShellCommand.java).
 
-Validation so far: Java/DEX build, bounded response parser, label-search and metadata-denial fixtures. No TV/emulator app connection or inspector execution has been performed; OEM behavior remains unverified under the user's deferred connection-testing instruction.
+`Context.createContextAsUser` is missing on older Android, so the inspector falls back to `createPackageContextAsUser`. Without that, it failed on a real Android 9 box before reading a single package.
+
+Run on real hardware on 2026-10-31: a Ugoos AM6 on Android 9 returned details, the certificate and 116 labels through the fallback, and an Android 16 phone returned details through the modern call. Android 10 and below are otherwise untested, and other brands' firmware may still deny this reflection.
