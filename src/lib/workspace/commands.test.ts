@@ -176,3 +176,36 @@ it("uses the device's profile when running", async () => {
   );
   await screen.findByText("pm clear --user 10 org.demo");
 });
+
+it("keeps a filled-in command to run again in one step", async () => {
+  localStorage.clear();
+  const api = platform();
+  const first = render(CommandsTool, { device, api, onreview: vi.fn() });
+  await fireEvent.click(await screen.findByRole("button", { name: /^Display/ }));
+  await fireEvent.click(await screen.findByRole("button", { name: /^Change animation speed/ }));
+  const select = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
+  const chosen = select.options[1].value;
+  await fireEvent.change(select, { target: { value: chosen } });
+  await fireEvent.click(screen.getByRole("button", { name: "Save for later" }));
+  expect(screen.getByRole("button", { name: "Saved" })).toBeTruthy();
+  first.unmount();
+
+  render(CommandsTool, { device, api, onreview: vi.fn() });
+  await fireEvent.click(await screen.findByRole("button", { name: /^Change animation speed ·/ }));
+  expect((screen.getAllByRole("combobox")[0] as HTMLSelectElement).value).toBe(chosen);
+  await fireEvent.click(screen.getByRole("button", { name: /^Display/ }));
+  await fireEvent.click(screen.getByRole("button", { name: "All commands" }));
+  await fireEvent.click(screen.getByRole("button", { name: /^Forget/ }));
+  expect(screen.queryByRole("button", { name: /^Change animation speed ·/ })).toBeNull();
+  expect(JSON.parse(localStorage.getItem("bridgecoil.savedCommands")!)).toEqual([]);
+});
+
+it("drops a saved command the app no longer has", async () => {
+  localStorage.setItem(
+    "bridgecoil.savedCommands",
+    JSON.stringify([{ id: "gone", title: "Gone", values: {} }]),
+  );
+  render(CommandsTool, { device, api: platform(), onreview: vi.fn() });
+  expect(screen.queryByRole("button", { name: /^Gone/ })).toBeNull();
+  localStorage.clear();
+});

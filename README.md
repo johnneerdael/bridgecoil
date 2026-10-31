@@ -1,85 +1,75 @@
 # Bridgecoil
 
-A Tauri 2 app with a Rust backend and a mobile-first Svelte interface. This first version prioritizes direct ADB pairing, connection and installation of a standalone APK selected through a native file picker. The broader approved workspace design remains in `docs/superpowers/specs/`.
+Take back control of your Android TV from your phone, with no typing and no prior ADB knowledge.
 
-The current implementation adds the five workspace areas through a hamburger menu, Bridgecoil's supplied typography/palette/assets, System/Light/Dark appearance and bounded page layouts. The broader implementation is in progress: app labels/icons and reviewed runtime/special-access controls now have implementation and fixture tests; their OEM runtime compatibility remains unverified. Split sets/signature review, discovery, physical key mapping/startup, artifact transfers and full platform acceptance remain incomplete. The retained branded APK is a milestone build, not the final workspace build.
+Android TVs come with ad-filled launchers, apps you can't remove and buttons that only open what the manufacturer was paid to put there. The tools that fix this are command-line tools. Bridgecoil puts them behind plain questions, checks each result on the TV and keeps a way back.
 
-## Connection and install foundation
+Bridgecoil talks to the TV directly over wireless debugging. It needs no computer, no root and no ADB server.
 
-- Direct pairing-code exchange and separate connection endpoint, without a desktop ADB server or external adb executable in the app.
-- Persistent, app-private RSA host identity. A new installation must be paired with the TV independently.
-- TLS wireless-debugging connections; legacy unencrypted connections require an explicit option.
-- Device model, Android version, SDK and ABI inspection.
-- Native APK selection, app-private staging, binary-manifest package/version inspection and SHA-256 fingerprint.
-- Streamed transfer, install/update for the selected Android profile, and installed-version readback before reporting success.
-- Per-stage progress, structured failures, stale-session rejection and unknown-outcome handling. No automatic uninstall or installation retry.
+## What it does
 
-These are implemented code paths, not a claim of complete physical-device acceptance. See `docs/validation/POC.md` for the actual validation matrix.
+- **Clean up.** Shows which preinstalled apps the community rates as safe to turn off, with what each one does, and turns them off together. Turn them back on just as easily.
+- **Replace the launcher.** Try a new Home app, make it the default, press Home on the real remote to prove it works, then turn off the old one. A way back stays on the screen until you're sure.
+- **Remap buttons.** Press a button on your remote and choose what it does: open any app, or act as another button. Tapping and holding can do different things.
+- **Keep it working.** A small listener runs on the TV and restarts itself after the TV does, without your phone. Bridgecoil tells you once it has seen that happen on your TV.
+- **Advanced commands, no typing.** Pick from explained lists, see the exact command, review it and run it. Save the ones you use.
+- **Apps.** Every app, grouped by how safe it is to remove, with community ratings from [Universal Android Debloater](https://github.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation).
+- **Files.** Browse TV storage, upload, save to your phone, rename, move and delete.
+- **Screen capture and logs.** Screenshots, short recordings and filtered logs, saved to your phone.
+- **Remote, settings, history.** A phone remote, common settings, and a record of every change with undo where one exists.
 
-## Try it
+## How TV setup works
 
-1. Put the phone/computer and TV on the same reachable local network. Enable the TV's developer/debugging options.
-2. On the TV, open Wireless debugging → Pair device with pairing code. Enter that screen's address/port and six-digit code in **Pair TV**.
-3. Switch to **Connect** and enter the separate address/port from the main Wireless debugging screen. Pairing success is not an active connection.
-4. Open **Install APK**, choose a standalone APK through the native picker, inspect the review, confirm the selected TV and trusted file source, and install.
-5. Keep the app open until verification finishes. If the outcome is unknown, reconnect and inspect the TV before retrying.
+**TV setup** walks through this in order and only moves on when the TV proves each step worked:
 
-For older TVs, enable their supported network debugging and use Connect with the explicit legacy option. First authorization may need approval on the TV. This app cannot turn debugging on remotely on an unauthorized TV.
+1. Choose a helper app, [Shizuku-Next](https://github.com/rushiranpise/Shizuku-Next) or [Porter](https://github.com/d4rken-org/porter). Bridgecoil downloads the latest release, checks its signing certificate and installs it.
+2. Start it over the same connection.
+3. Install [Termux](https://github.com/termux/termux-app) and Termux:Boot the same way.
+4. Connect Termux to the helper app. You approve one prompt on the TV.
+5. Turn on start at boot in the helper app, and Bridgecoil adds a small startup script.
+
+You don't download anything beforehand or type anything in Termux. Releases signed by anyone other than the expected developer are refused.
+
+## Get started
+
+1. Install the APK from [Releases](https://github.com/johnneerdael/bridgecoil/releases) on an arm64 Android phone.
+2. On the TV, open **Settings → System → About** and repeatedly select **Android TV OS build** to unlock Developer options. Menu names vary between brands.
+3. In Developer options, turn on **Wireless debugging**. The phone and TV must be on the same network.
+4. Open Bridgecoil. It looks for the TV on your network and walks you through pairing with the code the TV shows.
+
+## What it can't do
+
+- A remapped button still does its normal action first, then yours. Android gives apps no way to stop that without root. If a button opens a brand's app, disable that app.
+- Power, voice and some brand buttons never reach apps, so they can't be remapped.
+- Streaming apps usually appear black in screenshots and recordings.
+- Some TVs block the access Termux needs. Bridgecoil says so, and mappings then work until the TV restarts.
+- Shizuku-Next can't be installed over a different app that holds the Shizuku name. Porter can sit alongside it.
+- Turning off an app only affects that TV. Unrated apps are unknown, not safe.
+
+Bridgecoil has been tested end to end on Android TV emulators. Real TVs differ, so check the [validation notes](docs/validation) for what has and hasn't been proven on physical hardware.
 
 ## Development
 
-Requirements: Node 22.22.2 or newer compatible with the lockfile, npm, Rust through rustup (Rust 1.90+), and the platform toolchain. The Tauri runner resolves the actual rustup compiler so another Rust installation cannot silently shadow mobile targets.
+A Tauri 2 app with a Rust core in `crates/adb-core` and a Svelte 5 interface. ADB is spoken directly through [libadb](https://docs.rs/libadb).
+
+Requires Node 22, Rust through rustup and each platform's toolchain.
 
 ```sh
 npm ci
 npm run check
-npm test
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-npm run desktop
+npx vitest run
+node scripts/cargo.mjs test --workspace
+npm run dev
 ```
 
-Browser-only interface preview: `npm run dev`. It explicitly marks native functionality unavailable; it never fakes a connection or installation result.
-
-### Android
-
-Set `ANDROID_HOME`, `NDK_HOME` and a compatible `JAVA_HOME` for the installed Android SDK/NDK/JDK, then:
+`npm run dev` shows the interface in a browser, where native features are marked unavailable.
 
 ```sh
-npm run android -- init --ci
-npm run android -- build --debug --target aarch64 --apk --ci
+npm run android -- build --debug --target aarch64 --apk --ci   # Android, needs ANDROID_HOME, NDK_HOME and JAVA_HOME
+npm run ios -- build --debug --target aarch64-sim --no-sign --ci   # iOS simulator, needs Xcode, XcodeGen and CocoaPods
+npm run build:desktop   # macOS
 ```
 
-The first artifact is an ARM64 debug APK. Other ABIs need their own builds. The source includes a generated Android project with INTERNET permission and Android 17 local-network declaration/request handling. Real network policy and file-provider behavior still need testing on the target phones.
+`crates/adb-core/tests/toolkit_live.rs` walks the whole setup on a disposable emulator. Run it by hand, and only against an emulator, because it installs and removes apps. See the header of that file.
 
-### iOS
-
-Install Xcode, XcodeGen and CocoaPods, then:
-
-```sh
-npm run ios -- init --ci
-npm run ios -- build --debug --target aarch64-sim --no-sign --ci
-```
-
-This creates an unsigned simulator app, not a physical-device IPA. A physical iPhone/iPad build needs signing/provisioning and its own validation. The native configuration includes a local-network purpose string. Android Shizuku/Termux dependencies are not installed on the controlling iPhone.
-
-### macOS
-
-```sh
-npm run build:desktop
-```
-
-This creates `target/debug/bundle/macos/Bridgecoil.app`. Local debug builds are not store releases or notarized distributions.
-
-## Current boundaries
-
-- Manual IP/hostname and port entry; automatic mDNS discovery follows later. Android 17 requests local-network access just before pairing/connection, and denial points to app permission settings.
-- One active device, Owner/user 0, standalone APKs up to 1 GiB. Split APK sets and AABs are rejected/deferred.
-- Metadata inspection does not authenticate an APK publisher or pre-verify signing compatibility. Android's package installer enforces update/signature policy; the POC never uninstalls to work around a rejection.
-- APKs are copied into app-private temporary storage, and removed when a selection is replaced, used or the app exits normally. Abrupt process termination can leave a cache file; clear the app cache if needed.
-- Host keys are kept in app-private storage with restrictive Unix permissions. Production secure-vault/backup policy needs further platform work; do not treat this as a hardware-backed keystore.
-- The libadb TLS profile follows ADB's host-authentication model; encryption is not independent cryptographic authentication of the target TV.
-- Legacy transport still requires the TV’s shell_v2 capability. Older daemons without it are not supported by this POC.
-- No background install guarantee or automatic replay after disconnection.
-- Remote remapping, guided Shizuku/Termux installation, launcher changes and the full toolkit remain on the approved roadmap rather than appearing as simulated buttons in the POC.
-- No packages or settings on the user's TV were changed during automated POC validation.
+Releases are described in [docs/release.md](docs/release.md).

@@ -10,9 +10,14 @@
     buildCommand,
     catalog,
     defaults,
+    findCommand,
+    loadSaved,
+    savedTitle,
+    storeSaved,
     type Command,
     type CommandGroup,
     type CommandOption,
+    type SavedCommand,
     type Values,
   } from "./commands";
   import Icon from "./Icon.svelte";
@@ -31,6 +36,35 @@
   let apps = $state<{ package: string; label: string }[]>([]);
   let busy = $state(false);
   let error = $state("");
+  let saved = $state<SavedCommand[]>(loadSaved());
+  const title = $derived(
+    command
+      ? savedTitle(
+          command,
+          values,
+          apps.find((a) => a.package === values.app)?.label,
+        )
+      : "",
+  );
+  const isSaved = $derived(
+    saved.some(
+      (item) => item.id === command?.id && item.title === title,
+    ),
+  );
+  function remember(next: SavedCommand[]) {
+    saved = next;
+    storeSaved(next);
+  }
+  function save() {
+    if (!command || isSaved) return;
+    remember([...saved, { id: command.id, title, values: { ...values } }]);
+  }
+  async function reopen(item: SavedCommand) {
+    const found = findCommand(item.id);
+    if (!found) return;
+    group = found.group;
+    await choose(found.command, item.values);
+  }
   const effectLabels = {
     read: "Only reads",
     change: "Changes the TV",
@@ -48,9 +82,9 @@
       ? option.choices.find((c) => c.value === values[option.id])?.about
       : undefined;
   }
-  async function choose(next: Command) {
+  async function choose(next: Command, kept?: Values) {
     command = next;
-    values = { ...defaults(next), profile: String(device.profileId) };
+    values = { ...defaults(next), ...kept, profile: String(device.profileId) };
     error = "";
     if (!next.options?.some((o) => o.kind === "app")) return;
     try {
@@ -63,7 +97,8 @@
           label: a.label,
         }));
       }
-      values = { ...values, app: apps[0]?.package ?? "" };
+      if (!apps.some((a) => a.package === values.app))
+        values = { ...values, app: apps[0]?.package ?? "" };
     } catch (e) {
       error = errorMessage(e);
     }
@@ -90,6 +125,19 @@
 {#if error}<p class="error-text" role="alert">{error}</p>{/if}
 {#if !group}
   <div class="row-list app-list">
+    {#each saved as item (item.title)}<div class="file-row">
+        <button class="list-row" onclick={() => reopen(item)}
+          ><span class="truncate"
+            ><span class="entry-name">{item.title}</span><small>Saved</small
+            ></span
+          ></button
+        ><button
+          class="icon-button file-more"
+          aria-label={`Forget ${item.title}`}
+          onclick={() => remember(saved.filter((s) => s !== item))}
+          ><Icon name="close" /></button
+        >
+      </div>{/each}
     {#each catalog as item (item.name)}<button
         class="list-row"
         onclick={() => (group = item)}
@@ -148,6 +196,9 @@
     {/if}
     <button class="primary" disabled={busy || !preview} onclick={run}
       >Run on the TV</button
+    >
+    <button class="secondary" disabled={!preview || isSaved} onclick={save}
+      >{isSaved ? "Saved" : "Save for later"}</button
     >
   </div>
 {/if}

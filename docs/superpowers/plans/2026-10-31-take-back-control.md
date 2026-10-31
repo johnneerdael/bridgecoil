@@ -53,7 +53,19 @@ The certificate is pinned, so a release signed by anyone else is refused even if
 - [x] **H. Command builder.** Task 15: a catalog of labelled commands with explained options, picked from dropdowns, previewed, reviewed and run with no typing.
 - [x] **I. End-to-end emulator run.** Proven with `tests/toolkit_live.rs` for both managers. A real key press opened the mapped app, pause silenced it, and after a cold reboot the Termux:Boot monitor restored the listener within 60 seconds of the manager returning.
 - [x] **Independent review.** No Critical findings. Fixed all five Important issues: endless prompts from the boot monitor, a listener that could outlive removal on older Android, an unflagged lockout risk and hardcoded profile in Commands, a stale monitor lock, and a dead end on TVs that block `run-as`.
+- [x] **K. Launcher change.** Try, default through review, press Home on the real remote, then turn off the old launcher, with a way back.
+- [x] **L. Clean up.** Offers the preinstalled apps rated Recommended, ticked and explained, disables through bulk review and can turn them back on.
+- [x] **M. Richer mappings.** Tap and hold, and acting as a different button from a fixed list. A real long press was proven on an emulator. A tap mapping also fires on a slow press when no hold is mapped.
+- [x] **N. Evidence of restarts.** The saved boot ID is compared with the running one, so "came back by itself" is only shown after it has happened.
+- [x] **O. Capture and diagnostics.** Screenshots, bounded recordings, filtered logs and native save, with a live 3 MB download matched by SHA-256.
+- [x] **P. Saved commands.** Filled-in commands are kept on the phone and rerun in one step.
 - [ ] **J. On a real TV.** Needs the owner. Pairing, the access prompt, start at boot and a physical remote.
+
+## Left out, on purpose
+
+- Port forwarding and reverse. Nothing here needs them, and on a phone they'd serve developers rather than TV owners.
+- Multi-step sequences. Each command still gets its own review, which suits a tool for non-experts.
+- File copy and multi-select. Neither was asked for. Move, rename, delete, upload and save cover the requested file work.
 
 ## Verification
 

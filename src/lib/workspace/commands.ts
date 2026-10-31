@@ -422,3 +422,45 @@ export function defaults(command: Command): Values {
 }
 export const buildCommand = (command: Command, values: Values) =>
   command.build(values);
+
+export type SavedCommand = {
+  id: string;
+  title: string;
+  values: Values;
+};
+const savedKey = "bridgecoil.savedCommands";
+
+/** Commands the user keeps close. A saved entry whose command no longer exists is dropped. */
+export function loadSaved(): SavedCommand[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(savedKey) ?? "[]");
+    return Array.isArray(stored)
+      ? stored.filter((item: SavedCommand) => !!findCommand(item.id))
+      : [];
+  } catch {
+    return [];
+  }
+}
+export function storeSaved(saved: SavedCommand[]) {
+  try {
+    localStorage.setItem(savedKey, JSON.stringify(saved));
+  } catch {
+    // A convenience only: the command still runs, it just isn't remembered.
+  }
+}
+export function findCommand(id: string) {
+  for (const group of catalog) {
+    const command = group.commands.find((item) => item.id === id);
+    if (command) return { group, command };
+  }
+  return undefined;
+}
+/** Says which choices were made, so two saved versions of a command can be told apart. */
+export function savedTitle(command: Command, values: Values, appLabel?: string) {
+  const chosen = (command.options ?? []).map((option) =>
+    option.kind === "choice"
+      ? option.choices.find((c) => c.value === values[option.id])?.label
+      : appLabel,
+  );
+  return [command.title, ...chosen.filter(Boolean)].join(" · ");
+}
