@@ -107,6 +107,12 @@ def stage_signing_files():
     print("Prepared temporary signing files; secret values are not logged")
 
 
+def export_signing_certificate(code, directory):
+    prefix = directory / "signer"
+    subprocess.run(["codesign", "-d", f"--extract-certificates={prefix}", str(code)], check=True)
+    return (directory / "signer0").read_bytes()
+
+
 def verify_ipa(ipa, version, build_number):
     with tempfile.TemporaryDirectory(prefix="bridgecoil-ipa-") as temporary:
         directory = Path(temporary)
@@ -114,9 +120,7 @@ def verify_ipa(ipa, version, build_number):
         app = one_app(directory / "Payload")
         check_app(app, version, build_number)
         subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)
-        prefix = directory / "signer"
-        subprocess.run(["codesign", "-d", "--extract-certificates", str(prefix), str(app)], check=True)
-        signer = hashlib.sha1((directory / "signer0").read_bytes()).hexdigest().upper()
+        signer = hashlib.sha1(export_signing_certificate(app, directory)).hexdigest().upper()
         if signer != CERTIFICATE_SHA1:
             raise ValueError("IPA was not signed by the configured Apple Distribution certificate")
         result = subprocess.run(["security", "cms", "-D", "-i", str(app / "embedded.mobileprovision")], capture_output=True, check=True)

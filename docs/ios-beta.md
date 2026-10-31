@@ -15,7 +15,7 @@ Open [Actions → iOS beta](https://github.com/johnneerdael/bridgecoil/actions/w
 
 The workflow runs only when dispatched. A push does not publish a beta or a GitHub release. Run numbers and retry attempts produce a distinct numeric bundle version, such as `12.2`, while `package.json` and Tauri retain the marketing version. Never reuse a bundle version after Apple accepts it. The current format accepts run numbers 1–9999 and attempts 1–99.
 
-The macOS runner uses an iOS 26+ SDK, runs frontend checks/tests and Rust core tests, then builds the app. Build artifacts are retained for seven days. Only a verified exported IPA is eligible for upload; the `.xcarchive` is build/debug material and may be unsigned or use Tauri's temporary export signature.
+The macOS runner uses an iOS 26+ SDK, runs frontend checks/tests and Rust core tests, then builds the app. Build artifacts are retained for seven days, including after an artifact-check failure so the exported package can be inspected. Only a verified exported IPA is eligible for upload to Apple; the `.xcarchive` is build/debug material and may be unsigned or use Tauri's temporary export signature.
 
 ## Apple account setup
 

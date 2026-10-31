@@ -1,10 +1,26 @@
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
-from ios_beta import BUNDLE_ID, BONJOUR_TYPES, TEAM_ID, validate_info, validate_profile
+from ios_beta import BUNDLE_ID, BONJOUR_TYPES, TEAM_ID, export_signing_certificate, validate_info, validate_profile
 
 
 class IOSBetaTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "darwin", "Requires macOS codesign")
+    def test_extracts_a_real_embedded_signing_certificate(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            certificate = export_signing_certificate(
+                Path("/System/Applications/Calculator.app"), Path(temporary)
+            )
+        result = subprocess.run(
+            ["openssl", "x509", "-inform", "DER", "-noout", "-subject"],
+            input=certificate, capture_output=True, check=True,
+        )
+        self.assertIn(b"Apple", result.stdout)
+
     def info(self):
         return {
             "CFBundleIdentifier": BUNDLE_ID,

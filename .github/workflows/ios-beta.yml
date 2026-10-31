@@ -103,6 +103,7 @@ jobs:
         run: npm run ios -- build --target aarch64 --ci --export-method app-store-connect --config "$RUNNER_TEMP/ios-beta.json"
 
       - name: Verify the archive and package build artifacts
+        id: package
         run: |
           archive=src-tauri/gen/apple/build/adb-studio-app_iOS.xcarchive
           python3 scripts/ios_beta.py check-archive "$archive" --version "$IOS_APP_VERSION" --build-number "$IOS_BUILD_NUMBER"
@@ -122,6 +123,7 @@ jobs:
           fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: success() || (failure() && steps.package.outcome == 'failure')
         with:
           name: bridgecoil-ios-${{ inputs.mode }}-${{ env.IOS_BUILD_NUMBER }}
           path: artifacts/ios/
