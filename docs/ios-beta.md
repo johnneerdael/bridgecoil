@@ -4,6 +4,10 @@ Bridgecoil targets iOS 15 and later. A fresh release device archive of version 0
 
 This establishes current source-build support. Physical-iPhone permission handling, discovery/pairing, Files integration and lifecycle behavior remain unvalidated. A signed export, accepted upload, Apple processing and an installed working beta are separate checks.
 
+## First signed delivery
+
+[Run 41218436962](https://github.com/johnneerdael/bridgecoil/actions/runs/41218436962) built and verified version **0.1.7 (3.1)** with the configured Apple Distribution certificate and an App Store provisioning profile. Apple validation and upload completed without errors. Apple processing returned `VALID`. TestFlight initially reported `Missing Compliance`, requiring an encryption/export declaration before tester access. That declaration, tester assignment and physical-device acceptance are tracked separately.
+
 ## Run the workflow
 
 Open [Actions → iOS beta](https://github.com/johnneerdael/bridgecoil/actions/workflows/ios-beta.yml), choose **Run workflow**, and select a mode:
