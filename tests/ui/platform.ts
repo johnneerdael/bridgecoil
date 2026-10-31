@@ -162,10 +162,18 @@ async function query<T>(t: Target, q: Query): Promise<T> {
           .toLowerCase()
           .includes(q.search.toLowerCase()),
       );
-      const rated = rows.map((app, index) => {
-        const group = fixtureGroups[Math.floor((index * 6) / rows.length)];
-        return { ...app, group, rating: fixtureRating(group) };
-      });
+      const rated = rows
+        .map((app, index) => {
+          const group = fixtureGroups[Math.floor((index * 6) / rows.length)];
+          return { ...app, group, rating: fixtureRating(group) };
+        })
+        .filter((app, index) =>
+          q.filter === "system"
+            ? app.group !== "installed"
+            : q.filter === "disabled"
+              ? app.group === "recommended" && index % 3 === 0
+              : true,
+        );
       value = {
         items: rated.slice(q.page * q.pageSize, (q.page + 1) * q.pageSize),
         total: rated.length,

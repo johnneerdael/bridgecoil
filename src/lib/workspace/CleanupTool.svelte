@@ -47,6 +47,7 @@
       chosen.length,
   );
   const plural = (n: number) => (n === 1 ? "app" : "apps");
+  const restoring = $derived(Math.min(turnedOff.length, reviewLimit));
   async function readAll(
     filter: string,
     keep: (app: AppMetadata) => boolean,
@@ -148,7 +149,7 @@
     </p>
     <div class="row-list app-list">
       {#each offer as app (app.package)}<label
-          class="checkbox list-row bulk-choice"
+          class="checkbox list-row bulk-choice cleanup-choice"
           ><input
             type="checkbox"
             checked={!skipped.includes(app.package)}
@@ -190,6 +191,6 @@
           turnedOff.slice(0, reviewLimit).map((app) => app.package),
           "enable",
         )}
-      >Turn {Math.min(turnedOff.length, reviewLimit)} back on</button
+      >Turn {restoring} {plural(restoring)} back on</button
     >{/if}
 {/if}

@@ -108,7 +108,7 @@ it("lets everything turned off be turned back on", async () => {
   const api = platform({ system: [], disabled: [app("ads", "recommended")] });
   const onbulk = vi.fn();
   open(api, onbulk);
-  await fireEvent.click(await screen.findByRole("button", { name: "Turn 1 back on" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Turn 1 app back on" }));
   await waitFor(() => expect(onbulk).toHaveBeenCalled());
   expect(api.prepareBulk).toHaveBeenCalledWith(
     expect.anything(),

@@ -59,6 +59,8 @@ The certificate is pinned, so a release signed by anyone else is refused even if
 - [x] **N. Evidence of restarts.** The saved boot ID is compared with the running one, so "came back by itself" is only shown after it has happened.
 - [x] **O. Capture and diagnostics.** Screenshots, bounded recordings, filtered logs and native save, with a live 3 MB download matched by SHA-256.
 - [x] **P. Saved commands.** Filled-in commands are kept on the phone and rerun in one step.
+- [x] **Q. Android TV image.** Both managers walked from a bare TV to Done on a `user` build with secure ADB and no root, plus a real key, a cold boot and capture. This found the Play Protect block on Termux, which is now guided. See `docs/validation/android-tv-emulator.md`.
+- [x] **Second independent review.** No Critical findings. Fixed all four Important issues and all five Minor ones.
 - [ ] **J. On a real TV.** Needs the owner. Pairing, the access prompt, start at boot and a physical remote.
 
 ## Left out, on purpose

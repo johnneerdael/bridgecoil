@@ -1613,6 +1613,15 @@ textarea {
 .setup-step.done svg {
   color: var(--bc-success);
 }
+/* What an app does is the point here, so it gets more than one line. */
+.cleanup-choice small {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
 .capture-actions {
   display: flex;
   flex-wrap: wrap;

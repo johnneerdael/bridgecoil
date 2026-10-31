@@ -4,6 +4,13 @@ import ScreenshotTool from "./ScreenshotTool.svelte";
 import LogsTool from "./LogsTool.svelte";
 import type { Platform, Query } from "./client";
 import type { Device } from "../model";
+// jsdom has no <dialog> methods.
+HTMLDialogElement.prototype.showModal = function () {
+  this.open = true;
+};
+HTMLDialogElement.prototype.close = function () {
+  this.open = false;
+};
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
