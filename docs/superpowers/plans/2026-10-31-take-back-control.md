@@ -63,7 +63,7 @@ The certificate is pinned, so a release signed by anyone else is refused even if
 - [x] **Second independent review.** No Critical findings. Fixed all four Important issues and all five Minor ones.
 - [x] **R. Wired TVs.** Android refuses wireless debugging on Ethernet, so setup detects a wired TV and says what that costs. See `docs/validation/android-tv-emulator.md`.
 - [x] **S. Launcher handover.** Android TV's launcher outranks any other, so choosing one changed nothing. The chosen launcher is now reported, and the one in use can be turned off once a different installed launcher holds the Home role. Proven through the engine with a real Home key, a reboot and the way back.
-- [ ] **J. On a real TV.** Needs the owner. Pairing, the access prompt, start at boot and a physical remote.
+- [ ] **J. On a real TV.** The access prompt, a physical remote, start at boot and a cold boot passed on a Ugoos AM6 on Android 9. See `docs/validation/real-tv-checklist.md`. Code pairing on a real TV is still open, and needs Android 11 or later on Wi-Fi.
 
 ## Left out, on purpose
 

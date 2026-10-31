@@ -50,6 +50,34 @@ On a TV with a different app holding the Shizuku name, use Porter. Shizuku-Next 
 
 **Expect:** Clean up matches what's on the TV, and the way back works every time. Note if the TV has more than one stock launcher, because the card can then appear once for each.
 
+## Runs on a real TV
+
+**Ugoos AM6, Android 9 (`userdebug`, rooted with Magisk), 32-bit, on Ethernet, with network ADB on port 5555. 2026-10-31.** The phone was a CPH2747 on Android 16, with the signed app.
+
+| Step | Result |
+|---|---|
+| Find, then connect with legacy ADB | Passed, with the real approval prompt on the TV |
+| Pair with a code | Not possible here. Android 9 has no wireless debugging |
+| Helper app, recognised by certificate, started | Passed with Shizuku-Next, after fixing the inspector |
+| Termux and Termux:Boot | Passed. Play Protect blocked only Termux:Boot, as "Blocked by Play Protect" |
+| Access prompt | Passed, `uid=2000(shell)` |
+| Survive restarts, ending at **Your TV is ready** | Passed, once start on boot and the watchdog are on |
+| Listen hears a real press | Passed, after replacing `getevent` on older Android |
+| A mapped button opens its app | Passed, Search and an unassigned button |
+| Cold boot, with the phone not connected | Passed. The helper started itself and the listener was back about 62 seconds after power-on, then a real press opened the mapped app |
+
+This run found what no emulator could:
+
+- `Context.createContextAsUser` doesn't exist on Android 9, so app details couldn't be read and setup stalled.
+- `getevent` holds its output until 8 KB has built up when it isn't on a terminal, so Listen heard nothing and a mapping would have been late.
+- Setup called the TV ready with start on boot off and the watchdog never set, and didn't exempt the helper from battery limits.
+- A TV on network ADB was told it had no wireless debugging. A helper can start itself over that port, on any Android version, without Wi-Fi.
+- Pages rebuild after each change, which wiped the offer to turn off what a button opens.
+
+A button keeps its normal action until the app it opens is off. A button Android has no key code for, shown as `keyCode=0`, has no normal action, so a mapping is already a full replacement.
+
+Not proven here: pairing on a TV, and a full remap with **Turn off** on a button that opens an app.
+
 ## Afterwards
 
 Mark item J in `docs/superpowers/plans/2026-10-31-take-back-control.md` only for what was actually seen, and record the TV model, Android version and network here.
