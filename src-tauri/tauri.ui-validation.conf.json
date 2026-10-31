@@ -1,0 +1,7 @@
+{
+  "productName": "Bridgecoil UI validation",
+  "build": {
+    "beforeBuildCommand": "npm run build:ui",
+    "frontendDist": "../dist-ui"
+  }
+}

@@ -133,6 +133,99 @@ fn length16(b: &[u8], pos: &mut usize) -> Result<usize> {
         Ok(((a as usize & 0x7fff) << 16) | v as usize)
     }
 }
+
+/// Bound eager decoding by a signature library independently of our lazy metadata reader.
+pub(crate) fn validate_verifier_pool(bytes: &[u8]) -> Result<()> {
+    if bytes.len() > 2 * 1024 * 1024
+        || u16_at(bytes, 0)? != 3
+        || u32_at(bytes, 4)? as usize != bytes.len()
+    {
+        return Err(bad());
+    }
+    let mut at = 8usize;
+    let mut lengths = Vec::new();
+    let mut expanded = 0usize;
+    let mut chunks = 0usize;
+    while at < bytes.len() {
+        chunks += 1;
+        if chunks > 16384 {
+            return Err(bad());
+        }
+        let kind = u16_at(bytes, at)?;
+        let header = u16_at(bytes, at + 2)? as usize;
+        let size = u32_at(bytes, at + 4)? as usize;
+        let end = at
+            .checked_add(size)
+            .filter(|end| size >= header && header >= 8 && *end <= bytes.len())
+            .ok_or_else(bad)?;
+        let b = &bytes[at..end];
+        if kind == 1 {
+            if !lengths.is_empty() {
+                return Err(bad());
+            }
+            let pool = Pool::new(b)?;
+            if pool.count > 16384 || u32_at(b, 12)? != 0 {
+                return Err("Manifest string pool exceeds local verification limits.".into());
+            }
+            for index in 0..pool.count {
+                let text = pool.text(index as u32, 65536)?;
+                expanded = expanded.checked_add(text.len()).ok_or_else(bad)?;
+                if expanded > 8 * 1024 * 1024 {
+                    return Err(bad());
+                }
+                lengths.push(text.len());
+            }
+        } else {
+            let mut charge = |index: u32| -> Result<()> {
+                if index != u32::MAX {
+                    expanded = expanded
+                        .checked_add(*lengths.get(index as usize).ok_or_else(bad)?)
+                        .ok_or_else(bad)?;
+                    if expanded > 16 * 1024 * 1024 {
+                        return Err("Expanded manifest exceeds local verification limits.".into());
+                    }
+                }
+                Ok(())
+            };
+            match kind {
+                0x0100 | 0x0101 | 0x0103 => {
+                    charge(u32_at(b, header)?)?;
+                    charge(u32_at(b, header + 4)?)?;
+                }
+                0x0102 => {
+                    charge(u32_at(b, header)?)?;
+                    charge(u32_at(b, header + 4)?)?;
+                    let start = u16_at(b, header + 8)? as usize;
+                    let stride = u16_at(b, header + 10)? as usize;
+                    let count = u16_at(b, header + 12)? as usize;
+                    if start < 20 || stride < 20 || count > 512 {
+                        return Err(bad());
+                    }
+                    let base = header.checked_add(start).ok_or_else(bad)?;
+                    if base
+                        .checked_add(count.checked_mul(stride).ok_or_else(bad)?)
+                        .is_none_or(|n| n > b.len())
+                    {
+                        return Err(bad());
+                    }
+                    for index in 0..count {
+                        let pos = base + index * stride;
+                        for offset in [0, 4, 8] {
+                            charge(u32_at(b, pos + offset)?)?;
+                        }
+                        if b.get(pos + 15) == Some(&3) {
+                            charge(u32_at(b, pos + 16)?)?;
+                        }
+                    }
+                }
+                0x0104 => charge(u32_at(b, header)?)?,
+                _ => {}
+            }
+        }
+        at = end;
+    }
+    Ok(())
+}
 #[derive(Debug)]
 enum Value {
     Text(String),

@@ -16,7 +16,7 @@
     dismissible?: boolean;
   } = $props();
   let element = $state<HTMLDialogElement>();
-  const titleId = `dialog-${crypto.randomUUID()}`;
+  const titleId = $props.id();
   $effect(() => {
     if (!element) return;
     if (open && !element.open) element.showModal();

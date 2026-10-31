@@ -10,6 +10,7 @@ import AppsPage from "./AppsPage.svelte";
 import RemotePage from "./RemotePage.svelte";
 import ActionReview from "./ActionReview.svelte";
 import BulkActionReview from "./BulkReview.svelte";
+import HistoryPage from "./HistoryPage.svelte";
 import type { Platform, Review, Operation } from "./client";
 import type { Device } from "../model";
 afterEach(cleanup);
@@ -86,7 +87,7 @@ it("browses an app and prepares its selected-profile action without executing it
     oninstall: vi.fn(),
   });
   await fireEvent.click(await screen.findByRole("button", { name: /Player/ }));
-  await fireEvent.click(await screen.findByRole("button", { name: "actions" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Actions" }));
   await fireEvent.click(screen.getByRole("button", { name: "Disable" }));
   await waitFor(() => expect(onreview).toHaveBeenCalledWith(review));
   expect(prepare).toHaveBeenCalledWith(review.target, {
@@ -163,14 +164,12 @@ it("bulk selection prepares only selected packages and never applies during revi
   const prepareBulk = vi.fn().mockResolvedValue(bulk),
     applyBulk = vi.fn(),
     onbulk = vi.fn();
-  const query = vi
-    .fn()
-    .mockResolvedValue({
-      items: [{ package: "org.demo", label: "Player", icon: null }],
-      total: 1,
-      page: 0,
-      pageSize: 3,
-    });
+  const query = vi.fn().mockResolvedValue({
+    items: [{ package: "org.demo", label: "Player", icon: null }],
+    total: 1,
+    page: 0,
+    pageSize: 3,
+  });
   render(AppsPage, {
     device,
     api: { query, prepareBulk, applyBulk } as unknown as Platform,
@@ -183,7 +182,7 @@ it("bulk selection prepares only selected packages and never applies during revi
   await fireEvent.click(
     screen.getByRole("checkbox", { name: "Select Player" }),
   );
-  await fireEvent.click(screen.getByRole("button", { name: "Review 1 apps" }));
+  await fireEvent.click(screen.getByRole("button", { name: "Review 1 app" }));
   await waitFor(() => expect(onbulk).toHaveBeenCalledWith(bulk));
   expect(prepareBulk).toHaveBeenCalledWith(
     review.target,
@@ -215,9 +214,7 @@ it("a running bulk review keeps cancellation available until the active item fin
   await fireEvent.click(
     screen.getByRole("checkbox", { name: /Apply the included/ }),
   );
-  await fireEvent.click(
-    screen.getByRole("button", { name: "Apply 1 changes" }),
-  );
+  await fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
   expect(
     (screen.getByRole("button", { name: "Close dialog" }) as HTMLButtonElement)
       .disabled,
@@ -228,4 +225,48 @@ it("a running bulk review keeps cancellation available until the active item fin
   expect(cancelBulk).toHaveBeenCalledWith("bulk");
   finish({ ...operation, status: "cancelled" });
   await waitFor(() => expect(applyBulk).toHaveBeenCalledTimes(1));
+});
+
+it("opens a browsed app without exposing or requiring a typed activity name", async () => {
+  const query = vi
+    .fn()
+    .mockResolvedValueOnce({
+      items: [{ package: "org.demo", label: "Player", icon: null }],
+      total: 1,
+      page: 0,
+      pageSize: 3,
+    })
+    .mockResolvedValueOnce({
+      package: "org.demo",
+      state: { installed: true, enabled: 0, stopped: false, version: 1 },
+      versionName: "1",
+      activities: ["org.demo/.Main"],
+      launchActivity: "org.demo/.Main",
+      permissions: [],
+      raw: "",
+    });
+  const remote = vi.fn().mockResolvedValue(operation),
+    prepare = vi.fn();
+  render(AppsPage, {
+    device,
+    api: { query, remote, prepare } as unknown as Platform,
+    onreview: vi.fn(),
+    onbulk: vi.fn(),
+    oninstall: vi.fn(),
+  });
+  await fireEvent.click(await screen.findByRole("button", { name: /Player/ }));
+  await fireEvent.click(screen.getByRole("button", { name: "Open app" }));
+  await waitFor(() =>
+    expect(remote).toHaveBeenCalledWith(review.target, {
+      kind: "launch",
+      component: "org.demo/.Main",
+    }),
+  );
+  expect(prepare).not.toHaveBeenCalled();
+});
+
+it("identifies original devices in history when package and profile match",async()=>{
+ const rows=[{...operation,id:"living",title:"Disable app",deviceLabel:"Living room TV"},{...operation,id:"bedroom",title:"Disable app",deviceLabel:"Bedroom TV"}];
+ const history=vi.fn().mockResolvedValue({items:rows,total:2,page:0,pageSize:4}),recovery=vi.fn();render(HistoryPage,{api:{history,recovery} as unknown as Platform,onreview:vi.fn()});
+ expect(await screen.findByRole("button",{name:/Living room TV/})).toBeTruthy();expect(screen.getByRole("button",{name:/Bedroom TV/})).toBeTruthy();expect(recovery).not.toHaveBeenCalled();
 });

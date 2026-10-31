@@ -1,7 +1,7 @@
 {
   "name": "bridgecoil",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -14,7 +14,9 @@
     "desktop": "node scripts/tauri.mjs dev",
     "build:desktop": "node scripts/tauri.mjs build --debug --bundles app",
     "test:rust": "node scripts/cargo.mjs test --workspace",
-    "lint:rust": "node scripts/cargo.mjs clippy --workspace --all-targets -- -D warnings"
+    "lint:rust": "node scripts/cargo.mjs clippy --workspace --all-targets -- -D warnings",
+    "build:ui": "vite build --config vite.ui.config.ts",
+    "android:ui": "node scripts/ui-android.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4",

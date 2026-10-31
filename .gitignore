@@ -14,3 +14,5 @@ src-tauri/gen/apple/build/
 
 artifacts/
 src-tauri/gen/schemas/
+
+dist-ui/

@@ -38,6 +38,7 @@ fn interrupted_operation_reopens_as_unknown_without_replay() {
             id: "op".into(),
             target: target("s", 0),
             title: "Disable app".into(),
+            device_label: Some("Fixture TV".into()),
             kind: "package".into(),
             status: OperationStatus::Running,
             created_ms: 1,
@@ -60,6 +61,7 @@ fn history_pages_are_bounded_and_preserve_exact_output() {
             id: format!("{i}"),
             target: target("s", 0),
             title: "Action".into(),
+            device_label: Some("Fixture TV".into()),
             kind: "test".into(),
             status: OperationStatus::Verified,
             created_ms: i,
@@ -74,6 +76,7 @@ fn history_pages_are_bounded_and_preserve_exact_output() {
     assert_eq!(p.total, 15);
     assert_eq!(p.items.len(), 6);
     assert_eq!(p.items[0].output, "quotes ' and unicode ✓");
+    assert_eq!(p.items[0].device_label.as_deref(), Some("Fixture TV"));
     assert!(h.list(0, 10000).is_err());
 }
 

@@ -40,3 +40,7 @@ pub fn shell_quote(value: &str) -> String {
 pub fn install_succeeded(code: Option<u8>, output: &str) -> bool {
     code == Some(0) && output.trim() == "Success"
 }
+
+pub mod signing;
+
+pub mod connection;

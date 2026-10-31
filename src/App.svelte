@@ -11,7 +11,8 @@
     themeKey,
     type ThemePreference,
   } from "./lib/theme/theme";
-  import { invoke, isTauri } from "@tauri-apps/api/core";
+  import {endpointHost,loadPairs,recordPair,pairStoreKey,stageLabel,type PairRecord,type ConnectionProgress} from "./lib/connection-model";
+  import { invoke, isTauri, Channel } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import {
     canInstall,
@@ -55,6 +56,14 @@
   let busyLabel = $state("");
   let error = $state("");
   let notice = $state("");
+  let errorDetails=$state("");
+  let pairingRequired=$state(false);
+  let pairs=$state<PairRecord[]>(loadPairs(localStorage.getItem(pairStoreKey)));
+  const pairingRecord=$derived(pairs.find(record=>record.host===endpointHost(endpoint)));
+  let attemptId=$state("");let connectionSequence=0;
+  function progressChannel(){const generation=++connectionSequence;const channel=new Channel<ConnectionProgress>();channel.onmessage=event=>{if(generation===connectionSequence&&busy){attemptId=event.attemptId;busyLabel=stageLabel[event.stage]??"Connecting to TV";}};return channel;}
+  async function cancelConnection(){if(!attemptId)return;busyLabel="Cancelling…";try{await invoke("cancel_connection",{attemptId});}catch(e){error=errorMessage(e);}}
+
   let unknown = $state(false);
   let permissionDenied = $state(false);
   let progress = $state<{
@@ -107,14 +116,17 @@
     if (busy || !native || !nativeReady) return;
     busy = true;
     busyLabel = label;
-    error = "";
+    error = "";errorDetails="";pairingRequired=false;
     notice = "";
     unknown = false;
     permissionDenied = false;
     try {
       await action();
     } catch (e) {
-      error = errorMessage(e);
+      const cancelled=!!e&&typeof e==="object"&&"kind" in e&&e.kind==="cancelled";
+      if(cancelled){notice=errorMessage(e);error="";code="";}else error = errorMessage(e);
+      errorDetails=!!e&&typeof e==="object"&&"details" in e&&typeof e.details==="string"?e.details:"";
+      pairingRequired=!!e&&typeof e==="object"&&"kind" in e&&["pairingRequired","authorizationRequired"].includes(String(e.kind));
       permissionDenied =
         !!e && typeof e === "object" && "kind" in e && e.kind === "permission";
       unknown =
@@ -128,13 +140,17 @@
         device = null;
       }
     } finally {
-      busy = false;
+      busy = false;attemptId="";connectionSequence++;
       busyLabel = "";
     }
   }
   async function pair() {
     await run("Pairing with TV", async () => {
-      await invoke<string>("pair_device", { endpoint: pairEndpoint, code });
+      const guid=await invoke<string>("pair_device", { endpoint: pairEndpoint, code,onProgress:progressChannel() });
+      pairs=recordPair(pairs,pairEndpoint,guid);
+      try{localStorage.setItem(pairStoreKey,JSON.stringify(pairs));}catch{/* Pairing itself succeeded even when local status storage is full. */}
+      const host=endpointHost(pairEndpoint);
+      if(host&&endpointHost(endpoint)!==host)endpoint=(host.includes(":")?`[${host}]`:host)+":";
       code = "";
       step = "connect";
       notice =
@@ -149,6 +165,7 @@
       device = await invoke<Device>("connect_device", {
         endpoint,
         allowLegacy: legacy,
+        onProgress:progressChannel(),
       });
       localStorage.setItem("adb.connectionEndpoint", endpoint.trim());
       notice = "Connected. Your device workspace is ready.";
@@ -200,7 +217,7 @@
   let installHelpOpen = $state(false);
   let keyboard = $state(false);
   let messagePage = $state(0);
-  const messageText = $derived(error || notice);
+  const messageText = $derived(error?[error,errorDetails].filter(Boolean).join("\n\n"):notice);
   const messagePages = $derived(
     Math.max(1, Math.ceil(messageText.length / 400)),
   );
@@ -214,8 +231,9 @@
   }
   function focusInput(event: FocusEvent) {
     keyboard =
-      event.target instanceof HTMLInputElement &&
-      event.target.type !== "checkbox";
+      event.target instanceof HTMLTextAreaElement ||
+      (event.target instanceof HTMLInputElement &&
+        event.target.type !== "checkbox");
   }
   const label = (value: string | undefined, max = 100) =>
     value && value.length > max ? value.slice(0, max) + "…" : value;
@@ -250,7 +268,11 @@
           alt=""
         />
       </div>
-      <small>{device ? label(device.model, 36) : "Android TV workspace"}</small>
+      <small
+        >{device
+          ? label(`Profile ${device.profileId} · ${device.model}`, 64)
+          : "Android TV workspace"}</small
+      >
     </div>
     <button
       class="connection-badge"
@@ -311,7 +333,7 @@
                 ? "Installation outcome unknown"
                 : permissionDenied
                   ? "Local network access is off"
-                  : "Action needs attention"
+                  : pairingRequired?"This app needs TV authorization":"Action needs attention"
               : "Done"}</strong
           >
           <p>{messageText.slice(0, 200)}</p>
@@ -369,7 +391,9 @@
                 disabled={busy}><span>2</span> Connect</button
               >
             </div>
-            {#if step === "pair"}
+            {#if busy&&attemptId}
+              <section class="center-state"><h2 role="status">{busyLabel}</h2><p class="subtle">{busyLabel==="Approve debugging on the TV"?"Check the TV for its Allow USB debugging prompt. This installation has its own key.":"Pairing and connection use different TV ports. You can cancel this attempt."}</p><button class="secondary" onclick={cancelConnection}>Cancel attempt</button></section>
+            {:else if step === "pair"}
               <p class="connection-hint">
                 Open <strong>Pair device with pairing code</strong> in your TV’s Wireless
                 debugging settings.
@@ -406,7 +430,7 @@
                 <button
                   class="primary"
                   type="submit"
-                  disabled={!native ||
+                  disabled={!native || !nativeReady ||
                     busy ||
                     !pairEndpoint.trim() ||
                     !/^[0-9]{6}$/.test(code)}
@@ -420,6 +444,7 @@
                 Connect above.
               </p>
             {:else}
+              {#if !legacy}<p class="pair-status">{pairingRecord?`Pairing completed in this app · ${new Date(pairingRecord.pairedAt).toLocaleString()}`:"For Wireless debugging, pair this app once before using its connection port."}</p>{/if}
               <p class="connection-hint">
                 Use the address on the <strong
                   >main Wireless debugging screen</strong
@@ -458,7 +483,7 @@
                 <button
                   class="primary"
                   type="submit"
-                  disabled={!native || busy || !endpoint.trim()}
+                  disabled={!native || !nativeReady || busy || !endpoint.trim()}
                   >{busy ? busyLabel : "Connect to TV"}<span aria-hidden="true"
                     >→</span
                   ></button

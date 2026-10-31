@@ -26,6 +26,7 @@ export type Operation = {
   target: Target;
   title: string;
   kind: string;
+  deviceLabel?: string | null;
   status:
     | "queued"
     | "running"
@@ -118,6 +119,7 @@ export type AppMetadata = {
   error?: string | null;
 };
 export type PackageDetail = {
+  launchActivity?: string | null;
   metadata?: AppMetadata | null;
   package: string;
   state: {

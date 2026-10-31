@@ -1,0 +1,3 @@
+import {it,expect} from "vitest";import {endpointHost,loadPairs,recordPair} from "./connection-model";
+it("records successful pairing by host across separate pairing/connect ports",()=>{const records=recordPair([],"TV.local:37123","guid",1000);expect(records[0].host).toBe(endpointHost("tv.local:40215"));expect(records[0].pairedAt).toBe(1000);expect(endpointHost("[2001:db8::1]:1234")).toBe("2001:db8::1");});
+it("bounds local records and rejects malformed saved status",()=>{expect(loadPairs("not-json")).toEqual([]);expect(loadPairs('[{"host":"tv","guid":"g","pairedAt":"bad"}]')).toEqual([]);let records=recordPair([],"tv:1","a",1);records=recordPair(records,"TV:2","b",2);expect(records).toHaveLength(1);expect(records[0].guid).toBe("b");});

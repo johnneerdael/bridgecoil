@@ -277,6 +277,7 @@ impl Workspace {
             id: Uuid::new_v4().to_string(),
             target: target.clone(),
             title: p.review.title.clone(),
+            device_label: driver.target_label(),
             kind: kind(&p.action).into(),
             status: OperationStatus::Running,
             created_ms: now,
@@ -292,7 +293,11 @@ impl Workspace {
                 row.error = Some(format!("{}. Inspect the TV before retrying.", e.message));
             }
             Ok(output) => {
-                row.output = output.combined();
+                row.output = if matches!(p.action, Action::Shell { .. }) {
+                    format!("$ {}\n\n{}", p.review.commands[0], output.combined())
+                } else {
+                    output.combined()
+                };
                 if !output.success() {
                     row.status = OperationStatus::Failed;
                     row.error = Some(format!("TV command exited {:?}.", output.exit_code));

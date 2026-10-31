@@ -63,6 +63,9 @@
   let refresh = $state(0);
   let busy = $state(false);
   let error = $state("");
+  let notice = $state("");
+  let activitiesOpen = $state(false),
+    activityPage = $state(0);
   type AppPage = Page<AppMetadata> & { metadataNote?: string | null };
   let result = $state<AppPage>({
     items: [],
@@ -123,6 +126,9 @@
   async function inspect(packageId: string) {
     busy = true;
     error = "";
+    notice = "";
+    activityPage = 0;
+    activitiesOpen = false;
     const id = device.id;
     try {
       const r = await api.query<PackageDetail>(targetOf(device), {
@@ -163,9 +169,8 @@
         kind: "launch",
         component,
       });
-      error =
-        r.error ??
-        (r.status === "sent" ? "Launch sent. Check the TV." : r.output);
+      if (r.status === "sent") notice = "Open request sent. Check the TV.";
+      else error = r.error || r.output || "The open request was not verified.";
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -233,7 +238,9 @@
       ><button
         class="secondary"
         disabled={busy || !selected.length}
-        onclick={reviewBulk}>Review {selected.length} apps</button
+        onclick={reviewBulk}
+        >Review {selected.length}
+        {selected.length === 1 ? "app" : "apps"}</button
       >
     </div>
   {:else}<p class="subtle">
@@ -283,9 +290,9 @@
         {detail.package}
       </p>{/if}
     <div class="segmented">
-      {#each ["overview", "actions", "permissions", "raw"] as section}<button
+      {#each [["overview", "Overview"], ["actions", "Actions"], ["permissions", "Access"], ["raw", "Details"]] as [section, title]}<button
           class:chosen={tab === section}
-          onclick={() => (tab = section)}>{section}</button
+          onclick={() => (tab = section)}>{title}</button
         >{/each}
     </div>
     {#if tab === "overview"}<dl>
@@ -329,14 +336,13 @@
           </dd>
         </div>
       </dl>
-      {#each detail.activities.slice(0, 3) as component}<button
-          class="secondary"
+      {#if detail.launchActivity || detail.activities.length}<button
+          class="primary"
           disabled={busy}
-          onclick={() => launch(component)}
-          >Launch {component.split("/")[1]}</button
-        >{/each}{#if !detail.activities.length}<p class="subtle">
-          No launch activity reported.
-        </p>{/if}
+          onclick={() =>
+            detail && launch(detail.launchActivity || detail.activities[0])}
+          >Open app</button
+        >{:else}<p class="subtle">No launch activity reported.</p>{/if}
     {:else if tab === "actions"}<div class="action-grid">
         {#each actions.slice(actionPage * 4, actionPage * 4 + 4) as action}<button
             class="secondary"
@@ -418,9 +424,38 @@
           {busy}
           onpage={(n) => (permissionPage = n)}
         />{/if}
-    {:else}<Output
+    {:else}{#if detail.activities.length > 1}<button
+          class="secondary"
+          onclick={() => (activitiesOpen = true)}
+          >Choose a launch activity</button
+        >{/if}<Output
         text={`Signing certificate SHA-256:\n${detail.metadata?.signers?.join("\n") || "Not reported"}\n\n${detail.raw}`}
       />{/if}
+    {#if notice}<p class="subtle" role="status">{notice}</p>{/if}
     {#if error}<p class="error-text" role="alert">{error}</p>{/if}
   {/if}
+</Modal>
+<Modal
+  open={activitiesOpen && !!detail}
+  title="Launch activity"
+  onclose={() => (activitiesOpen = false)}
+>
+  <p class="subtle">
+    Advanced: choose a launch target reported by the installed app.
+  </p>
+  {#each detail?.activities.slice(activityPage * 3, activityPage * 3 + 3) ?? [] as component}<button
+      class="list-row break-word"
+      disabled={busy}
+      onclick={() => {
+        activitiesOpen = false;
+        void launch(component);
+      }}>{component}</button
+    >{/each}
+  <Pager
+    page={activityPage}
+    total={detail?.activities.length ?? 0}
+    size={3}
+    {busy}
+    onpage={(n) => (activityPage = n)}
+  />
 </Modal>

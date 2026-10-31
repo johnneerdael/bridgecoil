@@ -36,6 +36,8 @@ pub struct OperationRecord {
     pub id: String,
     pub target: Target,
     pub title: String,
+    #[serde(default)]
+    pub device_label: Option<String>,
     pub kind: String,
     pub status: OperationStatus,
     pub created_ms: i64,

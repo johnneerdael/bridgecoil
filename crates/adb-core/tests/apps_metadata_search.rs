@@ -100,3 +100,42 @@ async fn oem_metadata_failure_preserves_browsable_package_ids() {
     assert!(page["items"][0]["label"].is_null());
     assert!(page["metadataNote"].is_string());
 }
+
+struct DetailsDriver {
+    target: Target,
+}
+#[async_trait]
+impl ShellDriver for DetailsDriver {
+    fn current_target(&self) -> Option<Target> {
+        Some(self.target.clone())
+    }
+    async fn shell(&mut self, _: &Target, command: &str) -> Result<ShellOutput, PocError> {
+        let stdout = if command.contains("LEANBACK_LAUNCHER") {
+            "org.demo/.TvZ"
+        } else if command.contains("category.LAUNCHER") {
+            "org.demo/.PhoneA"
+        } else {
+            "versionCode=1\nUser 10: installed=true enabled=0 stopped=false"
+        };
+        Ok(ShellOutput {
+            stdout: stdout.into(),
+            stderr: String::new(),
+            exit_code: Some(0),
+        })
+    }
+}
+#[tokio::test]
+async fn normal_open_prefers_the_discovered_tv_activity_over_alphabetical_order() {
+    let t = driver(false).target;
+    let mut d = DetailsDriver { target: t.clone() };
+    let detail = query(
+        &mut d,
+        &t,
+        Query::Package {
+            package: "org.demo".into(),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(detail["launchActivity"], "org.demo/.TvZ");
+}

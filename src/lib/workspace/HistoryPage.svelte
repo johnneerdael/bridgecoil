@@ -82,9 +82,9 @@
         }}
         ><span class="truncate"
           ><strong>{row.title}</strong><small
-            >{new Date(row.createdMs).toLocaleString()} · Profile {row.target
-              .profileId}</small
-          ></span
+            >Profile {row.target.profileId} · {row.deviceLabel ||
+              `Device ${row.target.deviceId.slice(-8)}`}</small
+          ><small>{new Date(row.createdMs).toLocaleString()}</small></span
         ><span class={`outcome ${row.status}`}>{row.status}</span></button
       >{/each}{#if !busy && !result.items.length}<p class="empty-caption">
         No operations recorded yet.
@@ -117,6 +117,10 @@
       >
     </div>
     {#if tab === "summary"}<dl>
+        <div>
+          <dt>Device</dt>
+          <dd>{detail.deviceLabel || detail.target.deviceId}</dd>
+        </div>
         <div>
           <dt>Result</dt>
           <dd>{detail.status}</dd>

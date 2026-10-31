@@ -14,12 +14,15 @@ val tauriProperties = Properties().apply {
     }
 }
 
+val uiValidation = providers.environmentVariable("BRIDGECOIL_UI_VALIDATION").orNull == "1"
+
 android {
     compileSdk = 37
     namespace = "nl.neerdael.adbstudio.poc"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "nl.neerdael.adbstudio.poc"
+        applicationId = if (uiValidation) "nl.neerdael.adbstudio.poc.uitest" else "nl.neerdael.adbstudio.poc"
+        manifestPlaceholders["appLabel"] = if (uiValidation) "Bridgecoil UI test" else "@string/app_name"
         minSdk = 24
         targetSdk = 37
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()

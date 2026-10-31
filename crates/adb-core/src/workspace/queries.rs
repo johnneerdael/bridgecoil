@@ -192,6 +192,9 @@ pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Valu
                     Vec::new()
                 }
             };
+            if labels.len() < packages.len() {
+                label_note.get_or_insert("Some app labels were not returned.".into());
+            }
             let labels: HashMap<_, _> =
                 labels.into_iter().map(|m| (m.package.clone(), m)).collect();
             let label = |p: &String| {
@@ -243,8 +246,13 @@ pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Valu
             let state = parse_package_state(&raw, user);
             let output=checked(d,t,&format!("cmd package query-activities --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.LEANBACK_LAUNCHER -p {p}")).await;
             let mut activities = output.as_deref().map(parse_components).unwrap_or_default();
+            let mut launch_activity = activities.first().cloned();
             let output=checked(d,t,&format!("cmd package query-activities --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p {p}")).await;
-            activities.extend(output.as_deref().map(parse_components).unwrap_or_default());
+            let phone_activities = output.as_deref().map(parse_components).unwrap_or_default();
+            if launch_activity.is_none() {
+                launch_activity = phone_activities.first().cloned();
+            }
+            activities.extend(phone_activities);
             activities.sort();
             activities.dedup();
             let version_name = raw
@@ -270,8 +278,11 @@ pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Valu
                 activities.sort();
                 activities.dedup();
             }
+            if launch_activity.is_none() {
+                launch_activity = activities.first().cloned();
+            }
             Ok(
-                json!({"package":package,"state":state,"versionName":version_name,"activities":activities,"permissions":permissions,"raw":raw,"metadata":metadata}),
+                json!({"package":package,"state":state,"versionName":version_name,"activities":activities,"launchActivity":launch_activity,"permissions":permissions,"raw":raw,"metadata":metadata}),
             )
         }
 

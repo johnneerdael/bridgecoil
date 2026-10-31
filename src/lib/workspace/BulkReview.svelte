@@ -124,13 +124,15 @@
         ></label
       ><label class="checkbox"
         ><input type="checkbox" bind:checked={confirmed} /><span
-          >Apply the included changes. This is not a transaction; completed
-          items are kept.</span
+          >Apply the included changes. Completed items stay changed if a later
+          item fails.</span
         ></label
       ><button
         class="primary"
         disabled={!confirmed || !review.items.length}
-        onclick={apply}>Apply {review.items.length} changes</button
+        onclick={apply}
+        >Apply {review.items.length}
+        {review.items.length === 1 ? "change" : "changes"}</button
       >{/if}
     {#if error}<p role="alert" class="error-text">{error}</p>{/if}{/if}</Modal
 >

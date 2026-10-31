@@ -23,12 +23,15 @@ type Wire = Connection<MaybeTls<TokioTcp>>;
 pub struct PocError {
     pub kind: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
 }
 impl PocError {
     pub fn new(kind: &str, message: impl Into<String>) -> Self {
         Self {
             kind: kind.into(),
             message: message.into(),
+            details: None,
         }
     }
 }
@@ -103,26 +106,123 @@ impl Client {
         }).await.map_err(|_|PocError::new("timeout","Pairing timed out. Reopen the TV pairing screen and check its current port."))?
     }
     pub async fn connect(&mut self, endpoint: String, allow_legacy: bool) -> Result<DeviceInfo> {
+        self.connect_with_progress(endpoint, allow_legacy, |_| {})
+            .await
+    }
+    pub async fn connect_with_progress<F>(
+        &mut self,
+        endpoint: String,
+        allow_legacy: bool,
+        progress: F,
+    ) -> Result<DeviceInfo>
+    where
+        F: Fn(crate::connection::ConnectionProgress) + Send + Sync + 'static,
+    {
+        use crate::connection::{
+            ConnectionAuth, ConnectionProgress, ConnectionStage, connection_failure,
+        };
+        use std::sync::{Arc, atomic::Ordering};
         let endpoint = validate_endpoint(&endpoint).map_err(|e| PocError::new("input", e))?;
         self.active = None;
+        let progress = Arc::new(progress);
+        progress(ConnectionProgress {
+            stage: ConnectionStage::Preparing,
+        });
         let (key, tls) = self.identity().await?;
-        let result=timeout(Duration::from_secs(25),async {
-            let socket=tokio::net::TcpStream::connect(&endpoint).await.map_err(connection_error)?;
-            socket.set_nodelay(true).map_err(connection_error)?;
-            let mut wire=Connection::connect_tls(MaybeTls::plain(TokioTcp::new(socket)),key,&[Feature::ShellV2,Feature::StatV2,Feature::SendrecvV2],&tls).await.map_err(connection_error)?;
-            let encrypted=wire.transport().is_tls();
-            if !encrypted&&!allow_legacy{return Err(PocError::new("legacyApproval","This port uses unencrypted legacy ADB. Enable the legacy option only on a trusted local network."));}
-            let output=command(&mut wire,"getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.version.sdk; getprop ro.product.cpu.abilist; getprop ro.serialno; getprop ro.build.fingerprint; getprop ro.product.manufacturer; getprop persist.adb.wifi.guid").await?;
-            if output.0!=Some(0){return Err(PocError::new("connection","Connected but device inspection failed."));}
-            let lines:Vec<_>=output.1.lines().map(str::trim).collect();
-            let field=|n:usize|lines.get(n).copied().unwrap_or("").to_owned();
-            let id=Uuid::new_v4().to_string();let serial=field(4);let manufacturer=field(6);let guid=field(7);
-            let device_id=crate::workspace::driver::device_identity(if guid.is_empty(){&serial}else{&guid},&manufacturer,&id);
-            let info=DeviceInfo{id,device_id,profile_id:0,serial,manufacturer,build:field(5),endpoint:endpoint.clone(),model:lines.first().filter(|v|!v.is_empty()).unwrap_or(&"Android device").to_string(),android_version:field(1),sdk:field(2).parse().unwrap_or(0),abis:field(3).split(',').filter(|v|!v.is_empty()).map(str::to_owned).collect(),encrypted};
-            Ok(Active{wire,info})
-        }).await.map_err(|_|PocError::new("timeout","Connection timed out. Check the TV's connection port, local-network permission and approval prompt."))??;
-        let info = result.info.clone();
-        self.active = Some(result);
+        progress(ConnectionProgress {
+            stage: ConnectionStage::Connecting,
+        });
+        let socket = timeout(
+            Duration::from_secs(8),
+            tokio::net::TcpStream::connect(&endpoint),
+        )
+        .await
+        .map_err(|_| {
+            PocError::new(
+                "timeout",
+                "The TV did not answer on this address. Check the current connection port.",
+            )
+        })?
+        .map_err(connection_error)?;
+        socket.set_nodelay(true).map_err(connection_error)?;
+        progress(ConnectionProgress {
+            stage: ConnectionStage::Negotiating,
+        });
+        let auth = ConnectionAuth::new(key, allow_legacy, progress.clone());
+        let offered = auth.offered.clone();
+        let mut wire = {
+            let mut handshake = Box::pin(Connection::connect_tls(
+                MaybeTls::plain(TokioTcp::new(socket)),
+                auth,
+                &[Feature::ShellV2, Feature::StatV2, Feature::SendrecvV2],
+                &tls,
+            ));
+            let mut deadline = Box::pin(tokio::time::sleep(Duration::from_secs(25)));
+            let mut extended = false;
+            loop {
+                tokio::select! {
+                    result=&mut handshake=>break result.map_err(connection_failure)?,
+                    _=&mut deadline=>{
+                        if offered.load(Ordering::SeqCst)&&!extended {extended=true;deadline.as_mut().reset(tokio::time::Instant::now()+Duration::from_secs(155));}
+                        else{return Err(PocError::new("timeout",if offered.load(Ordering::SeqCst){"TV authorization was not completed. Approve this app's debugging prompt on the TV, then try again."}else{"ADB did not finish its handshake. Check the connection port and pair this installation if using Wireless debugging."}));}
+                    }
+                }
+            }
+        };
+        let encrypted = wire.transport().is_tls();
+        if !encrypted && !allow_legacy {
+            return Err(PocError::new(
+                "legacyApproval",
+                "This port uses unencrypted legacy ADB. Enable the legacy option only on a trusted local network.",
+            ));
+        }
+        progress(ConnectionProgress {
+            stage: ConnectionStage::Inspecting,
+        });
+        let output=timeout(Duration::from_secs(10),command(&mut wire,"getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.version.sdk; getprop ro.product.cpu.abilist; getprop ro.serialno; getprop ro.build.fingerprint; getprop ro.product.manufacturer; getprop persist.adb.wifi.guid")).await.map_err(|_|PocError::new("timeout","ADB connected, but the TV's device inspection did not finish."))??;
+        if output.0 != Some(0) {
+            return Err(PocError::new(
+                "connection",
+                "Connected but device inspection failed.",
+            ));
+        }
+        let lines: Vec<_> = output.1.lines().map(str::trim).collect();
+        let field = |n: usize| lines.get(n).copied().unwrap_or("").to_owned();
+        let id = Uuid::new_v4().to_string();
+        let serial = field(4);
+        let manufacturer = field(6);
+        let guid = field(7);
+        let device_id = crate::workspace::driver::device_identity(
+            if guid.is_empty() { &serial } else { &guid },
+            &manufacturer,
+            &id,
+        );
+        let info = DeviceInfo {
+            id,
+            device_id,
+            profile_id: 0,
+            serial,
+            manufacturer,
+            build: field(5),
+            endpoint: endpoint.clone(),
+            model: lines
+                .first()
+                .filter(|v| !v.is_empty())
+                .unwrap_or(&"Android device")
+                .to_string(),
+            android_version: field(1),
+            sdk: field(2).parse().unwrap_or(0),
+            abis: field(3)
+                .split(',')
+                .filter(|v| !v.is_empty())
+                .map(str::to_owned)
+                .collect(),
+            encrypted,
+        };
+        self.active = Some(Active {
+            wire,
+            info: info.clone(),
+        });
         Ok(info)
     }
     pub fn current_target(&self) -> Option<crate::workspace::types::Target> {
@@ -333,6 +433,7 @@ impl Client {
         .await;
         match result {
             Ok(Ok(())) => {
+                self.label_cache = None;
                 self.active = Some(active);
                 Ok(())
             }
@@ -419,6 +520,9 @@ async fn command_output(
 }
 #[async_trait::async_trait]
 impl crate::workspace::driver::ShellDriver for Client {
+    fn target_label(&self) -> Option<String> {
+        self.status().map(|info| info.model)
+    }
     async fn labels(
         &mut self,
         target: &crate::workspace::types::Target,

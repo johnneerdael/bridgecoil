@@ -10,7 +10,7 @@ use std::{
     io::{Read, Write},
     sync::Mutex,
 };
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, Manager, State, ipc::Channel};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_fs::FsExt;
 use tempfile::NamedTempFile;
@@ -25,6 +25,48 @@ struct Selected {
 #[derive(Default)]
 struct Selections(Mutex<HashMap<String, Selected>>);
 struct Backend(tokio::sync::Mutex<Client>);
+#[derive(Default)]
+struct ConnectionAttempt(Mutex<Option<(String, tokio::sync::watch::Sender<bool>)>>);
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConnectionEvent {
+    attempt_id: String,
+    #[serde(flatten)]
+    progress: adb_core::connection::ConnectionProgress,
+}
+fn begin_connection_attempt(
+    state: &ConnectionAttempt,
+) -> Result<(String, tokio::sync::watch::Receiver<bool>)> {
+    let (sender, receiver) = tokio::sync::watch::channel(false);
+    let id = uuid::Uuid::new_v4().to_string();
+    *state.0.lock().map_err(err)? = Some((id.clone(), sender));
+    Ok((id, receiver))
+}
+fn finish_connection_attempt(state: &ConnectionAttempt, id: &str) {
+    if let Ok(mut current) = state.0.lock() {
+        if current.as_ref().is_some_and(|(active, _)| active == id) {
+            *current = None;
+        }
+    }
+}
+async fn await_connection_cancel(receiver: &mut tokio::sync::watch::Receiver<bool>) {
+    loop {
+        let cancelled = *receiver.borrow();
+        if cancelled || receiver.changed().await.is_err() {
+            break;
+        }
+    }
+}
+#[tauri::command]
+fn cancel_connection(attempt_id: String, state: State<'_, ConnectionAttempt>) -> Result<()> {
+    let current = state.0.lock().map_err(err)?;
+    if let Some((active, sender)) = &*current {
+        if active == &attempt_id {
+            let _ = sender.send(true);
+        }
+    }
+    Ok(())
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SelectionInfo {
@@ -61,9 +103,23 @@ async fn pair_device(
     endpoint: String,
     code: String,
     state: State<'_, Backend>,
+    attempts: State<'_, ConnectionAttempt>,
+    on_progress: Channel<ConnectionEvent>,
 ) -> Result<String> {
     local_network::ensure(&app).await?;
-    state.0.lock().await.pair(endpoint, code).await
+    let mut client = state.0.lock().await;
+    let (id, mut cancel) = begin_connection_attempt(&attempts)?;
+    {
+        let _ = on_progress.send(ConnectionEvent {
+            attempt_id: id.clone(),
+            progress: adb_core::connection::ConnectionProgress {
+                stage: adb_core::connection::ConnectionStage::Pairing,
+            },
+        });
+    }
+    let result = tokio::select! {result=client.pair(endpoint,code)=>result,_=await_connection_cancel(&mut cancel)=>Err(PocError::new("cancelled","Pairing cancelled."))};
+    finish_connection_attempt(&attempts, &id);
+    result
 }
 #[tauri::command]
 async fn connect_device(
@@ -72,10 +128,20 @@ async fn connect_device(
     allow_legacy: bool,
     state: State<'_, Backend>,
     selections: State<'_, Selections>,
+    attempts: State<'_, ConnectionAttempt>,
+    on_progress: Channel<ConnectionEvent>,
 ) -> Result<DeviceInfo> {
     local_network::ensure(&app).await?;
     selections.0.lock().map_err(err)?.clear();
-    state.0.lock().await.connect(endpoint, allow_legacy).await
+    let mut client = state.0.lock().await;
+    let (id, mut cancel) = begin_connection_attempt(&attempts)?;
+    let progress_id = id.clone();
+    let result = tokio::select! {
+        result=client.connect_with_progress(endpoint,allow_legacy,move |progress|{{let _=on_progress.send(ConnectionEvent{attempt_id:progress_id.clone(),progress});}})=>result,
+        _=await_connection_cancel(&mut cancel)=>Err(PocError::new("cancelled","Connection cancelled."))
+    };
+    finish_connection_attempt(&attempts, &id);
+    result
 }
 #[tauri::command]
 async fn disconnect_device(
@@ -250,6 +316,7 @@ pub fn run() {
                 data.join("identity"),
             ))));
             app.manage(Selections::default());
+            app.manage(ConnectionAttempt::default());
             app.manage(adb_core::workspace::bulk::Bulk::default());
             app.manage(adb_core::workspace::engine::Workspace::new(
                 adb_core::workspace::history::History::open(&data.join("history.sqlite3"))?,
@@ -271,6 +338,7 @@ pub fn run() {
             select_profile,
             remote_action,
             set_appearance,
+            cancel_connection,
             connection_status,
             pair_device,
             connect_device,

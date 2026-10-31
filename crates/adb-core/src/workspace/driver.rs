@@ -20,6 +20,9 @@ impl ShellOutput {
 #[async_trait]
 pub trait ShellDriver: Send {
     fn current_target(&self) -> Option<Target>;
+    fn target_label(&self) -> Option<String> {
+        None
+    }
     async fn labels(
         &mut self,
         _target: &Target,

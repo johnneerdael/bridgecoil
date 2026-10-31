@@ -1,0 +1,86 @@
+{
+  "generator": "Android SDK aapt2/zipalign/apksigner 36.1.0, JDK17",
+  "package": "org.bridgecoil.fixture.install",
+  "files": {
+    "v2-rsa.apk": {
+      "sha256": "a6e5325869cdd4b195e77268abab970b595b50739978d9d8f11c948ec85c8ee4",
+      "signerSha256": "37be048f4c430ee03b82806fddc9ea7f9c5e5b89d60adf345983fe5fe8974fbf",
+      "schemes": [
+        "v2"
+      ],
+      "versionCode": 1,
+      "split": null,
+      "sdkVerified": true
+    },
+    "v2-ec.apk": {
+      "sha256": "5cd44d87812a92940d082ebbec3045e55d92291a5ff589f12bf53b1236082926",
+      "signerSha256": "7eb79675bead6810232d73f89a5d53c0eb27d49d4b508d8fe54c5c88b89b0775",
+      "schemes": [
+        "v2"
+      ],
+      "versionCode": 1,
+      "split": null,
+      "sdkVerified": true
+    },
+    "v2-v3.apk": {
+      "sha256": "6ac46c6adeb3b985f4fbd9369132813ff3629a8648a7313f5e1cd2afc029a76b",
+      "signerSha256": "37be048f4c430ee03b82806fddc9ea7f9c5e5b89d60adf345983fe5fe8974fbf",
+      "schemes": [
+        "v2",
+        "v3"
+      ],
+      "versionCode": 1,
+      "split": null,
+      "sdkVerified": true
+    },
+    "v1-only.apk": {
+      "sha256": "58c60d63b6e80a616970f430e0ab2d3da4220457c884d03a7f596160f02c610b",
+      "signerSha256": "37be048f4c430ee03b82806fddc9ea7f9c5e5b89d60adf345983fe5fe8974fbf",
+      "schemes": [
+        "v1"
+      ],
+      "versionCode": 1,
+      "split": null,
+      "sdkVerified": true
+    },
+    "update-v2.apk": {
+      "sha256": "dd74b2224ff71db773039b8f824382c4fd51ec550c58d64af10d6ed937770bef",
+      "signerSha256": "37be048f4c430ee03b82806fddc9ea7f9c5e5b89d60adf345983fe5fe8974fbf",
+      "schemes": [
+        "v2"
+      ],
+      "versionCode": 2,
+      "split": null,
+      "sdkVerified": true
+    },
+    "config-test.apk": {
+      "sha256": "2bc2d0c93f29e022168be9dbcb4133aa67e4b42d6b466529190309599fc81a24",
+      "signerSha256": "37be048f4c430ee03b82806fddc9ea7f9c5e5b89d60adf345983fe5fe8974fbf",
+      "schemes": [
+        "v2"
+      ],
+      "versionCode": 1,
+      "split": "config.test",
+      "sdkVerified": true
+    },
+    "other-signer.apk": {
+      "sha256": "e12f26a365fb7923b3179120bbb2cf1a0a4d8ffc5eb223966c4a4ba6ece09255",
+      "signerSha256": "299c949088d186b7765c9f3e5dcf1536b5666f9c9d7dd43da7b223c77448fd46",
+      "schemes": [
+        "v2"
+      ],
+      "versionCode": 1,
+      "split": null,
+      "sdkVerified": true
+    },
+    "unsigned.apk": {
+      "sha256": "de609be3032a90a19e98e8f451720beb2e3935d7a56bab8f0ed8438518950a62",
+      "sdkVerified": false
+    },
+    "tampered.apk": {
+      "sha256": "735899635ee634e0390d170da677fbf149e1233cf342f49117ed0455b7a45de2",
+      "sdkVerified": false,
+      "reason": "Asset bytes changed after signing"
+    }
+  }
+}

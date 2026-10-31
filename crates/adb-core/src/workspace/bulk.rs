@@ -209,6 +209,7 @@ impl Bulk {
             id: uuid::Uuid::new_v4().to_string(),
             target: review.target.clone(),
             title: format!("Bulk app changes · {} apps", review.items.len()),
+            device_label: d.target_label(),
             kind: "bulkPackages".into(),
             status: OperationStatus::Running,
             created_ms: now,

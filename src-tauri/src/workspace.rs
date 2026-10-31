@@ -241,6 +241,7 @@ pub async fn remote_action(
         id: uuid::Uuid::new_v4().to_string(),
         target: target.clone(),
         title,
+        device_label: client.status().map(|info| info.model),
         kind: "remote".into(),
         status: OperationStatus::Running,
         created_ms: now,
