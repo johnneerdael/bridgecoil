@@ -24,11 +24,26 @@ Some details come from the test setup. The TV is called `sdk_google_atv64_arm64`
 
 ## TV setup
 
-| Screen | File |
+From a bare TV to the last step, on Porter. The TV is wired, so the warning appears.
+
+| Step | File |
 |---|---|
-| Starting the helper app's service | [tv-setup](screenshots/tv-setup.png) |
+| The TV asks to allow this phone | [app](screenshots/connect-approve.png), [TV](screenshots/tv-prompt.png) |
+| 1. Choose a helper app | [setup-1-helper](screenshots/setup-1-helper.png) |
+| 2. Bridgecoil downloads and checks it | [setup-2-installing](screenshots/setup-2-installing.png) |
+| 3. Start it | [setup-3-start](screenshots/setup-3-start.png) |
 | Every change is reviewed first | [setup-start-review](screenshots/setup-start-review.png) |
-| Your TV is ready, with the network cable warning | [setup-ready-wired](screenshots/setup-ready-wired.png) |
+| 4. Install Termux, with the Play Protect warning | [setup-4-termux](screenshots/setup-4-termux.png) |
+| 5. Installing | [setup-5-installing-termux](screenshots/setup-5-installing-termux.png) |
+| On the TV: Unsafe app blocked | [tv-play-protect](screenshots/tv-play-protect.png), [Install anyway](screenshots/tv-play-protect-details.png) |
+| 6. Prepare Termux | [setup-6-prepare-termux](screenshots/setup-6-prepare-termux.png) |
+| 7. Connect Termux | [setup-7-connect-termux](screenshots/setup-7-connect-termux.png) |
+| 8. Allow access | [setup-8-access](screenshots/setup-8-access.png) |
+| 9. Review the request | [setup-9-ask-review](screenshots/setup-9-ask-review.png) |
+| On the TV: Allow all the time | [tv-access-prompt](screenshots/tv-access-prompt.png) |
+| 10. Survive restarts | [setup-10-survive-restarts](screenshots/setup-10-survive-restarts.png) |
+| Your TV is ready | [setup-ready-wired](screenshots/setup-ready-wired.png) |
+| The first stage on a TV with a helper installed | [tv-setup](screenshots/tv-setup.png) |
 
 ## Buttons
 
@@ -87,7 +102,10 @@ In this order, on a TV whose own launcher comes first.
 | A command's options, preview and save | [commands-options](screenshots/commands-options.png) |
 | Screen capture | [screen-capture](screenshots/screen-capture.png) |
 | A screenshot of the TV | [capture-screenshot](screenshots/capture-screenshot.png) |
+| Recording | [capture-recording](screenshots/capture-recording.png) |
+| Saving or discarding a recording | [capture-recording-done](screenshots/capture-recording-done.png) |
 | Files | [files](screenshots/files.png) |
+| Rename, move and delete | [files-menu](screenshots/files-menu.png) |
 | Diagnostics | [diagnostics-logs](screenshots/diagnostics-logs.png) |
 | Choosing from a list instead of typing | [diagnostics-choices](screenshots/diagnostics-choices.png) |
 | Log output | [diagnostics-log-output](screenshots/diagnostics-log-output.png) |
@@ -95,9 +113,11 @@ In this order, on a TV whose own launcher comes first.
 | Network | [network](screenshots/network.png) |
 | Shell | [shell](screenshots/shell.png) |
 
+## Dark mode
+
+[Menu](screenshots/dark-navigation.png), [Device](screenshots/dark-device.png), [Apps](screenshots/dark-apps.png), [Remote](screenshots/dark-remote.png), [Tools](screenshots/dark-tools.png), [TV setup](screenshots/dark-tv-setup.png), [Buttons](screenshots/dark-buttons.png), [Clean up](screenshots/dark-clean-up.png), [Commands](screenshots/dark-commands.png), [Files](screenshots/dark-files.png), [History](screenshots/dark-history.png)
+
 ## Not captured yet
 
-- **The start of TV setup:** choosing a helper app, installing Termux and the access prompt. They need a TV that hasn't been set up.
-- **Nearby devices:** this dialog lists what's on the real network, so it needs a staged network or a mock.
-- **Recording in progress, and the file actions menu.**
-- **Dark mode.** Everything here is the light theme.
+- **Nearby devices.** This dialog lists what's on the real network, so it needs a staged network or a mock.
+- **Pairing with a real code in the app.** The form is here, and the protocol is tested, but no TV in this run could offer a code.

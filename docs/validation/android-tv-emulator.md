@@ -84,6 +84,8 @@ Button mapping also ran in that build: **Listen** caught a real `KEY_A`, the map
 
 **Known issue.** Android's Back key closes the app instead of the open dialog, and reopening it shows Not connected. The next connection attempt failed with "The TV did not answer", and a retry worked. The phone emulator's network changed from Wi-Fi to 5G at about that time, so that failure may not be caused by Back.
 
+The signed app also took a brand new TV emulator from nothing to **Survive restarts** with Porter: the first connection prompt, the install, starting the server, both Play Protect blocks, Termux, and the access prompt.
+
 ## Code pairing
 
 The TV image can't do this, so it ran against the Android 16 phone image on its virtual Wi-Fi, reached through `adb forward`. It proves the protocol against a real `adbd`, not on a TV.

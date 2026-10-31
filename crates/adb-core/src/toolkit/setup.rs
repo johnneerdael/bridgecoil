@@ -111,7 +111,7 @@ pub fn plan(step: SetupStep) -> SetupPlan {
         ),
         SetupStep::RequestAccess => make(
             "Ask the TV for access".into(),
-            "Show the permission prompt on the TV. Choose Always allow there.",
+            "Show the permission prompt on the TV. Choose the option that always allows it.",
             &["Allowing this gives Termux the same power as ADB on this TV."],
             format!(
                 "run-as com.termux sh -c {}",
