@@ -12,4 +12,13 @@
 - [x] Update README with adaptive banner, feature overview, setup, actual platform status and limitations.
 - [x] Add release-note generator, meaningful tests, workflow integration and documentation.
 - [x] Validate site links/assets, workflow syntax, generated release body and desktop/mobile/light/dark appearance.
-- [ ] Commit, deliver through GitHub, configure Pages and verify the deployed site.
+- [x] Commit, deliver through GitHub, configure Pages and verify the deployed site.
+
+## Delivery evidence
+
+- Published from commit `5d26599b76bf3bbab975421323a19d35731081e4`; [Website run 41205646565](https://github.com/johnneerdael/bridgecoil/actions/runs/41205646565) passed checks and deployment.
+- Homepage, guide, stylesheet and pinned release banner returned HTTP 200. Live browser inspection confirmed fonts loaded, no broken images and no horizontal overflow at 1440 px.
+- Local browser checks covered 390, 1280 and 1440 px layouts, both themes, saved theme across pages, System preference changes, reduced motion, keyboard workspace tabs, FAQ expansion and script-blocked fallback content.
+- Automated axe WCAG A/AA scans reported zero violations on the landing page in both themes and the light guide. Decorative arrows/overlays required manual contrast review; this is not a full assistive-technology audit.
+- Static link/asset checker, JavaScript syntax checks, three release-renderer tests, actionlint and Git whitespace checks passed. Independent review found no important issues.
+- Repository homepage points to the site. App versions and signing settings are unchanged; no app release was created. Product captures remain pending.
