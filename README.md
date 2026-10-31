@@ -1,58 +1,101 @@
-# Bridgecoil
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="site/assets/marketing/bridgecoil-readme-dark.png">
+    <img src="site/assets/marketing/bridgecoil-readme-light.png" alt="Bridgecoil. The visual ADB workspace. From connection to control." width="100%">
+  </picture>
+</p>
 
-Take back control of your Android TV from your phone, with no typing and no prior ADB knowledge.
+<p align="center">
+  <a href="https://johnneerdael.github.io/bridgecoil/"><img src="https://img.shields.io/badge/website-Bridgecoil-D4F56B?style=flat-square&labelColor=191E26" alt="Bridgecoil website"></a>
+  <a href="https://github.com/johnneerdael/bridgecoil/actions/workflows/pages.yml"><img src="https://img.shields.io/github/actions/workflow/status/johnneerdael/bridgecoil/pages.yml?branch=main&style=flat-square&label=website&labelColor=191E26&color=D4F56B" alt="Website checks and deployment"></a>
+  <a href="https://github.com/johnneerdael/bridgecoil/releases"><img src="https://img.shields.io/badge/builds-Android_arm64-AAB8FF?style=flat-square&labelColor=191E26" alt="Android arm64 builds"></a>
+  <img src="https://img.shields.io/badge/Tauri_2-Rust_%2B_Svelte_5-B0BDCF?style=flat-square&labelColor=191E26" alt="Tauri 2, Rust and Svelte 5">
+</p>
 
-Android TVs come with ad-filled launchers, apps you can't remove and buttons that only open what the manufacturer was paid to put there. The tools that fix this are command-line tools. Bridgecoil puts them behind plain questions, checks each result on the TV and keeps a way back.
+Bridgecoil is a visual ADB workspace for your Android TV. Manage installed apps, choose a Home screen, remap remote buttons and reach deeper tools without learning ADB commands. Changes show the target, the expected effect and the result, with recovery where the operation supports it.
 
-Bridgecoil talks to the TV directly over wireless debugging. It needs no computer, no root and no ADB server.
+Bridgecoil connects directly over local wireless debugging. The supported wireless setup needs no computer, root or desktop ADB server.
 
-## What it does
+<p align="center">
+  <a href="https://github.com/johnneerdael/bridgecoil/releases"><b>Releases</b></a> &nbsp;·&nbsp;
+  <a href="https://johnneerdael.github.io/bridgecoil/guide.html"><b>Get started</b></a> &nbsp;·&nbsp;
+  <a href="https://johnneerdael.github.io/bridgecoil/"><b>Website</b></a> &nbsp;·&nbsp;
+  <a href="https://github.com/johnneerdael/bridgecoil/issues"><b>Report an issue</b></a>
+</p>
 
-- **Clean up.** Shows which preinstalled apps the community rates as safe to turn off, with what each one does, and turns them off together. Turn them back on just as easily.
-- **Replace the launcher.** Try a new Home app, make it the default, press Home on the real remote to prove it works, then turn off the old one. A way back stays on the screen until you're sure.
-- **Remap buttons.** Press a button on your remote and choose what it does: open any app, or act as another button. Tapping and holding can do different things.
-- **Keep it working.** A small listener runs on the TV and restarts itself after the TV does, without your phone. Bridgecoil tells you once it has seen that happen on your TV.
-- **Advanced commands, no typing.** Pick from explained lists, see the exact command, review it and run it. Save the ones you use.
-- **Apps.** Every app, grouped by how safe it is to remove, with community ratings from [Universal Android Debloater](https://github.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation).
-- **Files.** Browse TV storage, upload, save to your phone, rename, move and delete.
-- **Screen capture and logs.** Screenshots, short recordings and filtered logs, saved to your phone.
-- **Remote, settings, history.** A phone remote, common settings, and a record of every change with undo where one exists.
+## What you can do
 
-## How TV setup works
+| Task | How Bridgecoil helps |
+| --- | --- |
+| **Manage apps** | Browse installed packages, inspect community removal ratings and review changes for the selected device/profile. Unknown packages stay unknown. |
+| **Choose a launcher** | Try a new Home app, set it as default and check the real Home button before disabling the old launcher. Keep a recovery path available. |
+| **Remap your remote** | Learn a physical button and choose an app or another key as its action. Tap and hold behavior depends on the available input path. |
+| **Prepare the TV** | Guided setup installs and starts the helper tools needed by the TV-side listener, checks each stage and tracks reboot verification separately. |
+| **Work with files** | Browse TV storage, upload, save to your phone, rename, move and delete. |
+| **Capture and diagnose** | Save screenshots and short recordings, inspect filtered logs and run explained commands. |
+| **Use everyday controls** | Navigate with the on-screen remote, open app shortcuts and reach common settings. |
+| **Review what happened** | Per-device history keeps requested changes, verified results and supported recovery actions visible. |
 
-**TV setup** walks through this in order and only moves on when the TV proves each step worked:
+Community package descriptions and ratings come from [Universal Android Debloater](https://github.com/Universal-Debloater-Alliance/universal-android-debloater-next-generation). They provide context, not a guarantee that disabling an app is safe on your firmware.
 
-1. Choose a helper app, [Shizuku-Next](https://github.com/rushiranpise/Shizuku-Next) or [Porter](https://github.com/d4rken-org/porter). Bridgecoil downloads the latest release, checks its signing certificate and installs it.
-2. Start it over the same connection.
-3. Install [Termux](https://github.com/termux/termux-app) and Termux:Boot the same way.
-4. Connect Termux to the helper app. You approve one prompt on the TV.
-5. Turn on start at boot in the helper app, and Bridgecoil adds a small startup script.
+## Screenshots
 
-You don't download anything beforehand or type anything in Termux. Releases signed by anyone other than the expected developer are refused.
+Application screenshots are being prepared. The [website workspace preview](https://johnneerdael.github.io/bridgecoil/#workspace) reserves their place. See the [screenshot handoff](site/screenshots/README.md) for the planned captures and where to add them.
 
-Google Play Protect may stop the Termux apps with "Unsafe app blocked", because they're built for an older version of Android. Use your remote on the TV to choose **More details**, then **Install anyway**. Bridgecoil leaves that decision to you and never turns Play Protect off.
+## Get Bridgecoil
 
-## Get started
+Check [GitHub Releases](https://github.com/johnneerdael/bridgecoil/releases) for available builds and the notes for each one. The current release pipeline produces these files:
 
-1. Install the APK from [Releases](https://github.com/johnneerdael/bridgecoil/releases) on an arm64 Android phone.
-2. On the TV, open **Settings → System → About** and repeatedly select **Android TV OS build** to unlock Developer options. Menu names vary between brands.
-3. In Developer options, turn on **Wireless debugging** and allow it on this network if asked. The phone and TV must be on the same network, and the TV must be on Wi-Fi. If it's on a network cable, Android usually turns this off again.
-4. Open Bridgecoil. It looks for the TV on your network and walks you through pairing with the code the TV shows.
+| Controller | Distribution | Status |
+| --- | --- | --- |
+| **Android phone, arm64** | `Bridgecoil-<version>-arm64.apk` and `SHA256SUMS` | Signed APK from the release workflow. Install on the phone. |
+| **iPhone / iPad** | Build from source | No public iOS package in the current release workflow. |
+| **macOS / Windows / Linux** | Build from source | No public desktop packages in the current release workflow. |
 
-## What it can't do
+Releases use one Android signing identity so compatible builds can update an existing installation. See [release and signing details](docs/release.md). Do not infer platform availability from a design preview.
 
-- On Android, a "Connected to your TV" service runs while connected. Android closes a background app's connections, so without it, opening a file picker would drop the TV. On iPhone and iPad the connection may drop when you leave the app, so reconnect when you come back.
+## First connection
 
-- On a TV with a network cable, the helper app can't start itself after a restart, because that needs wireless debugging. Use Wi-Fi, or start it again from Bridgecoil after each restart.
+1. Install an available Android arm64 APK on your phone.
+2. Connect the phone and TV to the same local network. Keep **Wi-Fi enabled on the TV**; Wireless debugging may turn off on a wired-only connection.
+3. On the TV, open **Settings → System → About** and repeatedly select **Android TV OS build** to unlock Developer options. Menu names vary by manufacturer.
+4. Enable **Wireless debugging** and open its pairing-code screen.
+5. Open Bridgecoil, select the TV and enter the code it shows. Pairing establishes trust; connecting to the TV is a separate step. Confirm the selected device and profile before changing anything.
 
-- A remapped button still does its normal action first, then yours. Android gives apps no way to stop that without root. If a button opens a brand's app, disable that app.
-- Power, voice and some brand buttons never reach apps, so they can't be remapped.
-- Streaming apps usually appear black in screenshots and recordings.
-- Some TVs block the access Termux needs. Bridgecoil says so, and mappings then work until the TV restarts.
-- Shizuku-Next can't be installed over a different app that holds the Shizuku name. Porter can sit alongside it.
-- Turning off an app only affects that TV. Unrated apps are unknown, not safe.
+Follow the [connection guide](https://johnneerdael.github.io/bridgecoil/guide.html#connect) for more context.
 
-Guided setup has been run end to end on an Android TV 16 emulator image with secure ADB and no root. It has not been completed on a physical TV yet, and real TVs differ.
+## Guided TV setup
+
+Persistent remote mappings need an execution helper and a listener on the TV. Bridgecoil guides the setup; basic app management and ordinary remote controls do not require the full toolkit.
+
+1. Choose [Shizuku-Next](https://github.com/rushiranpise/Shizuku-Next) or [Porter](https://github.com/d4rken-org/porter). Bridgecoil downloads the release, checks its expected signing certificate and installs it.
+2. Start the helper over the same connection.
+3. Install [Termux](https://github.com/termux/termux-app) and Termux:Boot through the guided flow.
+4. Connect Termux to the helper and approve its prompt on the TV.
+5. Enable helper startup at boot and let Bridgecoil prepare the startup script. Test the physical button, phone-independent operation and restart behavior separately.
+
+Play Protect may stop the Termux apps because of their older Android target. Read the TV prompt and decide there whether to continue. Bridgecoil does not turn Play Protect off. A package signed by an unexpected developer is refused. See [prepare the TV toolkit](https://johnneerdael.github.io/bridgecoil/guide.html#toolkit).
+
+## Compatibility and current limits
+
+Guided setup has run end to end on an **Android TV 16 emulator**, using secure ADB with no root. **Physical-TV setup validation is still pending.** Real firmware, permissions and input paths vary.
+
+- A remapped button can still perform its original action before the new one. The current non-root listener cannot universally suppress that action.
+- Power, voice and some vendor buttons never reach the accessible input path.
+- On wired-only TVs, automatic helper startup may fail after a restart. Enable Wi-Fi or start the helper again from Bridgecoil.
+- Some TVs restrict the access Termux needs; reboot persistence needs its own check on the target TV.
+- Android keeps a connection service running while connected. On iPhone and iPad, leaving the app can drop the connection; reconnect when returning.
+- Protected streaming surfaces usually appear black in screenshots and recordings.
+- Shizuku-Next cannot replace an app with the same package name and a different signer. Porter can sit alongside it.
+- Recovery exists only for supported operations. Reinstalling a package does not restore deleted app data.
+
+Read [compatibility and limits](https://johnneerdael.github.io/bridgecoil/guide.html#limits) and the individual build's release notes before relying on a workflow.
+
+## Documentation
+
+- [User guide](https://johnneerdael.github.io/bridgecoil/guide.html): connection, apps, launchers, remotes, toolkit, files and recovery.
+- [Website maintenance](docs/website.md): local preview, Pages deployment, brand assets and screenshot handoff.
+- [Release process](docs/release.md): signing, version tags and branded release notes.
 
 ## Development
 

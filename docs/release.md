@@ -10,6 +10,27 @@
 
 To test the build without publishing, run **Android release** from the Actions tab. The APK appears as a workflow artifact.
 
+## Release presentation
+
+The release workflow calls `scripts/release-notes.mjs` after GitHub generates the change notes. Every new release has:
+
+- The original dark 1600 × 480 brand-kit README banner, pinned to the released source commit.
+- Website, getting-started and issue links.
+- Version-specific Android APK and `SHA256SUMS` download links matching the published artifact names.
+- GitHub's generated changes and full-changelog link, preserved as supplied.
+- Current compatibility limits, with build and source verification in a collapsed section.
+
+The script changes presentation; it does not choose a version, change signing or publish a release itself. Do not bump the app version just to change the website or release appearance. Existing published releases are not rewritten automatically.
+
+Check the renderer without Android tooling:
+
+```sh
+node --test scripts/release-notes.test.mjs
+node scripts/release-notes.mjs --repository johnneerdael/bridgecoil --version 0.1.7 --sha <full-source-commit-sha> --changes /path/to/generated-notes.md
+```
+
+The banner is `site/assets/marketing/bridgecoil-readme-dark.png`. Keep this file at that path and preserve the supplied artwork. See [website maintenance](website.md) for shared assets and the Pages workflow.
+
 ## Signing
 
 All releases must use the same key, or Android refuses to install them as updates.

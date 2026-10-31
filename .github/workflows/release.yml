@@ -61,6 +61,7 @@ jobs:
         run: |
           npx vitest run
           npm run -s check
+          node --test scripts/release-notes.test.mjs
           node scripts/cargo.mjs test -p adb-core
 
       - name: Write signing config
@@ -108,9 +109,24 @@ jobs:
           path: release/
           if-no-files-found: error
 
+      - name: Prepare branded release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh api --method POST "repos/$GH_REPO/releases/generate-notes" \
+            -f tag_name="$GITHUB_REF_NAME" -f target_commitish="$GITHUB_SHA" \
+            --jq .body > "$RUNNER_TEMP/generated-notes.md"
+          node scripts/release-notes.mjs --repository "$GH_REPO" \
+            --version "${GITHUB_REF_NAME#v}" --sha "$GITHUB_SHA" \
+            --changes "$RUNNER_TEMP/generated-notes.md" > "$RUNNER_TEMP/release-notes.md"
+
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --verify-tag --generate-notes
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* --verify-tag \
+            --title "Bridgecoil $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
