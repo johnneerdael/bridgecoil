@@ -1,4 +1,4 @@
-First iOS beta — please test with an Android TV / Google TV you are authorized to manage.
+Please test with an Android TV / Google TV you are authorized to manage.
 
 - Local Network permission: grant/deny, recovery from Settings, discovery, code pairing and connection.
 - Confirm the selected device/profile, inspect apps and try a reviewed reversible change. Check results and supported recovery in History.

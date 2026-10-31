@@ -12,7 +12,7 @@ To test the build without publishing, run **Android release** from the Actions t
 
 ## Release presentation
 
-For iOS, use the separate owner-triggered [iOS beta / TestFlight workflow](ios-beta.md). It supports unsigned validation without secrets and verified signed export/upload from `main`. Apple credentials and physical-device acceptance are tracked separately from Android releases.
+For iOS, use the separate owner-triggered [iOS beta / TestFlight workflow](ios-beta.md). It supports unsigned validation without secrets and verified signed export/upload from `main`. Apple credentials and physical-device acceptance are tracked separately from Android releases. Before every beta release, update [the versioned What to Test source](testflight/README.md). Each TestFlight upload automatically posts and verifies notes for its exact processed build. Use the workflow's `notes` mode with an existing marketing version and build number to repair or revise notes without rebuilding.
 
 The release workflow calls `scripts/release-notes.mjs` after GitHub generates the change notes. Every new release has:
 

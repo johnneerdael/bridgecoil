@@ -5,11 +5,23 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Validate an unsigned device archive, or sign and upload to TestFlight
+        description: Validate, upload to TestFlight, or update notes for an existing build
         type: choice
-        options: [validate, testflight]
+        options: [validate, testflight, notes]
         default: validate
         required: true
+      app_version:
+        description: Existing marketing version for notes mode (for example 0.1.7)
+        type: string
+        required: false
+      build_number:
+        description: Existing build number for notes mode (for example 3.1)
+        type: string
+        required: false
+      release_focus:
+        description: Optional additional testing focus for this beta release
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -25,18 +37,23 @@ jobs:
     env:
       IOS_MODE: ${{ inputs.mode }}
       IOS_BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+      TESTFLIGHT_RELEASE_FOCUS: ${{ inputs.release_focus }}
       HOMEBREW_NO_AUTO_UPDATE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Restrict signing to main and check Xcode
+      - name: Restrict signing and API writes to main
         run: |
-          if [[ "$IOS_MODE" == testflight && "$GITHUB_REF" != refs/heads/main ]]; then
-            echo "::error::TestFlight signing is restricted to main. Use validate on a feature branch."
+          if [[ "$IOS_MODE" != validate && "$GITHUB_REF" != refs/heads/main ]]; then
+            echo "::error::TestFlight signing and API writes are restricted to main. Use validate on a feature branch."
             exit 1
           fi
+
+      - name: Check Xcode
+        if: inputs.mode != 'notes'
+        run: |
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
           python3 - <<'PY'
@@ -47,27 +64,33 @@ jobs:
           PY
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: inputs.mode != 'notes'
         with:
           node-version: "22"
           cache: npm
 
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        if: inputs.mode != 'notes'
         with:
           toolchain: stable
           targets: aarch64-apple-ios
 
       - run: brew install xcodegen cocoapods
+        if: inputs.mode != 'notes'
       - run: npm ci
+        if: inputs.mode != 'notes'
 
       - name: Test and prepare the build number
+        if: inputs.mode != 'notes'
         run: |
           npm run check
           npm test
           node scripts/cargo.mjs test -p adb-core
-          python3 -m unittest discover -s scripts -p 'test_ios_beta.py'
+          python3 -m unittest discover -s scripts -p 'test_*.py'
           python3 scripts/ios_beta.py config --build-number "$IOS_BUILD_NUMBER" --output "$RUNNER_TEMP/ios-beta.json"
           version=$(node -p "require('./package.json').version")
           echo "IOS_APP_VERSION=$version" >> "$GITHUB_ENV"
+          python3 scripts/testflight_notes.py render --version "$version" --build-number "$IOS_BUILD_NUMBER"
 
       - name: Prepare an isolated signing keychain
         if: inputs.mode == 'testflight'
@@ -103,6 +126,7 @@ jobs:
         run: npm run ios -- build --target aarch64 --ci --export-method app-store-connect --config "$RUNNER_TEMP/ios-beta.json"
 
       - name: Verify the archive and package build artifacts
+        if: inputs.mode != 'notes'
         id: package
         run: |
           archive=src-tauri/gen/apple/build/adb-studio-app_iOS.xcarchive
@@ -123,7 +147,7 @@ jobs:
           fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: success() || (failure() && steps.package.outcome == 'failure')
+        if: inputs.mode != 'notes' && (success() || (failure() && steps.package.outcome == 'failure'))
         with:
           name: bridgecoil-ios-${{ inputs.mode }}-${{ env.IOS_BUILD_NUMBER }}
           path: artifacts/ios/
@@ -142,8 +166,26 @@ jobs:
             --apiKey "$APPLE_API_KEY" --apiIssuer "$APPLE_API_ISSUER"
           echo "Upload accepted. App Store Connect processing and tester installation still need verification." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Publish and verify build-specific What to Test
+        if: inputs.mode == 'testflight' || inputs.mode == 'notes'
+        env:
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          NOTES_APP_VERSION: ${{ inputs.app_version }}
+          NOTES_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          if [[ "$IOS_MODE" == notes ]]; then
+            version="$NOTES_APP_VERSION"
+            build_number="$NOTES_BUILD_NUMBER"
+          else
+            version="$IOS_APP_VERSION"
+            build_number="$IOS_BUILD_NUMBER"
+          fi
+          python3 scripts/testflight_notes.py publish --version "$version" --build-number "$build_number"
+
       - name: Remove temporary signing material
-        if: always()
+        if: always() && inputs.mode == 'testflight'
         run: |
           keychain="$RUNNER_TEMP/bridgecoil-ios.keychain-db"
           if [[ -f "$keychain" ]]; then
