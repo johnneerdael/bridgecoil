@@ -41,6 +41,8 @@ Google Play Protect may stop the Termux apps with "Unsafe app blocked", because 
 
 ## What it can't do
 
+- On Android, a "Connected to your TV" service runs while connected. Android closes a background app's connections, so without it, opening a file picker would drop the TV. On iPhone and iPad the connection may drop when you leave the app, so reconnect when you come back.
+
 - A remapped button still does its normal action first, then yours. Android gives apps no way to stop that without root. If a button opens a brand's app, disable that app.
 - Power, voice and some brand buttons never reach apps, so they can't be remapped.
 - Streaming apps usually appear black in screenshots and recordings.

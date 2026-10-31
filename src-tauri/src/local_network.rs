@@ -33,6 +33,25 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         })
         .build()
 }
+/// Android closes a background app's sockets, so hold on to the network while a TV is connected.
+pub async fn keep_connection(app: &AppHandle, connected: bool) -> crate::Result<()> {
+    #[cfg(target_os = "android")]
+    {
+        let handle = app.state::<LanHandle<tauri::Wry>>().0.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            handle.run_mobile_plugin::<serde_json::Value>(
+                "keepConnection",
+                serde_json::json!({ "connected": connected }),
+            )
+        })
+        .await
+        .map_err(|e| adb_core::backend::PocError::new("connection", e.to_string()))?
+        .map_err(|e| adb_core::backend::PocError::new("connection", e.to_string()))?;
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = (app, connected);
+    Ok(())
+}
 pub async fn discover(app: &AppHandle) -> crate::Result<adb_core::discovery::DiscoveryResult> {
     ensure(app).await?;
     let state = app.state::<DiscoveryScan>();

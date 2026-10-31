@@ -102,6 +102,10 @@ async fn set_appearance(app: tauri::AppHandle, dark: bool) -> Result<()> {
     Ok(())
 }
 #[tauri::command]
+async fn keep_connection(app: tauri::AppHandle, connected: bool) -> Result<()> {
+    local_network::keep_connection(&app, connected).await
+}
+#[tauri::command]
 async fn connection_status(state: State<'_, Backend>) -> Result<Option<DeviceInfo>> {
     Ok(state.0.lock().await.status())
 }
@@ -626,6 +630,7 @@ pub fn run() {
             set_appearance,
             cancel_connection,
             connection_status,
+            keep_connection,
             discover_adb,
             pair_device,
             connect_device,

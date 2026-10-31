@@ -72,6 +72,12 @@
   let endpoint = $state("");
   let legacy = $state(false);
   let device = $state<Device | null>(null);
+  const connected = $derived(!!device);
+  $effect(() => {
+    // Without this, Android drops the TV whenever a file picker covers the app.
+    if (native && nativeReady)
+      void invoke("keep_connection", { connected }).catch(() => {});
+  });
   let selection = $state<Selection | null>(null);
   let busy = $state(false);
   let busyLabel = $state("");
