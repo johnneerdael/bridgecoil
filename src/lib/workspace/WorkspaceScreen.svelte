@@ -8,6 +8,7 @@
     type Destination,
     type Operation,
     type ButtonFollowUp,
+    type SetupWatch,
     type Review,
   } from "./client";
   import DevicePage from "./DevicePage.svelte";
@@ -42,6 +43,8 @@
     appSubmitted = $state(""),
     toolChoice = $state(""),
     buttonFollowUp = $state<ButtonFollowUp | null>(null),
+    setupWatch = $state<SetupWatch | null>(null),
+    pendingWatch: SetupWatch | null = null,
     toolFilePath = $state(internalStorage);
   let originalSession = $state("");
   $effect(() => {
@@ -53,6 +56,7 @@
       appSubmitted = "";
       toolChoice = "";
       buttonFollowUp = null;
+      setupWatch = null;
       toolFilePath = internalStorage;
       if (review) void api.discard(review.id).catch(() => {});
       review = null;
@@ -82,6 +86,11 @@
     // A verified file change shows in the list itself, and History keeps the record.
     const quiet = ["file", "setup", "mapping"].includes(r.kind);
     if (!quiet || (r.status !== "verified" && r.status !== "sent")) outcome = r;
+    // Only an applied step starts a watch, so a cancelled review can't lead to a prompt.
+    if (r.kind === "setup") {
+      setupWatch = pendingWatch;
+      pendingWatch = null;
+    }
     reload++;
   }
 </script>
@@ -134,6 +143,9 @@
         {api}
         bind:tool={toolChoice}
         bind:buttonFollowUp
+        {setupWatch}
+        onwatch={(next) => (pendingWatch = next)}
+        onwatched={() => (setupWatch = null)}
         bind:filePath={toolFilePath}
         onreview={acceptReview}
         onbulk={acceptBulk}

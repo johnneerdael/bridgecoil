@@ -360,6 +360,50 @@ fn commands_for_an_existing_helper_find_it_on_the_tv() {
     assert!(open.contains("set -- \"$helper\""));
 }
 
+/// A TCL dropped the request while the helper's app was closed, so it has to open first.
+#[test]
+fn asking_for_access_opens_the_helper_before_requesting() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let calls = dir.path().join("calls");
+    let tool = |name: &str, body: String| {
+        let path = dir.path().join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    tool(
+        "cmd",
+        format!(
+            "case \"$2\" in\n\
+             query-activities) echo '    org.fork.helper/.Handler' ;;\n\
+             resolve-activity) echo org.fork.helper/.Main ;;\n\
+             esac"
+        ),
+    );
+    tool("am", format!("echo \"am $*\" >> {}", calls.display()));
+    tool("sleep", "exit 0".into());
+    tool("run-as", format!("echo \"run-as $1\" >> {}", calls.display()));
+    let path = format!(
+        "{}:{}",
+        dir.path().display(),
+        std::env::var("PATH").unwrap()
+    );
+    let command = plan(SetupStep::RequestAccess {
+        manager: Manager::Existing,
+    })
+    .command;
+    let status = std::process::Command::new("sh")
+        .args(["-c", &command])
+        .env("PATH", path)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    assert_eq!(
+        std::fs::read_to_string(calls).unwrap(),
+        "am start -n org.fork.helper/.Main\nrun-as com.termux\n"
+    );
+}
+
 #[test]
 fn choosing_an_existing_helper_warns_that_it_is_not_verified() {
     let step = plan(SetupStep::UseHelper);

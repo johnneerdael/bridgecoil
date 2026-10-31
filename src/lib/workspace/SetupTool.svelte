@@ -8,6 +8,7 @@
     type Platform,
     type Review,
     type SetupStep,
+    type SetupWatch,
     type Stage,
     type ToolId,
     type ToolkitSnapshot,
@@ -19,12 +20,20 @@
     reload,
     onreview,
     onbuttons,
+    watching = null,
+    onwatch = () => {},
+    onwatched = () => {},
+    pollMs = 3000,
   }: {
     device: Device;
     api: Platform;
     reload: number;
     onreview: (r: Review) => void;
     onbuttons: () => void;
+    watching?: SetupWatch | null;
+    onwatch?: (next: SetupWatch | null) => void;
+    onwatched?: () => void;
+    pollMs?: number;
   } = $props();
   const steps: { id: Stage; title: string }[] = [
     { id: "manager", title: "Choose a helper app" },
@@ -59,6 +68,8 @@
   let installing = $state<InstallProgress | null>(null);
   let survived = $state(false);
   let bootChecked = $state(false);
+  const accessTries = 40;
+  const bootTries = 100;
   const current = $derived(steps.findIndex((s) => s.id === snapshot?.stage));
   const finished = $derived(snapshot?.stage === "done");
   const managerName = $derived(
@@ -107,7 +118,50 @@
       installing = null;
     }
   }
-  async function run(step: SetupStep) {
+  // The TV is where these get answered, so setup watches it instead of asking for a button.
+  $effect(() => {
+    if (watching !== "access" || snapshot?.stage !== "access") return;
+    const target = targetOf(device);
+    let stopped = false;
+    void (async () => {
+      for (let tries = 0; tries < accessTries && !stopped; tries++) {
+        const r = await api
+          .query<{ route: string }>(target, { kind: "verifyShell" })
+          .catch(() => null);
+        if (stopped) return;
+        if (r?.route === "shell" || r?.route === "root") {
+          onwatched();
+          refresh++;
+          return;
+        }
+        await new Promise((done) => setTimeout(done, pollMs));
+      }
+      if (stopped) return;
+      onwatched();
+      error = `Termux still can't use ${managerName}. Choose ${allowLabel} on the TV, then check again.`;
+    })();
+    return () => {
+      stopped = true;
+    };
+  });
+  $effect(() => {
+    if (watching !== "boot" || snapshot?.stage === undefined) return;
+    if (snapshot.bootStart) {
+      onwatched();
+      return;
+    }
+    let tries = 0;
+    const timer = setInterval(() => {
+      if (++tries > bootTries) {
+        clearInterval(timer);
+        bootChecked = true;
+        onwatched();
+      } else refresh++;
+    }, pollMs);
+    return () => clearInterval(timer);
+  });
+  async function run(step: SetupStep, watch: SetupWatch | null = null) {
+    onwatch(watch);
     busy = true;
     error = "";
     try {
@@ -297,11 +351,18 @@
         {managerName} will ask on the TV whether Termux can use it. Choose
         <strong>{allowLabel}</strong>.
       </p>
-      <button
-        class="primary"
-        disabled={busy}
-        onclick={() => run({ kind: "requestAccess" })}>Ask the TV</button
-      >
+      {#if watching === "access"}<p role="status">
+          Waiting for the TV. This moves on by itself.
+        </p>
+      {:else}<button
+          class="primary"
+          disabled={busy}
+          onclick={() =>
+            run(
+              { kind: "requestAccess", manager: snapshot!.manager! },
+              "access",
+            )}>Ask the TV</button
+        >{/if}
       <p class="subtle">Can't reach the TV remote? Use these.</p>
       <div class="setup-remote">
         {#each [["left", "Left"], ["ok", "OK"], ["right", "Right"]] as [key, label]}<button
@@ -309,9 +370,11 @@
             onclick={() => press(key)}>{label}</button
           >{/each}
       </div>
-      <button class="secondary" disabled={busy} onclick={checkAccess}
-        >Check access</button
-      >
+      {#if error}<button
+          class="secondary"
+          disabled={busy}
+          onclick={checkAccess}>Check access</button
+        >{/if}
     {:else if snapshot.stage === "startup" && snapshot.manager}
       <h3>{snapshot.monitor ? "Not ready for restarts yet" : "Survive restarts"}</h3>
       {@render startNote()}
@@ -343,6 +406,7 @@
           <span
             >Start on boot<small>
               {#if snapshot.bootStart}On
+              {:else if watching === "boot"}Waiting for you to turn it on: Settings, Start on boot
               {:else if bootChecked}Still off. On the TV: Settings, Start on boot
               {:else}On the TV: Settings, Start on boot{/if}</small
             ></span
@@ -352,8 +416,10 @@
               disabled={busy}
               aria-label={`Open ${managerName} on the TV`}
               onclick={() =>
-                run({ kind: "allowBootStart", manager: snapshot!.manager! })}
-              >Open</button
+                run(
+                  { kind: "allowBootStart", manager: snapshot!.manager! },
+                  "boot",
+                )}>Open</button
             >{/if}
         </li>
         <li class:done={snapshot.monitor}>
@@ -367,13 +433,10 @@
             >{/if}
         </li>
       </ul>
-      {#if !snapshot.bootStart}<button
+      {#if !snapshot.bootStart && watching !== "boot" && bootChecked}<button
           class="primary"
           disabled={busy}
-          onclick={() => {
-            bootChecked = true;
-            refresh++;
-          }}>Check start on boot</button
+          onclick={() => refresh++}>Check start on boot</button
         >{/if}
       {#if snapshot.monitor}<button class="secondary" onclick={onbuttons}
           >Remap buttons</button

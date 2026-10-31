@@ -132,7 +132,7 @@ async fn walks_every_stage() {
         OperationStatus::Verified
     );
     assert_eq!(stage(&mut c, &t).await, Stage::Access);
-    step(&w, &mut c, &t, SetupStep::RequestAccess).await;
+    step(&w, &mut c, &t, SetupStep::RequestAccess { manager }).await;
     approve(&mut c, &t).await;
     tokio::time::sleep(Duration::from_secs(2)).await;
     let route = query(&mut c, &t, Query::VerifyShell).await.unwrap();

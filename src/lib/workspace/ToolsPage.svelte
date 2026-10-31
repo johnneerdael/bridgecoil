@@ -4,6 +4,7 @@
     targetOf,
     type Platform,
     type ButtonFollowUp,
+    type SetupWatch,
     type Review,
     type Action,
     type BulkReview,
@@ -30,12 +31,18 @@
     oninstall,
     tool = $bindable(""),
     buttonFollowUp = $bindable(null),
+    setupWatch = null,
+    onwatch = () => {},
+    onwatched = () => {},
     filePath = $bindable(internalStorage),
   }: {
     device: Device;
     api: Platform;
     onreview: (r: Review) => void;
     buttonFollowUp?: ButtonFollowUp | null;
+    setupWatch?: SetupWatch | null;
+    onwatch?: (next: SetupWatch | null) => void;
+    onwatched?: () => void;
     onbulk: (r: BulkReview) => void;
     oninstall: () => void;
     tool?: string;
@@ -225,6 +232,9 @@
         {reload}
         {onreview}
         onbuttons={() => (tool = "buttons")}
+        watching={setupWatch}
+        {onwatch}
+        {onwatched}
       />
     {:else if tool === "buttons"}<ButtonsTool
         {device}

@@ -22,7 +22,7 @@ pub enum SetupStep {
     OpenTerminal,
     AllowBackground { manager: Manager },
     DeployShell { manager: Manager },
-    RequestAccess,
+    RequestAccess { manager: Manager },
     AllowBootStart { manager: Manager },
     InstallMonitor,
     RemoveMonitor,
@@ -146,15 +146,21 @@ pub fn plan(step: SetupStep) -> SetupPlan {
             &[],
             deploy_command(manager),
         ),
-        SetupStep::RequestAccess => make(
+        SetupStep::RequestAccess { manager } => make(
             "Ask the TV for access".into(),
             "Show the permission prompt on the TV. Choose the option that always allows it.",
             &["Allowing this gives Termux the same power as ADB on this TV."],
-            format!(
-                "run-as com.termux sh -c {}",
-                shell_quote(&format!(
-                    "nohup timeout 120 {TERMUX_SHELL} -c id >/dev/null 2>&1 </dev/null &"
-                ))
+            // Some TVs drop the request unless the helper is already open.
+            for_manager(
+                manager,
+                &[],
+                &format!(
+                    "({})\nsleep 2\nrun-as com.termux sh -c {}",
+                    include_str!("scripts/open_manager.sh"),
+                    shell_quote(&format!(
+                        "nohup timeout 120 {TERMUX_SHELL} -c id >/dev/null 2>&1 </dev/null &"
+                    ))
+                ),
             ),
         ),
         SetupStep::AllowBootStart { manager } => make(
@@ -207,7 +213,7 @@ pub fn has_readback(step: SetupStep) -> bool {
     !matches!(
         step,
         SetupStep::AllowBackground { .. }
-            | SetupStep::RequestAccess
+            | SetupStep::RequestAccess { .. }
             | SetupStep::AllowBootStart { .. }
     )
 }

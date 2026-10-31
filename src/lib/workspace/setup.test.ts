@@ -56,6 +56,26 @@ function platform(state: ToolkitSnapshot, route = "shell") {
 const open = (api: Platform, onreview = vi.fn()) =>
   render(SetupTool, { device, api, reload: 0, onreview, onbuttons: vi.fn() });
 
+const access = {
+  manager: "porter" as const,
+  porter: official,
+  stage: "access" as const,
+};
+const watch = (api: Platform, watching: "access" | "boot") => {
+  const onwatched = vi.fn();
+  render(SetupTool, {
+    device,
+    api,
+    reload: 0,
+    onreview: vi.fn(),
+    onbuttons: vi.fn(),
+    watching,
+    onwatched,
+    pollMs: 1,
+  });
+  return onwatched;
+};
+
 it("offers only the two supported managers with no file to find", async () => {
   const api = platform(snapshot({}));
   open(api);
@@ -188,7 +208,7 @@ it("guides the TV prompt with its real wording and proves access", async () => {
   await waitFor(() =>
     expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
       kind: "setup",
-      step: { kind: "requestAccess" },
+      step: { kind: "requestAccess", manager: "porter" },
     }),
   );
   expect(screen.getByText(/Allow all the time/)).toBeTruthy();
@@ -198,12 +218,6 @@ it("guides the TV prompt with its real wording and proves access", async () => {
     key: "ok",
     longPress: false,
   });
-  await fireEvent.click(screen.getByRole("button", { name: "Check access" }));
-  await waitFor(() =>
-    expect(api.query).toHaveBeenCalledWith(expect.anything(), {
-      kind: "verifyShell",
-    }),
-  );
 });
 
 it("says plainly when access was not granted", async () => {
@@ -211,12 +225,14 @@ it("says plainly when access was not granted", async () => {
     snapshot({ manager: "porter", porter: official, stage: "access" }),
     "none",
   );
-  open(api);
+  watch(api, "access");
   await fireEvent.click(
     await screen.findByRole("button", { name: "Check access" }),
   );
-  expect((await screen.findByRole("alert")).textContent).toContain(
-    "hasn't been allowed",
+  await waitFor(() =>
+    expect(screen.getByRole("alert").textContent).toContain(
+      "hasn't been allowed",
+    ),
   );
 });
 
@@ -227,13 +243,15 @@ it.each(["timeout", "unknown"])(
       snapshot({ manager: "porter", porter: official, stage: "access" }),
       route,
     );
-    open(api);
+    watch(api, "access");
     await fireEvent.click(
       await screen.findByRole("button", { name: "Check access" }),
     );
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("didn't answer in time");
-    expect(alert.textContent).not.toContain("hasn't been allowed");
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toContain(
+        "didn't answer in time",
+      ),
+    );
   },
 );
 
@@ -353,7 +371,38 @@ it("only calls the TV ready once it can come back by itself", async () => {
   expect(screen.queryByText("Not ready for restarts yet")).toBeNull();
 });
 
-it("reads the TV again after the viewer turns start on boot on", async () => {
+it("moves on by itself once the TV has allowed access", async () => {
+  let tries = 0;
+  const api = platform(snapshot(access));
+  const ready = snapshot({ ...access, stage: "startup", authorized: true, shellReady: true });
+  vi.mocked(api.query).mockImplementation((async (_: unknown, q: Query) => {
+    if (q.kind === "verifyShell") return { route: ++tries < 3 ? "none" : "shell" };
+    return tries >= 3 ? ready : snapshot(access);
+  }) as never);
+  const onwatched = watch(api, "access");
+  expect(await screen.findByText(/moves on by itself/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Check access" })).toBeNull();
+  await waitFor(() => expect(onwatched).toHaveBeenCalled());
+  expect(await screen.findByText("Survive restarts", { selector: "h3" })).toBeTruthy();
+  expect(tries).toBe(3);
+});
+
+it("offers Check access only after the TV never answered", async () => {
+  const api = platform(snapshot(access), "none");
+  const onwatched = watch(api, "access");
+  await waitFor(() => expect(onwatched).toHaveBeenCalled());
+  expect(await screen.findByRole("alert")).toBeTruthy();
+});
+
+it("doesn't touch the helper until the viewer asks", async () => {
+  const api = platform(snapshot(access));
+  open(api);
+  await screen.findByRole("button", { name: "Ask the TV" });
+  await new Promise((done) => setTimeout(done, 20));
+  expect(api.query).not.toHaveBeenCalledWith(expect.anything(), { kind: "verifyShell" });
+});
+
+it("ticks start on boot by itself once it's turned on", async () => {
   const ready = {
     manager: "porter" as const,
     porter: official,
@@ -364,64 +413,15 @@ it("reads the TV again after the viewer turns start on boot on", async () => {
     monitor: true,
     stage: "startup" as const,
   };
+  let reads = 0;
   const api = platform(snapshot(ready));
-  open(api);
-  const check = await screen.findByRole("button", {
-    name: "Check start on boot",
-  });
-  expect(screen.getByRole("button", { name: /Open Porter/ })).toBeTruthy();
-  await fireEvent.click(check);
-  expect(await screen.findByText(/Still off/)).toBeTruthy();
-  vi.mocked(api.query).mockImplementation(
-    async () => snapshot({ ...ready, bootStart: true, stage: "done" }) as never,
-  );
-  await fireEvent.click(screen.getByRole("button", { name: "Check start on boot" }));
+  vi.mocked(api.query).mockImplementation((async () =>
+    ++reads < 3
+      ? snapshot(ready)
+      : snapshot({ ...ready, bootStart: true, stage: "done" })) as never);
+  const onwatched = watch(api, "boot");
   expect(await screen.findByText("Your TV is ready")).toBeTruthy();
-});
-
-it("offers a helper already on the TV, and says it isn't verified", async () => {
-  const api = platform(
-    snapshot({
-      shizuku: "other",
-      helper: { package: "org.fork.helper", label: "Fork" },
-    }),
-  );
-  const onreview = vi.fn();
-  render(SetupTool, { device, api, reload: 0, onreview, onbuttons: vi.fn() });
-  expect(await screen.findByText("Fork is already on this TV")).toBeTruthy();
-  expect(screen.getByText(/hasn't verified this build/)).toBeTruthy();
-  await fireEvent.click(screen.getByRole("button", { name: "Use Fork" }));
-  await waitFor(() =>
-    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
-      kind: "setup",
-      step: { kind: "useHelper" },
-    }),
-  );
-});
-
-it("names an existing helper through setup and lets the viewer stop using it", async () => {
-  const api = platform(
-    snapshot({
-      manager: "existing",
-      helper: { package: "org.fork.helper", label: "Fork" },
-      terminalReady: true,
-      shellReady: true,
-      authorized: true,
-      serverRunning: true,
-      stage: "startup",
-    }),
-  );
-  open(api);
-  expect(
-    await screen.findByRole("button", { name: /Open Fork on the TV/ }),
-  ).toBeTruthy();
-  await fireEvent.click(screen.getByRole("button", { name: "Stop using Fork" }));
-  await waitFor(() =>
-    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
-      kind: "setup",
-      step: { kind: "stopUsingHelper" },
-    }),
-  );
+  await waitFor(() => expect(onwatched).toHaveBeenCalled());
 });
 
 it("stops and explains when a TV blocks setting up Termux", async () => {

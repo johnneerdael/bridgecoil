@@ -108,12 +108,14 @@ export type ButtonFollowUp = {
   key: KeyIdentity;
   apps: { package: string; label: string }[];
 };
+/** What setup is waiting to see on the TV after a step it can't read back at once. */
+export type SetupWatch = "access" | "boot";
 export type SetupStep =
   | { kind: "startServer"; manager: Manager }
   | { kind: "openTerminal" }
   | { kind: "allowBackground"; manager: Manager }
   | { kind: "deployShell"; manager: Manager }
-  | { kind: "requestAccess" }
+  | { kind: "requestAccess"; manager: Manager }
   | { kind: "allowBootStart"; manager: Manager }
   | { kind: "installMonitor" }
   | { kind: "useHelper" }
