@@ -34,3 +34,55 @@ fn rejects_unbounded_or_non_png_icons_and_reports_helper_failure() {
     assert!(parse_metadata("__BRIDGECOIL_JSON__{\"error\":\"Permission denied\"}", &[]).is_err());
     assert!(parse_metadata(&"x".repeat(1048577), &[]).is_err());
 }
+
+#[test]
+fn bundled_agents_match_their_build_manifest() {
+    use sha2::{Digest, Sha256};
+    let manifest: serde_json::Value =
+        serde_json::from_str(include_str!("../assets/agent/agent-build.json")).unwrap();
+    for (abi, binary) in [
+        (
+            "armeabi-v7a",
+            &include_bytes!("../assets/agent/armeabi-v7a/bridgecoil-agent")[..],
+        ),
+        (
+            "arm64-v8a",
+            &include_bytes!("../assets/agent/arm64-v8a/bridgecoil-agent")[..],
+        ),
+        (
+            "x86_64",
+            &include_bytes!("../assets/agent/x86_64/bridgecoil-agent")[..],
+        ),
+    ] {
+        assert_eq!(manifest["binaries"][abi], hex::encode(Sha256::digest(binary)));
+    }
+}
+
+/// Fails when the agent's source changes and `scripts/build-agent.py` wasn't run.
+#[test]
+fn bundled_agents_were_built_from_this_source() {
+    use sha2::{Digest, Sha256};
+    use std::{fs, path::Path};
+    fn files(folder: &Path, found: &mut Vec<std::path::PathBuf>) {
+        for entry in fs::read_dir(folder).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                files(&path, found);
+            } else {
+                found.push(path);
+            }
+        }
+    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut found = Vec::new();
+    files(&root.join("crates/tv-agent"), &mut found);
+    found.sort();
+    found.push(root.join("Cargo.lock"));
+    let mut hash = Sha256::new();
+    for path in found {
+        hash.update(fs::read(path).unwrap());
+    }
+    let manifest: serde_json::Value =
+        serde_json::from_str(include_str!("../assets/agent/agent-build.json")).unwrap();
+    assert_eq!(manifest["sourceSha256"], hex::encode(hash.finalize()));
+}

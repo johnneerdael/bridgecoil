@@ -63,6 +63,8 @@ function platform(
         helper: null,
         bootStart: false,
         watchdog: false,
+        agent: true,
+        agentReady: true,
       };
     }),
     prepare: vi.fn(async () => ({ id: "review" })),

@@ -10,7 +10,7 @@ use crate::{
         capture::{capture_command, parse_capture, parse_started},
         mappings,
     },
-    toolkit::{inventory, setup},
+    toolkit::{agent, inventory, setup},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -79,6 +79,10 @@ pub enum Query {
     Launchers,
     Toolkit,
     VerifyShell,
+    PairAgent {
+        code: String,
+    },
+    VerifyAgent,
     CaptureKeys {
         seconds: u32,
     },
@@ -605,6 +609,24 @@ pub async fn query_rated(
                 .map(|c| json!({"component":c,"label":label(c.split('/').next().unwrap_or_default())}))
                 .collect();
             Ok(json!(apps))
+        }
+        Query::PairAgent { code } => {
+            let command = agent::pair_command(&code)
+                .ok_or_else(|| PocError::new("input", "A pairing code is six digits."))?;
+            let output = d.shell(t, &command).await?;
+            if !output.success() {
+                return Err(PocError::new("pairing", output.combined().trim().to_owned()));
+            }
+            Ok(json!({"paired":true}))
+        }
+        Query::VerifyAgent => {
+            let raw = checked(d, t, &agent::verify_command()).await?;
+            let route = raw.lines().find_map(|l| l.trim().strip_prefix("route="));
+            // Every TV needs its mappings back after a restart, so this isn't a choice to offer.
+            if route == Some("shell") {
+                checked(d, t, &setup::keep_mappings_command()).await?;
+            }
+            Ok(json!({"route":route.unwrap_or("unknown")}))
         }
         Query::VerifyShell => {
             let raw = checked(d, t, setup::verify_shell_command()).await?;

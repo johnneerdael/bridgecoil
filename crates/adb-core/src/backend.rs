@@ -359,6 +359,48 @@ impl Client {
         }
         Ok(output.stdout)
     }
+    /// Puts the agent for this TV's CPU into Termux. It needs Termux to be set up first.
+    pub async fn install_agent(&mut self, session: &str) -> Result<()> {
+        let info = self.status().filter(|i| i.id == session).ok_or_else(|| {
+            PocError::new("staleSession", "The connection changed. Reconnect and try again.")
+        })?;
+        let binary = crate::toolkit::agent::binary_for(&info.abis).ok_or_else(|| {
+            PocError::new("unsupported", "Bridgecoil has no agent for this TV's processor.")
+        })?;
+        let remote = format!("/data/local/tmp/bridgecoil-agent-{}", Uuid::new_v4());
+        let mut active = self
+            .active
+            .take()
+            .ok_or_else(|| PocError::new("staleTarget", "Device disconnected."))?;
+        let staged = timeout(Duration::from_secs(60), async {
+            let mut buffer = vec![0u8; 66000];
+            let mut sync = libadb::sync::open(&mut active.wire, &mut buffer)
+                .await
+                .map_err(connection_error)?;
+            sync.send_start(&remote, 0o100644)
+                .await
+                .map_err(connection_error)?;
+            for chunk in binary.chunks(65536) {
+                sync.send_data(chunk).await.map_err(connection_error)?;
+            }
+            sync.send_done(0).await.map_err(connection_error)?;
+            sync.quit().await.map_err(connection_error)
+        })
+        .await
+        .map_err(|_| PocError::new("timeout", "Copying to the TV timed out. Reconnect and try again."))?;
+        staged?;
+        self.active = Some(active);
+        let target = self
+            .current_target()
+            .ok_or_else(|| PocError::new("staleTarget", "Device disconnected."))?;
+        let output = self
+            .execute_target(&target, &crate::toolkit::agent::place_command(&remote))
+            .await?;
+        if !output.success() {
+            return Err(PocError::new("agent", output.combined()));
+        }
+        Ok(())
+    }
     pub async fn install(
         &mut self,
         session: &str,

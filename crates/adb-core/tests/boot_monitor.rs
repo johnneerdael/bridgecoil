@@ -14,7 +14,7 @@ fn run_monitor(dir: &Path, shell: &str, naps: u32) -> String {
     let bin = dir.join("bin");
     fs::create_dir_all(&home).unwrap();
     fs::create_dir_all(&bin).unwrap();
-    executable(&home.join("shell"), shell);
+    executable(&home.join("agent"), shell);
     executable(&bin.join("timeout"), "#!/bin/sh\nshift\nexec \"$@\"\n");
     executable(
         &bin.join("sleep"),
@@ -50,56 +50,25 @@ fn run_monitor(dir: &Path, shell: &str, naps: u32) -> String {
 }
 
 #[test]
-fn it_stops_after_three_refusals_so_the_tv_is_not_nagged() {
+fn it_keeps_asking_until_the_tv_offers_adb() {
     let dir = tempfile::tempdir().unwrap();
-    let log = run_monitor(dir.path(), "#!/bin/sh\necho denied\nexit 1\n", 50);
-    assert_eq!(log.lines().count(), 3, "{log}");
-    assert!(log.contains("(3 of 3)"));
-    assert_eq!(
-        fs::read_to_string(dir.path().join("naps")).unwrap().trim(),
-        "2"
-    );
-}
-
-#[test]
-fn it_keeps_waiting_for_a_manager_that_has_not_started() {
-    let dir = tempfile::tempdir().unwrap();
-    let log = run_monitor(
-        dir.path(),
-        "#!/bin/sh\necho Server is not running\nexit 1\n",
-        8,
-    );
-    assert_eq!(log, "", "waiting is not a refusal");
-    assert_eq!(
-        fs::read_to_string(dir.path().join("naps")).unwrap().trim(),
-        "8"
-    );
-}
-
-#[test]
-fn running_out_of_time_is_not_a_refusal() {
-    let dir = tempfile::tempdir().unwrap();
-    // What a real TV printed on the attempt that started the listener, then `timeout`'s status.
-    let log = run_monitor(
-        dir.path(),
-        "#!/bin/sh\necho Entering shell...\nexit 124\n",
-        8,
-    );
-    assert_eq!(log, "", "a slow start is not a refusal");
-    assert_eq!(
-        fs::read_to_string(dir.path().join("naps")).unwrap().trim(),
-        "8"
-    );
-}
-
-#[test]
-fn a_recovered_manager_clears_earlier_refusals() {
-    let dir = tempfile::tempdir().unwrap();
-    let flaky = format!(
-        "#!/bin/sh\nn=$(cat {0}/calls 2>/dev/null || echo 0)\nn=$((n + 1))\necho $n > {0}/calls\n\
-         [ $((n % 3)) -eq 0 ] && exit 0\necho denied\nexit 1\n",
+    let agent = format!(
+        "#!/bin/sh\nn=$(cat {0}/calls 2>/dev/null || echo 0)\necho $((n + 1)) > {0}/calls\nexit 1\n",
         dir.path().display()
     );
-    let log = run_monitor(dir.path(), &flaky, 12);
-    assert!(!log.contains("(3 of 3)"), "{log}");
+    run_monitor(dir.path(), &agent, 8);
+    let calls = fs::read_to_string(dir.path().join("calls")).unwrap();
+    assert_eq!(calls.trim(), "8", "a slow start must not stop the monitor");
+}
+
+#[test]
+fn it_keeps_checking_after_the_listener_starts() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("args");
+    let agent = format!("#!/bin/sh\necho \"$@\" >> {}\nexit 0\n", log.display());
+    run_monitor(dir.path(), &agent, 3);
+    let calls = fs::read_to_string(log).unwrap();
+    assert_eq!(calls.lines().count(), 3, "{calls}");
+    assert!(calls.contains("run [ ! -f /data/local/tmp/bridgecoil/listener.sh ]"), "{calls}");
+    assert!(calls.contains("--start"), "{calls}");
 }

@@ -8,7 +8,6 @@
     type Platform,
     type Review,
     type SetupStep,
-    type SetupWatch,
     type Stage,
     type ToolId,
     type ToolkitSnapshot,
@@ -20,9 +19,6 @@
     reload,
     onreview,
     onbuttons,
-    watching = null,
-    onwatch = () => {},
-    onwatched = () => {},
     pollMs = 3000,
   }: {
     device: Device;
@@ -30,17 +26,11 @@
     reload: number;
     onreview: (r: Review) => void;
     onbuttons: () => void;
-    watching?: SetupWatch | null;
-    onwatch?: (next: SetupWatch | null) => void;
-    onwatched?: () => void;
     pollMs?: number;
   } = $props();
   const steps: { id: Stage; title: string }[] = [
-    { id: "manager", title: "Choose a helper app" },
-    { id: "server", title: "Start it" },
     { id: "terminal", title: "Set up Termux" },
-    { id: "shell", title: "Connect Termux" },
-    { id: "access", title: "Allow access" },
+    { id: "pair", title: "Connect to the TV" },
     { id: "startup", title: "Survive restarts" },
   ];
   const managers: { id: Exclude<Manager, "existing">; name: string; note: string }[] = [
@@ -67,9 +57,9 @@
   let error = $state("");
   let installing = $state<InstallProgress | null>(null);
   let survived = $state(false);
-  let bootChecked = $state(false);
-  const accessTries = 40;
-  const bootTries = 100;
+  let code = $state("");
+  let agentTried = false;
+  const approvalTries = 40;
   const current = $derived(steps.findIndex((s) => s.id === snapshot?.stage));
   const finished = $derived(snapshot?.stage === "done");
   const managerName = $derived(
@@ -77,9 +67,8 @@
       ? (snapshot.helper?.label ?? "your helper app")
       : (managers.find((m) => m.id === snapshot?.manager)?.name ?? ""),
   );
-  const allowLabel = $derived(
-    snapshot?.manager === "porter" ? "Allow all the time" : "Always allow",
-  );
+  // A TV with no wireless debugging can't show a code, so it approves the connection instead.
+  const approves = $derived(!!snapshot?.noWirelessDebugging);
   $effect(() => {
     const target = targetOf(device);
     reload;
@@ -118,50 +107,54 @@
       installing = null;
     }
   }
-  // The TV is where these get answered, so setup watches it instead of asking for a button.
   $effect(() => {
-    if (watching !== "access" || snapshot?.stage !== "access") return;
+    if (snapshot?.stage !== "pair" || snapshot.agent || agentTried) return;
+    agentTried = true;
+    void api
+      .installAgent(device.id)
+      .then(() => refresh++)
+      .catch((e) => (error = errorMessage(e)));
+  });
+  // The TV answers this, so setup watches it instead of asking for a button.
+  $effect(() => {
+    if (snapshot?.stage !== "pair" || !snapshot.agent || !approves) return;
     const target = targetOf(device);
     let stopped = false;
     void (async () => {
-      for (let tries = 0; tries < accessTries && !stopped; tries++) {
+      for (let tries = 0; tries < approvalTries && !stopped; tries++) {
         const r = await api
-          .query<{ route: string }>(target, { kind: "verifyShell" })
+          .query<{ route: string }>(target, { kind: "verifyAgent" })
           .catch(() => null);
         if (stopped) return;
-        if (r?.route === "shell" || r?.route === "root") {
-          onwatched();
+        if (r?.route === "shell") {
           refresh++;
           return;
         }
         await new Promise((done) => setTimeout(done, pollMs));
       }
-      if (stopped) return;
-      onwatched();
-      error = `Termux still can't use ${managerName}. Choose ${allowLabel} on the TV, then check again.`;
+      if (!stopped) error = "The TV didn't allow this. Reopen TV setup to try again.";
     })();
     return () => {
       stopped = true;
     };
   });
-  $effect(() => {
-    if (watching !== "boot" || snapshot?.stage === undefined) return;
-    if (snapshot.bootStart) {
-      onwatched();
-      return;
+  async function pair() {
+    busy = true;
+    error = "";
+    const target = targetOf(device);
+    try {
+      await api.query(target, { kind: "pairAgent", code });
+      const r = await api.query<{ route: string }>(target, { kind: "verifyAgent" });
+      if (r.route === "shell") refresh++;
+      else error = "Paired, but Termux can't reach the TV yet. Reopen TV setup to try again.";
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      busy = false;
+      code = "";
     }
-    let tries = 0;
-    const timer = setInterval(() => {
-      if (++tries > bootTries) {
-        clearInterval(timer);
-        bootChecked = true;
-        onwatched();
-      } else refresh++;
-    }, pollMs);
-    return () => clearInterval(timer);
-  });
-  async function run(step: SetupStep, watch: SetupWatch | null = null) {
-    onwatch(watch);
+  }
+  async function run(step: SetupStep) {
     busy = true;
     error = "";
     try {
@@ -174,46 +167,38 @@
       busy = false;
     }
   }
-  async function checkAccess() {
-    busy = true;
-    error = "";
-    try {
-      const { route } = await api.query<{ route: string }>(targetOf(device), {
-        kind: "verifyShell",
-      });
-      if (route === "none")
-        error = `Termux hasn't been allowed yet. Choose ${allowLabel} on the TV, then check again.`;
-      else if (route === "shell" || route === "root") refresh++;
-      else error = "The TV didn't answer in time. Check access again.";
-    } catch (e) {
-      error = errorMessage(e);
-    } finally {
-      busy = false;
-    }
-  }
-  const press = (key: string) =>
-    api.remote(targetOf(device), { kind: "key", key, longPress: false });
 </script>
 
-{#snippet stopUsingHelper()}
-  {#if snapshot?.manager === "existing"}<button
-      class="secondary"
-      disabled={busy}
-      onclick={() => run({ kind: "stopUsingHelper" })}
-      >Stop using {managerName}</button
-    >{/if}
-{/snippet}
-
-{#snippet startNote()}
-  {#if !snapshot?.bootStart && !snapshot?.networkAdb && (snapshot?.noWirelessDebugging || snapshot?.wired)}<p
-      class="risk-note"
-      role="note"
-    >
-      {#if snapshot?.noWirelessDebugging}This TV has no network ADB turned on, so
-        {managerName} may not start by itself.{:else}{managerName} can't start
-        by itself on a network cable. Use Wi-Fi if you can.{/if}
-      Otherwise, start it here after each restart.
-    </p>{/if}
+{#snippet helpers()}
+  <details class="setup-optional">
+    <summary>Shizuku, for other apps</summary>
+    <p class="subtle">
+      Bridgecoil doesn't need this. Install it if another app asks for Shizuku.
+    </p>
+    {#if snapshot?.manager && snapshot.manager !== "existing"}
+      <p class="subtle" role="status">
+        {managerName} is installed{snapshot.serverRunning ? " and running" : ""}.
+      </p>
+      {#if !snapshot.serverRunning}<button
+          class="secondary"
+          disabled={busy}
+          onclick={() =>
+            run({ kind: "startServer", manager: snapshot!.manager! })}
+          >Start {managerName}</button
+        >{/if}
+    {:else}
+      {#if snapshot?.helper}<p class="subtle">
+          {snapshot.helper.label} is already on this TV.
+        </p>{/if}
+      {#each managers as manager}<button
+          class="secondary"
+          disabled={busy ||
+            (manager.id === "shizukuNext" &&
+              ["other", "unknown"].includes(snapshot?.shizuku ?? ""))}
+          onclick={() => install(manager.id)}>Install {manager.name}</button
+        >{/each}
+    {/if}
+  </details>
 {/snippet}
 
 {#if !snapshot && !error}<p class="subtle" role="status">Checking the TV…</p>
@@ -235,57 +220,7 @@
         you something.{/if}
     </p>{/if}
   <div class="setup-card">
-    {#if snapshot.stage === "manager"}
-      <p>
-        These helper apps give your TV the access it needs. Pick one and
-        Bridgecoil gets the latest version for you.
-      </p>
-      {#if snapshot.helper}<div class="setup-choice">
-          <strong>{snapshot.helper.label} is already on this TV</strong>
-          <p class="subtle">
-            You can use it instead. Bridgecoil hasn't verified this build, so
-            only do this if you trust where it came from.
-          </p>
-          <button
-            class="secondary"
-            disabled={busy}
-            onclick={() => run({ kind: "useHelper" })}
-            >Use {snapshot.helper.label}</button
-          >
-        </div>{/if}
-      {#if snapshot.shizuku === "other"}<p class="subtle">
-          A different app is using the Shizuku name on this TV, so Shizuku-Next
-          can't be installed. Porter can sit alongside it.
-        </p>{/if}
-      {#if snapshot.shizuku === "unknown"}<p class="subtle">
-          Bridgecoil couldn't check which helper app is installed. Tap refresh
-          to try again.
-        </p>{/if}
-      {#each managers as manager}<div class="setup-choice">
-          <strong>{manager.name}</strong>
-          <p class="subtle">{manager.note}</p>
-          <button
-            class="secondary"
-            disabled={busy ||
-              (manager.id === "shizukuNext" &&
-                ["other", "unknown"].includes(snapshot.shizuku))}
-            aria-label={`Install ${manager.name}`}
-            onclick={() => install(manager.id)}>Install</button
-          >
-        </div>{/each}
-    {:else if snapshot.stage === "server" && snapshot.manager}
-      <p>
-        {managerName} needs its background service running. Bridgecoil can start
-        it over this connection.
-      </p>
-      <button
-        class="primary"
-        disabled={busy}
-        onclick={() =>
-          run({ kind: "startServer", manager: snapshot!.manager! })}
-        >Start {managerName}</button
-      >
-    {:else if snapshot.stage === "terminal"}
+    {#if snapshot.stage === "terminal"}
       <p>
         Termux keeps your button mappings running on the TV. You won't need to
         type anything in it.
@@ -337,111 +272,42 @@
           Termux opens on the TV once. If this step doesn't finish, give it a
           minute and try again.
         </p>{/if}
-    {:else if snapshot.stage === "shell" && snapshot.manager}
-      <p>Next, Termux needs the shell tool from {managerName}.</p>
+    {:else if snapshot.stage === "pair"}
+      {#if !snapshot.agent}<p role="status">Getting Termux ready…</p>
+      {:else if approves}
+        <p>
+          Your TV will ask to allow a connection. Choose
+          <strong>Always allow</strong> with your remote.
+        </p>
+        <p role="status">Waiting for the TV. This moves on by itself.</p>
+      {:else}
+        <p>
+          On the TV, open <strong>Wireless debugging</strong> in Developer
+          options, and choose <strong>Pair device with pairing code</strong>.
+          Type the code here.
+        </p>
+        <input
+          class="pair-code"
+          aria-label="Pairing code"
+          inputmode="numeric"
+          autocomplete="off"
+          maxlength="6"
+          bind:value={code}
+        />
+        <button
+          class="primary"
+          disabled={busy || !/^\d{6}$/.test(code)}
+          onclick={pair}>Connect</button
+        >
+      {/if}
+    {:else if snapshot.stage === "startup"}
+      <p>Termux is connected. One step left.</p>
       <button
         class="primary"
         disabled={busy}
-        onclick={() =>
-          run({ kind: "deployShell", manager: snapshot!.manager! })}
-        >Connect Termux</button
+        onclick={() => run({ kind: "installMonitor" })}
+        >Keep mappings running</button
       >
-    {:else if snapshot.stage === "access"}
-      <p>
-        {managerName} will ask on the TV whether Termux can use it. Choose
-        <strong>{allowLabel}</strong>.
-      </p>
-      {#if watching === "access"}<p role="status">
-          Waiting for the TV. This moves on by itself.
-        </p>
-      {:else}<button
-          class="primary"
-          disabled={busy}
-          onclick={() =>
-            run(
-              { kind: "requestAccess", manager: snapshot!.manager! },
-              "access",
-            )}>Ask the TV</button
-        >{/if}
-      <p class="subtle">Can't reach the TV remote? Use these.</p>
-      <div class="setup-remote">
-        {#each [["left", "Left"], ["ok", "OK"], ["right", "Right"]] as [key, label]}<button
-            class="secondary"
-            onclick={() => press(key)}>{label}</button
-          >{/each}
-      </div>
-      {#if error}<button
-          class="secondary"
-          disabled={busy}
-          onclick={checkAccess}>Check access</button
-        >{/if}
-    {:else if snapshot.stage === "startup" && snapshot.manager}
-      <h3>{snapshot.monitor ? "Not ready for restarts yet" : "Survive restarts"}</h3>
-      {@render startNote()}
-      <ul class="setup-checks">
-        <li class:done={snapshot.manager !== "shizukuNext" || snapshot.watchdog}>
-          <Icon
-            name={snapshot.manager !== "shizukuNext" || snapshot.watchdog
-              ? "check"
-              : "minus"}
-            size={16}
-          />
-          <span
-            >Keep running<small>
-              {#if snapshot.manager === "shizukuNext"}Watchdog
-                {snapshot.watchdog ? "on" : "off"}{:else}Battery limits{/if}</small
-            ></span
-          >
-          <button
-            class="secondary"
-            disabled={busy}
-            aria-label={`Let Termux and ${managerName} keep running`}
-            onclick={() =>
-              run({ kind: "allowBackground", manager: snapshot!.manager! })}
-            >Allow</button
-          >
-        </li>
-        <li class:done={snapshot.bootStart}>
-          <Icon name={snapshot.bootStart ? "check" : "minus"} size={16} />
-          <span
-            >Start on boot<small>
-              {#if snapshot.bootStart}On
-              {:else if watching === "boot"}Waiting for you to turn it on: Settings, Start on boot
-              {:else if bootChecked}Still off. On the TV: Settings, Start on boot
-              {:else}On the TV: Settings, Start on boot{/if}</small
-            ></span
-          >
-          {#if !snapshot.bootStart}<button
-              class="secondary"
-              disabled={busy}
-              aria-label={`Open ${managerName} on the TV`}
-              onclick={() =>
-                run(
-                  { kind: "allowBootStart", manager: snapshot!.manager! },
-                  "boot",
-                )}>Open</button
-            >{/if}
-        </li>
-        <li class:done={snapshot.monitor}>
-          <Icon name={snapshot.monitor ? "check" : "minus"} size={16} />
-          <span>Restore mappings<small>Runs when the TV starts</small></span>
-          {#if !snapshot.monitor}<button
-              class="secondary"
-              disabled={busy}
-              aria-label="Keep mappings running"
-              onclick={() => run({ kind: "installMonitor" })}>Add</button
-            >{/if}
-        </li>
-      </ul>
-      {#if !snapshot.bootStart && watching !== "boot" && bootChecked}<button
-          class="primary"
-          disabled={busy}
-          onclick={() => refresh++}>Check start on boot</button
-        >{/if}
-      {#if snapshot.monitor}<button class="secondary" onclick={onbuttons}
-          >Remap buttons</button
-        >{/if}
-      {@render stopUsingHelper()}
     {:else if snapshot.stage === "done"}
       <h3>Your TV is ready</h3>
       <p>Everything is in place to remap buttons.</p>
@@ -460,7 +326,7 @@
         onclick={() => run({ kind: "removeMonitor" })}
         >Remove the startup script</button
       >
-      {@render stopUsingHelper()}
+      {@render helpers()}
     {/if}
   </div>
 {:else}<p class="error-text" role="alert">{error}</p>{/if}

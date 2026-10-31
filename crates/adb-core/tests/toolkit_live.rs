@@ -111,41 +111,23 @@ async fn walks_every_stage() {
         .unwrap();
     let t = c.current_target().unwrap();
     let w = Workspace::new(History::open(&dir.path().join("ops.db")).unwrap());
-    assert_eq!(stage(&mut c, &t).await, Stage::Manager);
-    install(&mut c, manager.tool().unwrap(), dir.path()).await;
-    assert_eq!(stage(&mut c, &t).await, Stage::Server);
-    assert_eq!(
-        step(&w, &mut c, &t, SetupStep::StartServer { manager }).await,
-        OperationStatus::Verified
-    );
-    assert_eq!(stage(&mut c, &t).await, Stage::Terminal);
     install(&mut c, ToolId::Termux, dir.path()).await;
     install(&mut c, ToolId::TermuxBoot, dir.path()).await;
     assert_eq!(
         step(&w, &mut c, &t, SetupStep::OpenTerminal).await,
         OperationStatus::Verified
     );
-    step(&w, &mut c, &t, SetupStep::AllowBackground { manager }).await;
-    assert_eq!(stage(&mut c, &t).await, Stage::Shell);
-    assert_eq!(
-        step(&w, &mut c, &t, SetupStep::DeployShell { manager }).await,
-        OperationStatus::Verified
-    );
-    assert_eq!(stage(&mut c, &t).await, Stage::Access);
-    step(&w, &mut c, &t, SetupStep::RequestAccess { manager }).await;
+    assert_eq!(stage(&mut c, &t).await, Stage::Pair);
+    let session = c.status().unwrap().id;
+    c.install_agent(&session).await.unwrap();
+    let route = query(&mut c, &t, Query::VerifyAgent).await.unwrap();
+    println!("route {route}");
     approve(&mut c, &t).await;
     tokio::time::sleep(Duration::from_secs(2)).await;
-    let route = query(&mut c, &t, Query::VerifyShell).await.unwrap();
-    println!("route {route}");
+    let route = query(&mut c, &t, Query::VerifyAgent).await.unwrap();
     assert_eq!(route["route"], "shell");
-    assert_eq!(stage(&mut c, &t).await, Stage::Startup);
-    step(&w, &mut c, &t, SetupStep::AllowBootStart { manager }).await;
-    assert_eq!(
-        step(&w, &mut c, &t, SetupStep::InstallMonitor).await,
-        OperationStatus::Verified
-    );
-    // Start on boot is a switch inside the manager, which this run doesn't press.
-    assert_eq!(stage(&mut c, &t).await, Stage::Startup);
+    assert_eq!(stage(&mut c, &t).await, Stage::Done);
+    let _ = manager;
     println!(
         "snapshot {}",
         serde_json::to_string(&inspect(&mut c, &t).await.unwrap()).unwrap()

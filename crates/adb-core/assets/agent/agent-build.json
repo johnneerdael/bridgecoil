@@ -1,0 +1,8 @@
+{
+  "sourceSha256": "ede9056eb4a1d381b156bde140c537877394caf3905eb37fbbd6cef7ba08e509",
+  "binaries": {
+    "armeabi-v7a": "80c49245087e9f77a1f9ace3bde9ebd0354461266dd5f1a40865f22dcf61a74d",
+    "arm64-v8a": "ef0f0a1b0d85fc51a38ce3f7c33c5666d9724b37f5e4e42a0b81bbe5ef3098fe",
+    "x86_64": "4aaf9052118bbf1df4a43ffeb830f29875d6b20b81ad1d21254fb080bdf8f59d"
+  }
+}

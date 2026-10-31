@@ -7,6 +7,7 @@ use tokio::net::{TcpStream, UdpSocket};
 use tokio::time::timeout;
 
 pub const CONNECT_SERVICE: &str = "_adb-tls-connect._tcp.local";
+pub const PAIRING_SERVICE: &str = "_adb-tls-pairing._tcp.local";
 
 /// A one-question DNS query for `name`, asking for a PTR record with a unicast answer.
 pub fn query(name: &str) -> Vec<u8> {

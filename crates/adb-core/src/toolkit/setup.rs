@@ -91,6 +91,22 @@ cmd appops write-settings 2>/dev/null\n\
 am start -n com.termux.boot/.BootActivity >/dev/null 2>&1\n\
 exit 0";
 
+/// Keeps Termux allowed to run, and adds the boot script that brings mappings back.
+pub fn keep_mappings_command() -> String {
+    format!(
+        "{}\n{}",
+        BACKGROUND.trim_end_matches("exit 0").replace("\"$1\" ", ""),
+        monitor_command()
+    )
+}
+fn monitor_command() -> String {
+    format!(
+        "{}{}MONITOR",
+        include_str!("scripts/install_monitor.sh"),
+        include_str!("scripts/boot_monitor.sh")
+    )
+}
+
 pub struct SetupPlan {
     pub title: String,
     pub effect: String,
@@ -191,14 +207,8 @@ pub fn plan(step: SetupStep) -> SetupPlan {
         SetupStep::InstallMonitor => make(
             "Keep mappings running".into(),
             "Add a Termux:Boot script that restarts your button mappings after a restart, retrying less often while the manager is unavailable.",
-            &[
-                "If the manager refuses three times, the script stops until the next restart, so it can't keep showing prompts on the TV.",
-            ],
-            format!(
-                "{}{}MONITOR",
-                include_str!("scripts/install_monitor.sh"),
-                include_str!("scripts/boot_monitor.sh")
-            ),
+            &[],
+            monitor_command(),
         ),
         SetupStep::RemoveMonitor => make(
             "Stop keeping mappings running".into(),

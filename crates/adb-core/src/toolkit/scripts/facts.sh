@@ -46,5 +46,7 @@ echo runAs=1
 [ -x "$files/home/.bridgecoil/shell" ] && [ -s "$files/home/.bridgecoil/shell" ] && echo shell=1
 [ -f "$files/home/.bridgecoil/authorized" ] && echo authorized=1
 [ -f "$files/home/.termux/boot/00-bridgecoil" ] && echo monitor=1
+[ -x "$files/home/.bridgecoil/agent" ] && echo agent=1
+[ -f "$files/home/.bridgecoil/agent-ready" ] && echo agentReady=1
 INNER
 exit 0

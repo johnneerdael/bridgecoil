@@ -561,6 +561,11 @@ async fn install_tool(
     let _ = std::fs::remove_file(&fetched.path);
     installed.map(|()| fetched.tag)
 }
+/// Puts Bridgecoil's small agent into Termux on the connected TV.
+#[tauri::command]
+async fn install_agent(session_id: String, state: State<'_, Backend>) -> Result<()> {
+    state.0.lock().await.install_agent(&session_id).await
+}
 #[tauri::command]
 fn cancel_upload(uploads: State<'_, Uploads>) {
     uploads.cancel.store(true, Ordering::SeqCst);
@@ -643,6 +648,7 @@ pub fn run() {
             save_tv_file,
             save_file,
             install_tool,
+            install_agent,
             ratings_status,
             ratings_update,
             ratings_update_if_due,

@@ -72,11 +72,8 @@ pub enum ShizukuSlot {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Stage {
-    Manager,
-    Server,
     Terminal,
-    Shell,
-    Access,
+    Pair,
     Startup,
     Done,
 }
@@ -109,6 +106,8 @@ pub struct ToolkitSnapshot {
     pub network_adb: bool,
     pub boot_start: bool,
     pub watchdog: bool,
+    pub agent: bool,
+    pub agent_ready: bool,
     pub stage: Stage,
 }
 
@@ -235,19 +234,13 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
     let monitor = facts.flag("monitor");
     let boot_start = manager.is_some_and(|m| facts.flag(m.boot_fact()));
     let watchdog = facts.flag("watchdog");
-    // Only Shizuku-Next has a watchdog to turn on.
-    let comes_back = boot_start && (manager != Some(Manager::ShizukuNext) || watchdog);
-    let stage = if manager.is_none() {
-        Stage::Manager
-    } else if !server_running {
-        Stage::Server
-    } else if !terminal_ready {
+    let agent = facts.flag("agent");
+    let agent_ready = agent && facts.flag("agentReady");
+    let stage = if !terminal_ready {
         Stage::Terminal
-    } else if !shell_ready {
-        Stage::Shell
-    } else if !authorized {
-        Stage::Access
-    } else if !monitor || !comes_back {
+    } else if !agent_ready {
+        Stage::Pair
+    } else if !monitor {
         Stage::Startup
     } else {
         Stage::Done
@@ -272,6 +265,8 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
         network_adb: facts.flag("networkAdb"),
         boot_start,
         watchdog,
+        agent,
+        agent_ready,
         stage,
     })
 }

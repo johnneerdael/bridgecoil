@@ -223,11 +223,11 @@ fn reads_probe_facts_and_ignores_noise() {
 }
 
 #[tokio::test]
-async fn an_empty_tv_starts_at_the_manager_step() {
+async fn an_empty_tv_starts_with_termux() {
     let snap = inspect(&mut device(vec![], ""), &target()).await.unwrap();
     assert_eq!(snap.shizuku, ShizukuSlot::Empty);
     assert_eq!(snap.manager, None);
-    assert_eq!(snap.stage, Stage::Manager);
+    assert_eq!(snap.stage, Stage::Terminal);
 }
 
 #[tokio::test]
@@ -237,7 +237,7 @@ async fn a_stub_under_the_shizuku_name_is_not_called_shizuku_next() {
         .unwrap();
     assert_eq!(snap.shizuku, ShizukuSlot::Other);
     assert_eq!(snap.manager, None);
-    assert_eq!(snap.stage, Stage::Manager);
+    assert_eq!(snap.stage, Stage::Terminal);
 }
 
 #[tokio::test]
@@ -283,7 +283,7 @@ async fn a_helper_already_on_the_tv_is_offered_and_only_used_when_chosen() {
     .await
     .unwrap();
     assert_eq!(offered.manager, None);
-    assert_eq!(offered.stage, Stage::Manager);
+    assert_eq!(offered.stage, Stage::Terminal);
     assert_eq!(offered.helper.as_ref().unwrap().package, FORK);
 
     let chosen = inspect(
@@ -299,27 +299,6 @@ async fn a_helper_already_on_the_tv_is_offered_and_only_used_when_chosen() {
     assert!(chosen.server_running);
     assert_eq!(chosen.stage, Stage::Terminal);
 
-    let ready = "shizukuServer=9\nrunAs=1\nterminal=1\nshell=1\nauthorized=1\nmonitor=1\n";
-    let waiting = inspect(
-        &mut device(
-            tools(),
-            &format!("helper={FORK}\nuseHelper=1\n{ready}"),
-        ),
-        &target(),
-    )
-    .await
-    .unwrap();
-    assert_eq!(waiting.stage, Stage::Startup, "start on boot isn't proven");
-    let done = inspect(
-        &mut device(
-            tools(),
-            &format!("helper={FORK}\nuseHelper=1\nhelperBoot=1\n{ready}"),
-        ),
-        &target(),
-    )
-    .await
-    .unwrap();
-    assert_eq!(done.stage, Stage::Done, "there's no watchdog to ask this one for");
 }
 
 #[tokio::test]
@@ -405,6 +384,32 @@ fn asking_for_access_opens_the_helper_before_requesting() {
 }
 
 #[test]
+fn the_agent_build_matches_the_cpu_and_refuses_a_bad_code() {
+    use adb_core::toolkit::agent::{binary_for, pair_command};
+    let abis = |list: &[&str]| list.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
+    let arm = binary_for(&abis(&["armeabi-v7a", "armeabi"])).unwrap();
+    let arm64 = binary_for(&abis(&["arm64-v8a", "armeabi-v7a"])).unwrap();
+    assert_ne!(arm.len(), arm64.len());
+    assert_eq!(arm[..4], [0x7f, b'E', b'L', b'F']);
+    assert!(binary_for(&abis(&["mips"])).is_none());
+    assert!(pair_command("123456").unwrap().ends_with("pair 123456"));
+    for bad in ["12345", "1234567", "12345a", "123; rm", ""] {
+        assert_eq!(pair_command(bad), None, "{bad}");
+    }
+}
+
+/// The boot script has to run the agent, because rish can be blocked while a helper is closed.
+#[test]
+fn mappings_come_back_without_a_helper() {
+    let command = adb_core::toolkit::setup::keep_mappings_command();
+    assert!(command.contains("\"$home/agent\" run"));
+    assert!(!command.contains("$home/shell"));
+    assert!(command.trim_end().ends_with("MONITOR"));
+    assert!(command.contains("00-bridgecoil"));
+    assert!(command.contains("deviceidle whitelist"));
+}
+
+#[test]
 fn choosing_an_existing_helper_warns_that_it_is_not_verified() {
     let step = plan(SetupStep::UseHelper);
     assert!(step.losses.iter().any(|l| l.contains("hasn't verified")));
@@ -420,31 +425,14 @@ async fn stages_follow_what_is_actually_proven() {
         ]
     };
     for (facts, stage) in [
-        ("", Stage::Server),
-        ("shizukuServer=1\n", Stage::Terminal),
-        ("shizukuServer=1\nrunAs=1\nterminal=1\n", Stage::Shell),
+        ("", Stage::Terminal),
+        ("runAs=1\n", Stage::Terminal),
+        ("runAs=1\nterminal=1\n", Stage::Pair),
+        ("runAs=1\nterminal=1\nagent=1\n", Stage::Pair),
+        ("runAs=1\nterminal=1\nagentReady=1\n", Stage::Pair),
+        ("runAs=1\nterminal=1\nagent=1\nagentReady=1\n", Stage::Startup),
         (
-            "shizukuServer=1\nrunAs=1\nterminal=1\nshell=1\n",
-            Stage::Access,
-        ),
-        (
-            "shizukuServer=1\nrunAs=1\nterminal=1\nshell=1\nauthorized=1\n",
-            Stage::Startup,
-        ),
-        (
-            "shizukuServer=1\nrunAs=1\nterminal=1\nshell=1\nauthorized=1\nmonitor=1\n",
-            Stage::Startup,
-        ),
-        (
-            "shizukuServer=1\nrunAs=1\nterminal=1\nshell=1\nauthorized=1\nmonitor=1\nshizukuBoot=1\n",
-            Stage::Startup,
-        ),
-        (
-            "shizukuServer=1\nrunAs=1\nterminal=1\nshell=1\nauthorized=1\nmonitor=1\nwatchdog=1\n",
-            Stage::Startup,
-        ),
-        (
-            "shizukuServer=1\nrunAs=1\nterminal=1\nshell=1\nauthorized=1\nmonitor=1\nshizukuBoot=1\nwatchdog=1\n",
+            "runAs=1\nterminal=1\nagent=1\nagentReady=1\nmonitor=1\n",
             Stage::Done,
         ),
     ] {

@@ -40,48 +40,104 @@ const snapshot = (over: Partial<ToolkitSnapshot>): ToolkitSnapshot => ({
   helper: null,
   bootStart: false,
   watchdog: false,
-  stage: "manager",
+  agent: false,
+  agentReady: false,
+  stage: "terminal",
   ...over,
 });
 function platform(state: ToolkitSnapshot, route = "shell") {
   return {
     query: vi.fn(async (_: unknown, q: Query) =>
-      q.kind === "verifyShell" ? { route } : state,
+      q.kind === "verifyAgent" ? { route } : state,
     ),
     prepare: vi.fn(async () => ({ id: "review" })),
     installTool: vi.fn(async () => "v1"),
+    installAgent: vi.fn(async () => {}),
     remote: vi.fn(async () => ({ status: "sent" })),
   } as unknown as Platform;
 }
 const open = (api: Platform, onreview = vi.fn()) =>
   render(SetupTool, { device, api, reload: 0, onreview, onbuttons: vi.fn() });
 
-const access = {
-  manager: "porter" as const,
-  porter: official,
-  stage: "access" as const,
+const termuxReady = {
+  termux: official,
+  termuxBoot: official,
+  canConfigureTerminal: true,
+  terminalReady: true,
 };
-const watch = (api: Platform, watching: "access" | "boot") => {
-  const onwatched = vi.fn();
+const pairing = { ...termuxReady, agent: true, stage: "pair" as const };
+
+it("puts the agent into Termux by itself", async () => {
+  const api = platform(snapshot({ ...termuxReady, stage: "pair" }));
+  open(api);
+  await waitFor(() => expect(api.installAgent).toHaveBeenCalledWith("session"));
+  expect(api.installAgent).toHaveBeenCalledTimes(1);
+});
+
+it("connects with only the code on the TV", async () => {
+  const api = platform(snapshot(pairing));
+  open(api);
+  const connect = await screen.findByRole("button", { name: "Connect" });
+  expect((connect as HTMLButtonElement).disabled).toBe(true);
+  await fireEvent.input(screen.getByLabelText("Pairing code"), {
+    target: { value: "123456" },
+  });
+  await fireEvent.click(connect);
+  await waitFor(() =>
+    expect(api.query).toHaveBeenCalledWith(expect.anything(), {
+      kind: "pairAgent",
+      code: "123456",
+    }),
+  );
+  await waitFor(() =>
+    expect(api.query).toHaveBeenCalledWith(expect.anything(), {
+      kind: "verifyAgent",
+    }),
+  );
+});
+
+it("says so when pairing worked but Termux still can't reach the TV", async () => {
+  const api = platform(snapshot(pairing), "none");
+  open(api);
+  await fireEvent.input(await screen.findByLabelText("Pairing code"), {
+    target: { value: "123456" },
+  });
+  await fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "can't reach the TV",
+  );
+});
+
+it("waits for the TV by itself where there's no code to type", async () => {
+  let tries = 0;
+  const old = { ...pairing, noWirelessDebugging: true, networkAdb: true };
+  const api = platform(snapshot(old));
+  vi.mocked(api.query).mockImplementation((async (_: unknown, q: Query) => {
+    if (q.kind === "verifyAgent") return { route: ++tries < 3 ? "none" : "shell" };
+    return tries >= 3
+      ? snapshot({ ...old, agentReady: true, monitor: true, stage: "done" })
+      : snapshot(old);
+  }) as never);
   render(SetupTool, {
     device,
     api,
     reload: 0,
     onreview: vi.fn(),
     onbuttons: vi.fn(),
-    watching,
-    onwatched,
     pollMs: 1,
   });
-  return onwatched;
-};
+  expect(await screen.findByText(/moves on by itself/)).toBeTruthy();
+  expect(screen.queryByLabelText("Pairing code")).toBeNull();
+  expect(await screen.findByText("Your TV is ready")).toBeTruthy();
+  expect(tries).toBe(3);
+});
 
-it("offers only the two supported managers with no file to find", async () => {
-  const api = platform(snapshot({}));
+it("needs no Shizuku to be ready, and offers it as an extra", async () => {
+  const ready = { ...termuxReady, agent: true, agentReady: true, monitor: true };
+  const api = platform(snapshot({ ...ready, stage: "done" }));
   open(api);
-  await screen.findByText("Shizuku-Next");
-  expect(screen.getByText("Porter")).toBeTruthy();
-  expect(screen.queryByText(/APK/)).toBeNull();
+  expect(await screen.findByText("Your TV is ready")).toBeTruthy();
+  expect(screen.getByText("Shizuku, for other apps")).toBeTruthy();
   await fireEvent.click(
     screen.getByRole("button", { name: "Install Shizuku-Next" }),
   );
@@ -89,55 +145,24 @@ it("offers only the two supported managers with no file to find", async () => {
     expect(api.installTool).toHaveBeenCalledWith(
       "session",
       "shizukuNext",
-      expect.any(Function),
+      expect.anything(),
     ),
   );
 });
 
-it("says when something else holds the Shizuku name and steers to Porter", async () => {
-  open(platform(snapshot({ shizuku: "other" })));
-  expect(await screen.findByText(/different app is using/)).toBeTruthy();
-  expect(
-    (screen.getByRole("button", {
-      name: "Install Shizuku-Next",
-    }) as HTMLButtonElement).disabled,
-  ).toBe(true);
-  expect(
-    (screen.getByRole("button", { name: "Install Porter" }) as HTMLButtonElement)
-      .disabled,
-  ).toBe(false);
-});
-
 it("shows a failed download without leaving the step", async () => {
-  const api = platform(snapshot({}));
+  const api = platform(snapshot({ terminalReady: false }));
   (api.installTool as ReturnType<typeof vi.fn>).mockRejectedValue({
     kind: "toolIdentity",
     message: "This download is not signed by its publisher.",
   });
   open(api);
   await fireEvent.click(
-    await screen.findByRole("button", { name: "Install Porter" }),
+    await screen.findByRole("button", { name: "Install Termux" }),
   );
   expect((await screen.findByRole("alert")).textContent).toContain("signed");
-  expect(screen.getByRole("button", { name: "Install Porter" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Install Termux" })).toBeTruthy();
 });
-
-it("reviews starting the service", async () => {
-  const api = platform(
-    snapshot({ shizuku: "shizukuNext", manager: "shizukuNext", stage: "server" }),
-  );
-  const onreview = vi.fn();
-  open(api, onreview);
-  await fireEvent.click(
-    await screen.findByRole("button", { name: "Start Shizuku-Next" }),
-  );
-  await waitFor(() => expect(onreview).toHaveBeenCalled());
-  expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
-    kind: "setup",
-    step: { kind: "startServer", manager: "shizukuNext" },
-  });
-});
-
 it("installs what Termux needs before preparing it", async () => {
   const running = {
     shizuku: "shizukuNext" as const,
@@ -177,7 +202,6 @@ it("installs what Termux needs before preparing it", async () => {
     await screen.findByRole("button", { name: "Prepare Termux" }),
   ).toBeTruthy();
 });
-
 it("won't use a Termux it can't configure", async () => {
   open(
     platform(
@@ -192,83 +216,6 @@ it("won't use a Termux it can't configure", async () => {
   );
   expect(await screen.findByText(/different Termux/)).toBeTruthy();
 });
-
-it("guides the TV prompt with its real wording and proves access", async () => {
-  const state = snapshot({
-    manager: "porter",
-    porter: official,
-    serverRunning: true,
-    stage: "access",
-  });
-  const api = platform(state);
-  open(api);
-  await fireEvent.click(
-    await screen.findByRole("button", { name: "Ask the TV" }),
-  );
-  await waitFor(() =>
-    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
-      kind: "setup",
-      step: { kind: "requestAccess", manager: "porter" },
-    }),
-  );
-  expect(screen.getByText(/Allow all the time/)).toBeTruthy();
-  await fireEvent.click(screen.getByRole("button", { name: "OK" }));
-  expect(api.remote).toHaveBeenCalledWith(expect.anything(), {
-    kind: "key",
-    key: "ok",
-    longPress: false,
-  });
-});
-
-it("says plainly when access was not granted", async () => {
-  const api = platform(
-    snapshot({ manager: "porter", porter: official, stage: "access" }),
-    "none",
-  );
-  watch(api, "access");
-  await fireEvent.click(
-    await screen.findByRole("button", { name: "Check access" }),
-  );
-  await waitFor(() =>
-    expect(screen.getByRole("alert").textContent).toContain(
-      "hasn't been allowed",
-    ),
-  );
-});
-
-it.each(["timeout", "unknown"])(
-  "doesn't blame the viewer when the check got no answer (%s)",
-  async (route) => {
-    const api = platform(
-      snapshot({ manager: "porter", porter: official, stage: "access" }),
-      route,
-    );
-    watch(api, "access");
-    await fireEvent.click(
-      await screen.findByRole("button", { name: "Check access" }),
-    );
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain(
-        "didn't answer in time",
-      ),
-    );
-  },
-);
-
-it("never calls a step done until the TV proves it", async () => {
-  open(
-    platform(
-      snapshot({
-        shizuku: "shizukuNext",
-        manager: "shizukuNext",
-        stage: "server",
-      }),
-    ),
-  );
-  await screen.findByRole("button", { name: "Start Shizuku-Next" });
-  expect(document.querySelectorAll(".setup-step.done")).toHaveLength(1);
-});
-
 it("is honest about restarts when finished", async () => {
   const onbuttons = vi.fn();
   render(SetupTool, {
@@ -289,7 +236,6 @@ it("is honest about restarts when finished", async () => {
   await fireEvent.click(screen.getByRole("button", { name: "Remap buttons" }));
   expect(onbuttons).toHaveBeenCalled();
 });
-
 it("says so once mappings have come back after a restart", async () => {
   const api = platform(
     snapshot({ manager: "porter", porter: official, stage: "done", monitor: true }),
@@ -302,128 +248,6 @@ it("says so once mappings have come back after a restart", async () => {
   render(SetupTool, { device, api, reload: 0, onreview: vi.fn(), onbuttons: vi.fn() });
   expect(await screen.findByText(/Proven on this TV/)).toBeTruthy();
 });
-
-it("only warns when a TV really can't start its manager", async () => {
-  const ready = {
-    manager: "porter" as const,
-    terminalReady: true,
-    shellReady: true,
-    authorized: true,
-    serverRunning: true,
-    stage: "startup" as const,
-  };
-  const wired = open(platform(snapshot({ ...ready, wired: true })));
-  expect(await screen.findByText(/on a network cable/)).toBeTruthy();
-  wired.unmount();
-  const old = open(platform(snapshot({ ...ready, noWirelessDebugging: true })));
-  expect(await screen.findByText(/no network ADB/)).toBeTruthy();
-  old.unmount();
-  const network = open(
-    platform(
-      snapshot({
-        ...ready,
-        wired: true,
-        noWirelessDebugging: true,
-        networkAdb: true,
-      }),
-    ),
-  );
-  await screen.findByRole("button", { name: /Keep mappings running/ });
-  expect(screen.queryByRole("note")).toBeNull();
-  network.unmount();
-  open(platform(snapshot(ready)));
-  await screen.findByRole("button", { name: /Keep mappings running/ });
-  expect(screen.queryByRole("note")).toBeNull();
-});
-
-it("only calls the TV ready once it can come back by itself", async () => {
-  const ready = {
-    manager: "shizukuNext" as const,
-    shizuku: "shizukuNext" as const,
-    terminalReady: true,
-    shellReady: true,
-    authorized: true,
-    serverRunning: true,
-    monitor: true,
-  };
-  const onbuttons = vi.fn();
-  const api = platform(snapshot({ ...ready, stage: "startup" }));
-  const missing = render(SetupTool, {
-    device,
-    api,
-    reload: 0,
-    onreview: vi.fn(),
-    onbuttons,
-  });
-  expect(await screen.findByText("Not ready for restarts yet")).toBeTruthy();
-  expect(screen.queryByText("Your TV is ready")).toBeNull();
-  expect(screen.getByText(/On the TV: Settings, Start on boot/)).toBeTruthy();
-  expect(screen.getByText(/Watchdog\s+off/)).toBeTruthy();
-  await fireEvent.click(screen.getByRole("button", { name: "Remap buttons" }));
-  expect(onbuttons).toHaveBeenCalled();
-  missing.unmount();
-  open(
-    platform(
-      snapshot({ ...ready, bootStart: true, watchdog: true, stage: "done" }),
-    ),
-  );
-  expect(await screen.findByText("Your TV is ready")).toBeTruthy();
-  expect(screen.queryByText("Not ready for restarts yet")).toBeNull();
-});
-
-it("moves on by itself once the TV has allowed access", async () => {
-  let tries = 0;
-  const api = platform(snapshot(access));
-  const ready = snapshot({ ...access, stage: "startup", authorized: true, shellReady: true });
-  vi.mocked(api.query).mockImplementation((async (_: unknown, q: Query) => {
-    if (q.kind === "verifyShell") return { route: ++tries < 3 ? "none" : "shell" };
-    return tries >= 3 ? ready : snapshot(access);
-  }) as never);
-  const onwatched = watch(api, "access");
-  expect(await screen.findByText(/moves on by itself/)).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Check access" })).toBeNull();
-  await waitFor(() => expect(onwatched).toHaveBeenCalled());
-  expect(await screen.findByText("Survive restarts", { selector: "h3" })).toBeTruthy();
-  expect(tries).toBe(3);
-});
-
-it("offers Check access only after the TV never answered", async () => {
-  const api = platform(snapshot(access), "none");
-  const onwatched = watch(api, "access");
-  await waitFor(() => expect(onwatched).toHaveBeenCalled());
-  expect(await screen.findByRole("alert")).toBeTruthy();
-});
-
-it("doesn't touch the helper until the viewer asks", async () => {
-  const api = platform(snapshot(access));
-  open(api);
-  await screen.findByRole("button", { name: "Ask the TV" });
-  await new Promise((done) => setTimeout(done, 20));
-  expect(api.query).not.toHaveBeenCalledWith(expect.anything(), { kind: "verifyShell" });
-});
-
-it("ticks start on boot by itself once it's turned on", async () => {
-  const ready = {
-    manager: "porter" as const,
-    porter: official,
-    terminalReady: true,
-    shellReady: true,
-    authorized: true,
-    serverRunning: true,
-    monitor: true,
-    stage: "startup" as const,
-  };
-  let reads = 0;
-  const api = platform(snapshot(ready));
-  vi.mocked(api.query).mockImplementation((async () =>
-    ++reads < 3
-      ? snapshot(ready)
-      : snapshot({ ...ready, bootStart: true, stage: "done" })) as never);
-  const onwatched = watch(api, "boot");
-  expect(await screen.findByText("Your TV is ready")).toBeTruthy();
-  await waitFor(() => expect(onwatched).toHaveBeenCalled());
-});
-
 it("stops and explains when a TV blocks setting up Termux", async () => {
   open(
     platform(
@@ -441,10 +265,3 @@ it("stops and explains when a TV blocks setting up Termux", async () => {
   expect(await screen.findByText(/blocks/)).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Prepare Termux" })).toBeNull();
 });
-
-it("offers a retry instead of blaming another app when it couldn't check", async () => {
-  open(platform(snapshot({ shizuku: "unknown" })));
-  expect(await screen.findByText(/couldn't check/)).toBeTruthy();
-  expect(screen.queryByText(/different app is using/)).toBeNull();
-});
-

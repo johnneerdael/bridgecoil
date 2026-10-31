@@ -1648,6 +1648,19 @@ textarea {
   min-height: 0;
   overflow-y: auto;
 }
+.setup-optional summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.setup-optional[open] {
+  display: grid;
+  gap: 8px;
+}
+.pair-code {
+  font-size: 24px;
+  letter-spacing: 8px;
+  text-align: center;
+}
 .setup-checks {
   display: grid;
   gap: 6px;

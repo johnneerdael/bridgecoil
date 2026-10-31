@@ -53,9 +53,18 @@ fn identity() -> Result<(AdbKey, TlsClientConfig), String> {
     Ok((key, tls))
 }
 
-async fn pair(endpoint: &str, code: &str) -> Result<(), String> {
+/// Pairs with the TV's pairing screen, which has to be open so that it offers a port.
+async fn pair(code: &str) -> Result<(), String> {
+    if code.len() != 6 || !code.bytes().all(|b| b.is_ascii_digit()) {
+        return Err("A pairing code is six digits".to_owned());
+    }
+    let port = mdns::find(mdns::PAIRING_SERVICE, Duration::from_secs(10))
+        .await
+        .ok_or("The TV's pairing screen isn't open")?;
     let (key, tls) = identity()?;
-    let socket = TcpStream::connect(endpoint).await.map_err(|e| e.to_string())?;
+    let socket = TcpStream::connect(("127.0.0.1", port))
+        .await
+        .map_err(|e| e.to_string())?;
     let mut wire = MaybeTls::plain(TokioTcp::new(socket));
     let mut random = OsRng;
     let pairing = libadb::pairing::pair(&mut wire, &tls, &key, code, &mut random);
@@ -120,12 +129,12 @@ async fn main() -> ExitCode {
             }
             None => Err("The TV isn't offering ADB yet".to_owned()),
         },
-        ["pair", endpoint, code] => pair(endpoint, code).await.map(|()| 0),
+        ["pair", code] => pair(code).await.map(|()| 0),
         ["run", command] => match find_port(Duration::from_secs(8)).await {
             Some(port) => run(port, command).await,
             None => Err("The TV isn't offering ADB yet".to_owned()),
         },
-        _ => Err("Usage: bridgecoil-agent find | pair <host:port> <code> | run <command>".to_owned()),
+        _ => Err("Usage: bridgecoil-agent find | pair <code> | run <command>".to_owned()),
     };
     match result {
         Ok(0) => ExitCode::SUCCESS,

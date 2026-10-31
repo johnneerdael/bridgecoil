@@ -278,6 +278,8 @@ async function query<T>(t: Target, q: Query): Promise<T> {
         helper: null,
         bootStart: false,
         watchdog: false,
+        agent: true,
+        agentReady: true,
         stage: "manager",
       };
       break;
@@ -393,6 +395,7 @@ export const api: Platform = {
   ratingsUpdate: async () => false,
   ratingsUpdateIfDue: async () => false,
   ratingsRemove: async () => {},
+  installAgent: async () => {},
   installTool: async (_session, _tool, onprogress) => {
     onprogress({ stage: "uploading", sent: 1, total: 2 });
     return "v1";

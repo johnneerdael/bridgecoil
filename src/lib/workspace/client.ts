@@ -108,8 +108,6 @@ export type ButtonFollowUp = {
   key: KeyIdentity;
   apps: { package: string; label: string }[];
 };
-/** What setup is waiting to see on the TV after a step it can't read back at once. */
-export type SetupWatch = "access" | "boot";
 export type SetupStep =
   | { kind: "startServer"; manager: Manager }
   | { kind: "openTerminal" }
@@ -147,7 +145,7 @@ export type ToolStatus = {
   version: string | null;
 };
 export type Stage =
-  "manager" | "server" | "terminal" | "shell" | "access" | "startup" | "done";
+  "terminal" | "pair" | "startup" | "done";
 export type ToolkitSnapshot = {
   shizuku: "empty" | "shizukuNext" | "porterCompat" | "other" | "unknown";
   shizukuVersion: string | null;
@@ -168,6 +166,8 @@ export type ToolkitSnapshot = {
   networkAdb: boolean;
   bootStart: boolean;
   watchdog: boolean;
+  agent: boolean;
+  agentReady: boolean;
   stage: Stage;
 };
 export type InstallProgress = { stage: string; sent: number; total: number };
@@ -195,6 +195,8 @@ export type Query =
   | { kind: "recording"; step: RecordingStep }
   | { kind: "files"; path: string }
   | { kind: "verifyShell" }
+  | { kind: "pairAgent"; code: string }
+  | { kind: "verifyAgent" }
   | { kind: "captureKeys"; seconds: number }
   | { kind: "mappings" }
   | { kind: "launchableApps" }
@@ -267,6 +269,7 @@ export type Platform = {
     tool: ToolId,
     onprogress: (progress: InstallProgress) => void,
   ): Promise<string>;
+  installAgent(sessionId: string): Promise<void>;
   chooseUpload(sessionId: string): Promise<UploadChoice | null>;
   upload(
     sessionId: string,
@@ -337,6 +340,7 @@ export function nativePlatform(
       onProgress.onmessage = onprogress;
       return call("install_tool", { sessionId, tool, onProgress });
     },
+    installAgent: (sessionId) => call("install_agent", { sessionId }),
     chooseUpload: (sessionId) => call("choose_upload", { sessionId }),
     upload: (sessionId, uploadId, folder, name, onprogress) => {
       const onProgress = new Channel<number>();
