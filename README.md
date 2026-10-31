@@ -40,7 +40,22 @@ Community package descriptions and ratings come from [Universal Android Debloate
 
 ## Screenshots
 
-Application screenshots are being prepared. The [website workspace preview](https://johnneerdael.github.io/bridgecoil/#workspace) reserves their place. See the [screenshot handoff](site/screenshots/README.md) for the planned captures and where to add them.
+Captured from the signed **v0.1.7** build on a phone emulator connected to an **Android TV 16 emulator**, in the light theme.
+
+<table>
+  <tr>
+    <td width="33%" align="center"><a href="docs/guide/screenshots/device.png"><img src="docs/guide/screenshots/device.png" height="420" alt="Device: The selected TV and profile."></a><br><sub><b>Device.</b> The selected TV and profile.</sub></td>
+    <td width="33%" align="center"><a href="docs/guide/screenshots/apps.png"><img src="docs/guide/screenshots/apps.png" height="420" alt="Apps: Installed packages and community ratings."></a><br><sub><b>Apps.</b> Installed packages and community ratings.</sub></td>
+    <td width="33%" align="center"><a href="docs/guide/screenshots/remote.png"><img src="docs/guide/screenshots/remote.png" height="420" alt="Remote: Navigation and media controls."></a><br><sub><b>Remote.</b> Navigation and media controls.</sub></td>
+  </tr>
+  <tr>
+    <td width="33%" align="center"><a href="docs/guide/screenshots/clean-up.png"><img src="docs/guide/screenshots/clean-up.png" height="420" alt="Clean up: Review which apps to turn off."></a><br><sub><b>Clean up.</b> Review which apps to turn off.</sub></td>
+    <td width="33%" align="center"><a href="docs/guide/screenshots/buttons-review.png"><img src="docs/guide/screenshots/buttons-review.png" height="420" alt="Button mapping: See the effect and original-action warning."></a><br><sub><b>Button mapping.</b> See the effect and original-action warning.</sub></td>
+    <td width="33%" align="center"><a href="docs/guide/screenshots/history-record.png"><img src="docs/guide/screenshots/history-record.png" height="420" alt="History: Verified results and available recovery."></a><br><sub><b>History.</b> Verified results and available recovery.</sub></td>
+  </tr>
+</table>
+
+[Browse all 51 screenshots with captions](https://johnneerdael.github.io/bridgecoil/screenshots.html) · [Walk through the user guide](https://johnneerdael.github.io/bridgecoil/guide.html)
 
 ## Get Bridgecoil
 

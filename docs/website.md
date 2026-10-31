@@ -1,20 +1,22 @@
 # Bridgecoil website
 
-The public product site and user guide live in `site/` and publish to <https://johnneerdael.github.io/bridgecoil/>. Only that directory is uploaded; application source, design experiments and private development artifacts stay out of the Pages artifact.
+The public product site and user guide live in `site/` and publish to <https://johnneerdael.github.io/bridgecoil/>. `scripts/build-site.py` stages those pages and the canonical `docs/guide/screenshots/*.png` captures into ignored `dist-site/`. Only that staged directory is uploaded; application source, design experiments and private development artifacts stay out of the Pages artifact.
 
-The site uses plain HTML, CSS and JavaScript with no build step. Fonts and original artwork are served locally. It contains no analytics, device access or connection to an ADB endpoint. Theme preference is stored locally when browser storage is available.
+The site uses plain HTML, CSS and JavaScript. Staging copies the original screenshots without transforming them; no frontend compilation is required. Fonts and original artwork are served locally. It contains no analytics, device access or connection to an ADB endpoint. Theme preference is stored locally when browser storage is available.
 
 ## Preview and check
 
 From the repository root:
 
 ```sh
+python3 scripts/build-site.py
 python3 -m http.server 4391 --bind 127.0.0.1
 ```
 
-Open <http://127.0.0.1:4391/site/>. Keeping the `/site/` prefix in local previews catches links that accidentally assume a domain-root deployment. The production prefix is `/bridgecoil/`.
+Open <http://127.0.0.1:4391/dist-site/>. Re-run the staging command after source edits. Keeping the `/dist-site/` prefix in local previews catches links that accidentally assume a domain-root deployment. The production prefix is `/bridgecoil/`.
 
 ```sh
+python3 scripts/build-site.py
 python3 scripts/check-site.py
 node --check site/theme.js
 node --check site/site.js
@@ -26,7 +28,7 @@ The static check validates page links, anchors, asset and font references, image
 
 ## Publish
 
-In repository Settings → Pages, select **GitHub Actions** as the build source. The `Website` workflow validates changes on pull requests and deploys `site/` on relevant pushes to `main`. It can also be dispatched manually from `main`. Pull requests have no Pages deployment permission and do not use release signing secrets.
+In repository Settings → Pages, select **GitHub Actions** as the build source. The `Website` workflow validates changes on pull requests and deploys `dist-site/` on relevant pushes to `main`, including updates under `docs/guide/`. It can also be dispatched manually from `main`. Pull requests have no Pages deployment permission and do not use release signing secrets.
 
 The deploy job uses the `github-pages` environment with `pages: write` and `id-token: write`. Keep any environment restrictions consistent with deployment from `main`. No custom domain is configured; update canonical URLs, social metadata, README links and the release renderer together if a domain is added later.
 
@@ -40,6 +42,6 @@ The deploy job uses the `github-pages` environment with `pages: write` and `id-t
 - `site/theme.js`: saved Dark / Light / System preference, applied before paint.
 - `site/site.js`: progressive enhancement for the workspace destination tabs.
 
-Application screenshots are intentionally unresolved. See [the screenshot handoff](../site/screenshots/README.md). Do not present the kit's simulated UI as a capture of the shipped app.
+The homepage previews five destinations, the guide illustrates relevant tasks, and `site/screenshots.html` presents all 51 captures with captions. The originals live in `docs/guide/screenshots/`; keep that directory as the only tracked image source. See [screenshot maintenance](../site/screenshots/README.md). Current captures show signed v0.1.7 in light mode on Android emulators and stay unchanged when the website theme changes. Dark captures and the other gaps listed in the source catalogue remain pending.
 
 Keep platform availability tied to the actual release workflow. It currently publishes Android arm64 APKs and checksums; iOS and desktop are source-build targets. Preserve the distinction between emulator validation and physical-TV acceptance. Update the user guide, README and release renderer together when those facts change.

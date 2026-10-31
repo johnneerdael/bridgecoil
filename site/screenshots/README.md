@@ -1,19 +1,14 @@
-# Screenshot handoff
+# Screenshot maintenance
 
-Product screenshots are deliberately pending. The brand kit’s simulated UI is not a product capture. No missing image URLs are published.
+The canonical images are `docs/guide/screenshots/*.png`. Their captions and capture context are recorded in `docs/guide/README.md`. The current 51 captures come from signed v0.1.7 on a phone emulator connected to an Android TV 16 emulator. They all show the light theme.
 
-Capture the actual application with non-sensitive device details. Suggested set:
+Run `python3 scripts/build-site.py` to copy the website and original PNGs into ignored `dist-site/`. The PNGs are copied without resizing, cropping or recoloring. Do not track duplicate captures here. The Pages workflow watches `docs/guide/**` so image updates trigger publication.
 
-| File | Content | Placement |
-| --- | --- | --- |
-| `device-dark.webp` / `device-light.webp` | Device and active profile | Homepage workspace; README overview |
-| `apps-dark.webp` / `apps-light.webp` | App list and review | Apps tab; guide Apps section |
-| `remote-dark.webp` / `remote-light.webp` | Remote and button learning | Remote tab; guide Remote section |
-| `tools-dark.webp` / `tools-light.webp` | Toolkit and capability states | Tools tab; guide TV toolkit section |
-| `history-dark.webp` / `history-light.webp` | Actual per-operation results | History tab; guide Results section |
+- `site/index.html`: paired captures for Device, Apps, Remote, Tools and History. Each panel is static HTML with native image links; `site/site.js` switches panels and supports arrow-key navigation.
+- `site/guide.html`: task-specific captures alongside connection, app management, launcher, mapping, toolkit, files and recovery instructions.
+- `site/screenshots.html`: every capture, grouped and captioned to match the source catalogue, with links to the full-size PNGs.
+- `README.md`: six selected portrait captures linked directly to the canonical files.
 
-Use consistent desktop and phone viewport sizes, crop only when the context remains clear, and write alt text for the workflow shown. Do not include pairing codes, real IP addresses, credentials or private package data.
+When adding captures, update the catalogue and relevant page markup, set descriptive alt text and captions, and preserve the original aspect ratio. Keep the full-size link and image source in sync. If adding another theme, only introduce theme-specific selection once those actual captures exist. See the catalogue's Not captured yet section for current gaps.
 
-When captures are ready, replace `.screenshot-placeholder` in `site/index.html` with a real `<picture>` and wire the selected destination in `site/site.js` to the matching capture and alt text. Use the existing `.logo-dark` / `.logo-light` theme selectors or `<picture>` media sources as appropriate; the website’s explicit theme must remain authoritative. Keep a fallback for any destination not yet captured.
-
-Replace the README’s Screenshot status paragraph with a theme-aware `<picture>` only once both referenced files exist. Update guide sections with real captures as useful. Run `python3 scripts/check-site.py` after adding them.
+After changes, run `python3 scripts/build-site.py`, `python3 scripts/check-site.py`, and check desktop/phone layouts in both website themes. The checker validates the staged output, including every image link. Build output must remain ignored.

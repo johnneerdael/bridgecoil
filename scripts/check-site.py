@@ -2,10 +2,11 @@
 """Check static site references before uploading the Pages artifact."""
 from html.parser import HTMLParser
 from pathlib import Path
+import argparse
 import re
 from urllib.parse import unquote, urlsplit
 
-ROOT = Path(__file__).resolve().parent.parent / "site"
+ROOT = Path(__file__).resolve().parent.parent / "dist-site"
 
 
 class Page(HTMLParser):
@@ -35,8 +36,10 @@ class Page(HTMLParser):
             self.references.extend(part.strip().split()[0] for part in attrs["srcset"].split(","))
 
 
-def check():
-    pages = {p: Page(p) for p in ROOT.rglob("*.html")}
+def check(root):
+    pages = {p: Page(p) for p in root.rglob("*.html")}
+    if not pages:
+        raise SystemExit(f"No HTML pages in {root}; run python3 scripts/build-site.py first")
     errors = []
 
     def reference(source, value):
@@ -44,26 +47,26 @@ def check():
         if url.scheme or url.netloc:
             return
         if url.path.startswith("/"):
-            errors.append(f"{source.relative_to(ROOT)}: project-site link starts at domain root: {value}")
+            errors.append(f"{source.relative_to(root)}: project-site link starts at domain root: {value}")
             return
         target = (source.parent / unquote(url.path)).resolve() if url.path else source
-        if not target.is_relative_to(ROOT):
-            errors.append(f"{source.relative_to(ROOT)}: reference leaves site directory: {value}")
+        if not target.is_relative_to(root):
+            errors.append(f"{source.relative_to(root)}: reference leaves site directory: {value}")
             return
         if target.is_dir():
             target /= "index.html"
         if not target.is_file():
-            errors.append(f"{source.relative_to(ROOT)}: missing target: {value}")
+            errors.append(f"{source.relative_to(root)}: missing target: {value}")
         elif url.fragment and target in pages and unquote(url.fragment) not in pages[target].ids:
-            errors.append(f"{source.relative_to(ROOT)}: missing anchor: {value}")
+            errors.append(f"{source.relative_to(root)}: missing anchor: {value}")
 
     for path, page in pages.items():
-        errors.extend(f"{path.relative_to(ROOT)}: {error}" for error in page.errors)
+        errors.extend(f"{path.relative_to(root)}: {error}" for error in page.errors)
         if page.h1_count != 1:
-            errors.append(f"{path.relative_to(ROOT)}: expected one h1, found {page.h1_count}")
+            errors.append(f"{path.relative_to(root)}: expected one h1, found {page.h1_count}")
         for value in page.references:
             reference(path, value)
-    for path in ROOT.rglob("*.css"):
+    for path in root.rglob("*.css"):
         for value in re.findall(r"url\([\"']?([^\"')]+)[\"']?\)", path.read_text()):
             reference(path, value)
     if errors:
@@ -72,4 +75,6 @@ def check():
 
 
 if __name__ == "__main__":
-    check()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("directory", nargs="?", type=Path, default=ROOT)
+    check(parser.parse_args().directory.resolve())
