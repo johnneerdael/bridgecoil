@@ -184,7 +184,10 @@ fn old_tv_facts(start_on_boot: bool) -> String {
             "case \"$2\" in moe.shizuku.privileged.api) cat <<'OUT'\n{lists}\nOUT\n;; esac"
         ),
     );
-    tool("getprop", "echo 28");
+    tool(
+        "getprop",
+        "case \"$1\" in\nro.build.version.sdk) echo 28 ;;\nservice.adb.tcp.port) echo 5555 ;;\nesac",
+    );
     tool("am", "echo 'Broadcast completed: result=0, data=\"1\"'");
     let path = format!(
         "{}:{}",
@@ -205,6 +208,7 @@ fn reads_start_on_boot_and_the_watchdog_from_the_tv() {
     assert!(on.flag("shizukuBoot"));
     assert!(on.flag("watchdog"));
     assert!(on.flag("noWirelessDebugging"));
+    assert!(on.flag("networkAdb"));
     assert!(!on.flag("porterBoot"));
     assert!(!parse_facts(&old_tv_facts(false)).flag("shizukuBoot"));
 }

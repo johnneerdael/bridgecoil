@@ -1648,6 +1648,37 @@ textarea {
   min-height: 0;
   overflow-y: auto;
 }
+.setup-checks {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.setup-checks li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.setup-checks li.done svg {
+  color: var(--bc-success);
+}
+.setup-checks span {
+  display: grid;
+  min-width: 0;
+  font-weight: 600;
+}
+.setup-checks small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.setup-checks button {
+  width: auto;
+}
 .setup-choice {
   display: grid;
   gap: 6px;

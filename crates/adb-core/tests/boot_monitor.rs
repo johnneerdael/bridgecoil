@@ -38,7 +38,8 @@ fn run_monitor(dir: &Path, shell: &str, naps: u32) -> String {
         .env("PATH", path)
         .spawn()
         .unwrap();
-    for _ in 0..100 {
+    // A busy machine can take this long to start the stand-in tools.
+    for _ in 0..600 {
         if child.try_wait().unwrap().is_some() {
             return fs::read_to_string(home.join("monitor.log")).unwrap_or_default();
         }

@@ -137,7 +137,7 @@ pub fn plan(step: SetupStep) -> SetupPlan {
         ),
         SetupStep::AllowBootStart { manager } => make(
             format!("Let {} start with the TV", manager.name()),
-            "Let the manager turn wireless debugging back on after a restart, then open it on the TV so you can switch on start at boot.",
+            "Give the manager the permission it needs to start with the TV, then open it on the TV so you can turn on Start on boot.",
             &["This permission lets the manager change secure system settings."],
             format!(
                 "pm grant {} android.permission.WRITE_SECURE_SETTINGS || exit 1\n{}",

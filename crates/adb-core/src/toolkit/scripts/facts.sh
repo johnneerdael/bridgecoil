@@ -18,6 +18,11 @@ esac
 case "$(getprop ro.build.version.sdk)" in
   [1-9]|[12][0-9]) echo noWirelessDebugging=1 ;;
 esac
+# ADB left listening on the network is enough for a manager to start itself, on any Android.
+case "$(getprop service.adb.tcp.port)$(getprop persist.adb.tcp.port)" in
+  ""|0|-1|00) ;;
+  *) echo networkAdb=1 ;;
+esac
 # A manager only enables this receiver while its start on boot is on.
 for manager in moe.shizuku.privileged.api:shizukuBoot eu.darken.porter:porterBoot; do
   case "$(dumpsys package "${manager%:*}" 2>/dev/null | sed -n '/enabledComponents:/,/disabledComponents:/p')" in

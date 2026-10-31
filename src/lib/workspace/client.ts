@@ -155,6 +155,7 @@ export type ToolkitSnapshot = {
   listener: boolean;
   wired: boolean;
   noWirelessDebugging: boolean;
+  networkAdb: boolean;
   bootStart: boolean;
   watchdog: boolean;
   stage: Stage;

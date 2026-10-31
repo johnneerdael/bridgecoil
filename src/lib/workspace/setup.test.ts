@@ -36,6 +36,7 @@ const snapshot = (over: Partial<ToolkitSnapshot>): ToolkitSnapshot => ({
   listener: false,
   wired: false,
   noWirelessDebugging: false,
+  networkAdb: false,
   bootStart: false,
   watchdog: false,
   stage: "manager",
@@ -283,50 +284,37 @@ it("says so once mappings have come back after a restart", async () => {
   expect(await screen.findByText(/Proven on this TV/)).toBeTruthy();
 });
 
-it("warns a wired TV that its manager can't start itself", async () => {
+it("only warns when a TV really can't start its manager", async () => {
   const ready = {
     manager: "porter" as const,
     terminalReady: true,
     shellReady: true,
     authorized: true,
     serverRunning: true,
+    stage: "startup" as const,
   };
-  const first = open(platform(snapshot({ ...ready, wired: true, stage: "startup" })));
+  const wired = open(platform(snapshot({ ...ready, wired: true })));
   expect(await screen.findByText(/on a network cable/)).toBeTruthy();
-  expect(screen.getByText(/start Porter again/)).toBeTruthy();
-  first.unmount();
-  const done = open(
-    platform(snapshot({ ...ready, wired: true, monitor: true, stage: "done" })),
-  );
-  expect(await screen.findByText(/on a network cable/)).toBeTruthy();
-  done.unmount();
-  open(platform(snapshot({ ...ready, stage: "startup" })));
-  await screen.findByRole("button", { name: /Keep mappings running/ });
-  expect(screen.queryByText(/on a network cable/)).toBeNull();
-});
-
-it("tells older Android that wireless debugging isn't the answer", async () => {
-  const ready = {
-    manager: "shizukuNext" as const,
-    shizuku: "shizukuNext" as const,
-    terminalReady: true,
-    shellReady: true,
-    authorized: true,
-    serverRunning: true,
-  };
-  open(
+  wired.unmount();
+  const old = open(platform(snapshot({ ...ready, noWirelessDebugging: true })));
+  expect(await screen.findByText(/no network ADB/)).toBeTruthy();
+  old.unmount();
+  const network = open(
     platform(
       snapshot({
         ...ready,
         wired: true,
         noWirelessDebugging: true,
-        stage: "startup",
+        networkAdb: true,
       }),
     ),
   );
-  expect(await screen.findByText(/doesn't have wireless debugging/)).toBeTruthy();
-  expect(screen.queryByText(/join Wi-Fi/)).toBeNull();
-  expect(screen.queryByText(/pair it with/)).toBeNull();
+  await screen.findByRole("button", { name: /Keep mappings running/ });
+  expect(screen.queryByRole("note")).toBeNull();
+  network.unmount();
+  open(platform(snapshot(ready)));
+  await screen.findByRole("button", { name: /Keep mappings running/ });
+  expect(screen.queryByRole("note")).toBeNull();
 });
 
 it("only calls the TV ready once it can come back by itself", async () => {
@@ -350,8 +338,8 @@ it("only calls the TV ready once it can come back by itself", async () => {
   });
   expect(await screen.findByText("Not ready for restarts yet")).toBeTruthy();
   expect(screen.queryByText("Your TV is ready")).toBeNull();
-  expect(screen.getByText("Start on boot isn't on yet.")).toBeTruthy();
-  expect(screen.getByText(/watchdog is off/)).toBeTruthy();
+  expect(screen.getByText(/On the TV: Settings, Start on boot/)).toBeTruthy();
+  expect(screen.getByText(/Watchdog\s+off/)).toBeTruthy();
   await fireEvent.click(screen.getByRole("button", { name: "Remap buttons" }));
   expect(onbuttons).toHaveBeenCalled();
   missing.unmount();
@@ -382,7 +370,7 @@ it("reads the TV again after the viewer turns start on boot on", async () => {
   });
   expect(screen.getByRole("button", { name: /Open Porter/ })).toBeTruthy();
   await fireEvent.click(check);
-  expect(await screen.findByText(/still isn't on/)).toBeTruthy();
+  expect(await screen.findByText(/Still off/)).toBeTruthy();
   vi.mocked(api.query).mockImplementation(
     async () => snapshot({ ...ready, bootStart: true, stage: "done" }) as never,
   );

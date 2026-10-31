@@ -139,24 +139,15 @@
     api.remote(targetOf(device), { kind: "key", key, longPress: false });
 </script>
 
-{#snippet wiredNote()}
-  {#if snapshot?.noWirelessDebugging && !snapshot?.bootStart}<p
+{#snippet startNote()}
+  {#if !snapshot?.bootStart && !snapshot?.networkAdb && (snapshot?.noWirelessDebugging || snapshot?.wired)}<p
       class="risk-note"
       role="note"
     >
-      This version of Android doesn't have wireless debugging, so {managerName}
-      can only start by itself if this TV allows it another way, such as root.
-      Otherwise, connect Bridgecoil after each restart and start {managerName}
-      again here. Your mappings return once it's running.
-    </p>{:else if snapshot?.wired && !snapshot?.noWirelessDebugging}<p
-      class="risk-note"
-      role="note"
-    >
-      This TV is on a network cable. Android usually allows wireless debugging
-      only on Wi-Fi, so {managerName} can't start by itself after a restart.
-      To fix that, unplug the cable and join Wi-Fi. If you stay wired, connect
-      Bridgecoil after each restart and start {managerName} again here. Your
-      mappings return once it's running.
+      {#if snapshot?.noWirelessDebugging}This TV has no network ADB turned on, so
+        {managerName} may not start by itself.{:else}{managerName} can't start
+        by itself on a network cable. Use Wi-Fi if you can.{/if}
+      Otherwise, start it here after each restart.
     </p>{/if}
 {/snippet}
 
@@ -298,67 +289,74 @@
         >Check access</button
       >
     {:else if snapshot.stage === "startup" && snapshot.manager}
-      {#if snapshot.monitor}<h3>Not ready for restarts yet</h3>
-        <p>
-          You can remap buttons now, but they won't come back by themselves
-          after a restart until everything below is on.
-        </p>
-      {:else}<p>
-          When a TV restarts, these background services stop. Do these three
-          things so they come back without your phone.
-        </p>{/if}
-      {@render wiredNote()}
-      <button
-        class="secondary"
-        disabled={busy}
-        onclick={() =>
-          run({ kind: "allowBackground", manager: snapshot!.manager! })}
-        >1. Let Termux and {managerName} keep running</button
-      >
-      {#if snapshot.manager === "shizukuNext"}<p class="subtle" role="status">
-          {snapshot.watchdog
-            ? "The watchdog is on."
-            : "The watchdog is off. Step 1 turns it on."}
-        </p>{/if}
-      <button
-        class="secondary"
-        disabled={busy}
-        onclick={() =>
-          run({ kind: "allowBootStart", manager: snapshot!.manager! })}
-        >2. Open {managerName} on the TV</button
-      >
-      <p class="subtle">
-        Then, on the TV, use your remote to open <strong>Settings</strong> in
-        {managerName} and turn on <strong>Start on boot</strong>.
-        {#if !snapshot.noWirelessDebugging}Pair it with wireless debugging as
-          well.{/if}
-      </p>
-      <p class="subtle" role="status">
-        {#if snapshot.bootStart}Start on boot is on.
-        {:else if bootChecked}Start on boot still isn't on. Check {managerName}
-          on the TV, then try again.
-        {:else}Start on boot isn't on yet.{/if}
-      </p>
+      <h3>{snapshot.monitor ? "Not ready for restarts yet" : "Survive restarts"}</h3>
+      {@render startNote()}
+      <ul class="setup-checks">
+        <li class:done={snapshot.manager !== "shizukuNext" || snapshot.watchdog}>
+          <Icon
+            name={snapshot.manager !== "shizukuNext" || snapshot.watchdog
+              ? "check"
+              : "minus"}
+            size={16}
+          />
+          <span
+            >Keep running<small>
+              {#if snapshot.manager === "shizukuNext"}Watchdog
+                {snapshot.watchdog ? "on" : "off"}{:else}Battery limits{/if}</small
+            ></span
+          >
+          <button
+            class="secondary"
+            disabled={busy}
+            aria-label={`Let Termux and ${managerName} keep running`}
+            onclick={() =>
+              run({ kind: "allowBackground", manager: snapshot!.manager! })}
+            >Allow</button
+          >
+        </li>
+        <li class:done={snapshot.bootStart}>
+          <Icon name={snapshot.bootStart ? "check" : "minus"} size={16} />
+          <span
+            >Start on boot<small>
+              {#if snapshot.bootStart}On
+              {:else if bootChecked}Still off. On the TV: Settings, Start on boot
+              {:else}On the TV: Settings, Start on boot{/if}</small
+            ></span
+          >
+          {#if !snapshot.bootStart}<button
+              class="secondary"
+              disabled={busy}
+              aria-label={`Open ${managerName} on the TV`}
+              onclick={() =>
+                run({ kind: "allowBootStart", manager: snapshot!.manager! })}
+              >Open</button
+            >{/if}
+        </li>
+        <li class:done={snapshot.monitor}>
+          <Icon name={snapshot.monitor ? "check" : "minus"} size={16} />
+          <span>Restore mappings<small>Runs when the TV starts</small></span>
+          {#if !snapshot.monitor}<button
+              class="secondary"
+              disabled={busy}
+              aria-label="Keep mappings running"
+              onclick={() => run({ kind: "installMonitor" })}>Add</button
+            >{/if}
+        </li>
+      </ul>
       {#if !snapshot.bootStart}<button
-          class="secondary"
+          class="primary"
           disabled={busy}
           onclick={() => {
             bootChecked = true;
             refresh++;
           }}>Check start on boot</button
         >{/if}
-      {#if snapshot.monitor}
-        <button class="primary" onclick={onbuttons}>Remap buttons</button>
-      {:else}<button
-          class="primary"
-          disabled={busy}
-          onclick={() => run({ kind: "installMonitor" })}
-          >3. Keep mappings running</button
+      {#if snapshot.monitor}<button class="secondary" onclick={onbuttons}
+          >Remap buttons</button
         >{/if}
     {:else if snapshot.stage === "done"}
       <h3>Your TV is ready</h3>
       <p>Everything is in place to remap buttons.</p>
-      {@render wiredNote()}
       {#if survived}<p class="subtle">
           Proven on this TV: your button mappings came back by themselves after
           it restarted.
