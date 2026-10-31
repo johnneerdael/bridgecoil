@@ -36,7 +36,7 @@ Google Play Protect may stop the Termux apps with "Unsafe app blocked", because 
 
 1. Install the APK from [Releases](https://github.com/johnneerdael/bridgecoil/releases) on an arm64 Android phone.
 2. On the TV, open **Settings → System → About** and repeatedly select **Android TV OS build** to unlock Developer options. Menu names vary between brands.
-3. In Developer options, turn on **Wireless debugging**. The phone and TV must be on the same network, and the TV must be on Wi-Fi. If it's on a network cable, Android usually turns this off again.
+3. In Developer options, turn on **Wireless debugging** and allow it on this network if asked. The phone and TV must be on the same network, and the TV must be on Wi-Fi. If it's on a network cable, Android usually turns this off again.
 4. Open Bridgecoil. It looks for the TV on your network and walks you through pairing with the code the TV shows.
 
 ## What it can't do

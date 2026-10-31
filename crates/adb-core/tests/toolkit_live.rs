@@ -200,6 +200,32 @@ async fn mapping_state(c: &mut Client, t: &Target) -> serde_json::Value {
     query(c, t, Query::Mappings).await.unwrap()
 }
 
+/// Needs a device on Wi-Fi with its pairing screen open: BC_PAIR, BC_CODE and BC_ENDPOINT. Starts
+/// from a new identity and refuses legacy, so only a real pairing can get through.
+#[tokio::test]
+#[ignore]
+async fn a_pairing_code_opens_an_encrypted_connection() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = Client::new(dir.path().join("identity"));
+    let paired = c
+        .pair(
+            std::env::var("BC_PAIR").unwrap(),
+            std::env::var("BC_CODE").unwrap(),
+        )
+        .await
+        .unwrap();
+    println!("paired: {paired}");
+    let info = c
+        .connect(std::env::var("BC_ENDPOINT").unwrap(), false)
+        .await
+        .unwrap();
+    println!("connected: {} encrypted={}", info.model, info.encrypted);
+    assert!(info.encrypted);
+    let t = c.current_target().unwrap();
+    let id = c.shell(&t, "id -u").await.unwrap();
+    assert_eq!(id.stdout.trim(), "2000");
+}
+
 async fn press_home(c: &mut Client, t: &Target) -> String {
     c.shell(t, "input keyevent KEYCODE_HOME").await.unwrap();
     tokio::time::sleep(Duration::from_secs(4)).await;

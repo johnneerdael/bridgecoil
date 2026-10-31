@@ -76,9 +76,21 @@ Run on the same image, also on 2026-10-31. The launcher used was a small test ap
 
 **A change needs a moment to stick.** Two reboots within about 8 seconds of disabling brought the stock launcher back. A third, after 45 seconds, kept it off. The likely cause is Android writing this state to disk late, so a power cut right after a change can undo it.
 
+## Code pairing
+
+The TV image can't do this, so it ran against the Android 16 phone image on its virtual Wi-Fi, reached through `adb forward`. It proves the protocol against a real `adbd`, not on a TV.
+
+| Check | Result |
+|---|---|
+| New identity pairs with the six-digit code | Passed |
+| Connects over TLS with legacy refused | Passed, encrypted |
+| Shell runs as the shell user | Passed, uid 2000 |
+
+Turning on wireless debugging first shows **Allow wireless debugging on this network?** on the device. Without an answer the option stays off.
+
 ## Not covered
 
 - **Hold gestures on this image.** The emulator console can only tap without root. Holds were proven with a real kernel key event on the phone image.
-- **Code pairing and start at boot in the manager.** Both need wireless debugging, which this wired image refuses. The test started the server by hand after each boot.
+- **Pairing on a TV, and start at boot in the manager.** Both need wireless debugging, which this wired image refuses. The test started the server by hand after each boot.
 - **A brand's own launcher.** Priorities and the number of stock launchers vary, and Google TV may have more than one. A system update may also turn one back on.
 - **A physical TV or remote.** Nothing here replaces that.
