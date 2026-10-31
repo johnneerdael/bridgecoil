@@ -87,6 +87,16 @@ A button keeps its normal action until the app it opens is off. A button Android
 | Listen, then a mapped button opens its app | Passed, a real press opened Videoland, next to the owner's own listener |
 | **Stop** on a listener that restarts itself | Passed, it stayed down, then started again |
 
+Shevery was then replaced by Shizuku-Next, directly over ADB, and the TV was unplugged for a cold boot with the phone not connected. It passed:
+
+| After power-on | What happened |
+|---|---|
+| 54 seconds | Termux:Boot started the Termux script, with no Shizuku server running |
+| 112 seconds | Android started wireless ADB |
+| 114 seconds | The script connected over its own `adb`, then started the listeners and Shizuku-Next |
+
+All 28 disabled apps stayed disabled, and Projectivy stayed the Home app. Termux doesn't need Shizuku to start, and an `adb` connection from Termux to the TV is enough to bring mappings back. Android's wireless ADB sets the limit, so about two minutes is the floor on this TV. A TV in standby keeps running, so this only applies after a real power cut.
+
 This run found:
 
 - TCL's firmware drops the helper's request while its app is closed (`TclAppBoot: Skipping delivery`), so **Ask the TV** seemed to do nothing. It now opens the helper first.
