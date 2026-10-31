@@ -109,11 +109,6 @@
         >Launcher, setup and diagnostics</small
       ></button
     >
-    <button class="tool-tile" onclick={() => onnavigate("connect")}
-      ><Icon name="pair" /><strong>Connection setup</strong><small
-        >Pair or connect a device</small
-      ></button
-    >
   </div>
   <div class="page-footer">
     <button class="secondary" disabled={busy} onclick={() => reload++}

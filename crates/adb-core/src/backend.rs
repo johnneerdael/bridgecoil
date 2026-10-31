@@ -13,6 +13,7 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::{io::AsyncReadExt, time::timeout};
 use uuid::Uuid;
 
@@ -459,7 +460,117 @@ impl Client {
             )),
         }
     }
+    /// Streams `file` to a staging name and only then gives it its real one, so an
+    /// interrupted upload can never look finished.
+    pub async fn upload(
+        &mut self,
+        session: &str,
+        mut file: tokio::fs::File,
+        total: u64,
+        remote: &str,
+        cancel: &AtomicBool,
+        mut progress: impl FnMut(u64) + Send,
+    ) -> Result<()> {
+        if self.active.as_ref().is_none_or(|a| a.info.id != session) {
+            return Err(PocError::new(
+                "staleSession",
+                "The connection changed. Reconnect and choose the file again.",
+            ));
+        }
+        let mut active = self
+            .active
+            .take()
+            .ok_or_else(|| PocError::new("staleSession", "Device disconnected."))?;
+        let quoted = shell_quote(remote);
+        let staging = format!("{remote}.bridgecoil-part");
+        let staged = shell_quote(&staging);
+        let exists = command(
+            &mut active.wire,
+            &format!("[ -e {quoted} ] || [ -L {quoted} ]"),
+        )
+        .await;
+        match exists {
+            Ok((Some(0), _)) => {
+                self.active = Some(active);
+                return Err(PocError::new(
+                    "exists",
+                    "An item with this name already exists here.",
+                ));
+            }
+            Ok(_) => {}
+            Err(e) => return Err(e),
+        }
+        let transfer: Result<bool> = async {
+            let mut buffer = vec![0u8; 66000];
+            let mut sync = libadb::sync::open(&mut active.wire, &mut buffer)
+                .await
+                .map_err(connection_error)?;
+            sync.send_start(&staging, 0o100644)
+                .await
+                .map_err(connection_error)?;
+            let mut chunk = vec![0u8; 65536];
+            let mut sent = 0;
+            let mut finished = true;
+            loop {
+                if cancel.load(Ordering::SeqCst) {
+                    finished = false;
+                    break;
+                }
+                let n = file.read(&mut chunk).await.map_err(connection_error)?;
+                if n == 0 {
+                    break;
+                }
+                timeout(UPLOAD_STALL, sync.send_data(&chunk[..n]))
+                    .await
+                    .map_err(|_| PocError::new("timeout", "The upload stalled."))?
+                    .map_err(connection_error)?;
+                sent += n as u64;
+                progress(sent);
+            }
+            sync.send_done(0).await.map_err(connection_error)?;
+            sync.quit().await.map_err(connection_error)?;
+            if finished && sent != total {
+                return Err(PocError::new(
+                    "fileChanged",
+                    "The file changed size during the upload.",
+                ));
+            }
+            Ok(finished)
+        }
+        .await;
+        let verified = match &transfer {
+            Ok(true) => command(
+                &mut active.wire,
+                &format!("mv -n {staged} {quoted} && stat -c %s {quoted}"),
+            )
+            .await
+            .is_ok_and(|(code, output)| code == Some(0) && output.trim() == total.to_string()),
+            _ => false,
+        };
+        if verified {
+            self.active = Some(active);
+            return Ok(());
+        }
+        // Best effort, bounded cleanup. A clean reply also proves the connection is still usable.
+        let cleaned = timeout(
+            Duration::from_secs(5),
+            command(&mut active.wire, &format!("rm -f {staged}")),
+        )
+        .await;
+        if matches!(cleaned, Ok(Ok(_))) {
+            self.active = Some(active);
+        }
+        match transfer {
+            Err(e) => Err(e),
+            Ok(false) => Err(PocError::new("cancelled", "Upload cancelled.")),
+            Ok(true) => Err(PocError::new(
+                "unknownUpload",
+                "The upload finished, but the file could not be verified on the TV.",
+            )),
+        }
+    }
 }
+const UPLOAD_STALL: Duration = Duration::from_secs(60);
 fn connection_error(e: impl std::fmt::Display) -> PocError {
     PocError::new("connection", e.to_string())
 }

@@ -6,21 +6,27 @@
     type Review,
     type Action,
     type Query,
-    type Page,
   } from "./client";
+  import FilesTool from "./FilesTool.svelte";
+  import { internalStorage } from "./files";
   import Pager from "./Pager.svelte";
   import Icon from "./Icon.svelte";
+  import { settingChoices, settingLabel, settingWritable } from "./settings";
   import Output from "./Output.svelte";
   let {
     device,
     api,
     onreview,
     oninstall,
+    tool = $bindable(""),
+    filePath = $bindable(internalStorage),
   }: {
     device: Device;
     api: Platform;
     onreview: (r: Review) => void;
     oninstall: () => void;
+    tool?: string;
+    filePath?: string;
   } = $props();
   const tools = [
     {
@@ -62,7 +68,6 @@
     },
   ];
   let page = $state(0);
-  let tool = $state("");
   let busy = $state(false);
   let error = $state("");
   let output = $state("");
@@ -91,29 +96,13 @@
   };
   let settings = $state<Setting[]>([]);
   let settingPage = $state(0);
-  let path = $state("/sdcard");
-  let filePage = $state(0);
-  let files = $state<Page<string>>({
-    items: [],
-    total: 0,
-    page: 0,
-    pageSize: 4,
-  });
   let reload = $state(0);
-  $effect(() => {
-    device.id;
-    tool = "";
-    output = "";
-    error = "";
-  });
   $effect(() => {
     const target = targetOf(device),
       choice = tool,
-      diagnostic = section,
-      currentPath = path,
-      p = filePage;
+      diagnostic = section;
     reload;
-    if (!choice || choice === "shell") return;
+    if (!choice || choice === "shell" || choice === "files") return;
     let cancelled = false;
     busy = true;
     error = "";
@@ -127,9 +116,7 @@
             ? { kind: "diagnostics", section: diagnostic }
             : choice === "settings"
               ? { kind: "settings" }
-              : choice === "files"
-                ? { kind: "files", path: currentPath, page: p, pageSize: 3 }
-                : { kind: "network" };
+              : { kind: "network" };
     void (async () => {
       try {
         if (choice === "launcher") {
@@ -141,12 +128,6 @@
         } else if (choice === "settings") {
           const r = await api.query<Setting[]>(target, q);
           if (!cancelled) settings = r;
-        } else if (choice === "files") {
-          const r = await api.query<{ path: string; entries: Page<string> }>(
-            target,
-            q,
-          );
-          if (!cancelled) files = r.entries;
         } else {
           const r = await api.query<{ output: string; forwarding?: string }>(
             target,
@@ -279,51 +260,21 @@
         size={1}
         onpage={(n) => (setupPage = n)}
       />
-    {:else if tool === "files"}<form
-        class="search-form"
-        onsubmit={(e) => {
-          e.preventDefault();
-          filePage = 0;
-          reload++;
-        }}
-      >
-        <label class="sr-only" for="remote-path">Device path</label><input
-          id="remote-path"
-          bind:value={path}
-        /><button class="secondary" type="submit" disabled={busy}>Open</button>
-      </form>
-      <div class="row-list">
-        <button
-          class="list-row"
-          onclick={() => {
-            path = path.split("/").slice(0, -1).join("/") || "/";
-            filePage = 0;
-          }}>Parent directory</button
-        >{#each files.items.slice(0, 3) as entry}<button
-            class="list-row"
-            onclick={() => {
-              path = entry;
-              filePage = 0;
-            }}
-            ><span class="truncate">{entry.split("/").pop()}</span><Icon
-              name="chevron-right"
-            /></button
-          >{/each}
-      </div>
-      <Pager
-        page={filePage}
-        total={files.total}
-        size={3}
-        {busy}
-        onpage={(n) => (filePage = n)}
+    {:else if tool === "files"}<FilesTool
+        {device}
+        {api}
+        {reload}
+        {onreview}
+        bind:path={filePath}
       />
     {:else if tool === "settings"}<div class="row-list">
-        {#each settings.slice(settingPage * 2, settingPage * 2 + 2) as setting}<div
+        {#each settings.slice(settingPage * 2, settingPage * 2 + 2) as setting}{@const choices =
+            settingChoices(setting.key, setting.value)}<div
             class="setting-row"
           >
             <label for={`setting-${setting.key}`}
               >{setting.name}<small
-                >Current: {setting.value ?? "Unknown"}{setting.namespace ===
+                >Current: {settingLabel(setting.value)}{setting.namespace ===
                 "global"
                   ? " · TV-wide"
                   : ""}</small
@@ -331,7 +282,7 @@
             ><select
               id={`setting-${setting.key}`}
               disabled={busy || setting.value === null}
-              value={setting.value ?? ""}
+              value={choices.selected}
               onchange={(e) =>
                 plan({
                   kind: "setting",
@@ -339,8 +290,9 @@
                   key: setting.key,
                   value: e.currentTarget.value,
                 })}
-              >{#each setting.key.endsWith("_scale") ? ["0", "0.5", "1", "1.5", "2", "5", "10"] : setting.key === "volume_music" ? ["0", "3", "5", "8", "10", "15"] : ["0", "32", "64", "128", "192", "255"] as value}<option
-                  {value}>{value}</option
+              >{#each choices.options as value}<option
+                  {value}
+                  hidden={!settingWritable(value)}>{settingLabel(value)}</option
                 >{/each}</select
             >
           </div>{/each}

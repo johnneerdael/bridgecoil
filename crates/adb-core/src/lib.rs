@@ -2,6 +2,7 @@ pub mod apk;
 pub mod backend;
 pub mod identity;
 mod manifest;
+pub mod ratings;
 pub mod workspace;
 pub fn validate_endpoint(value: &str) -> Result<String, String> {
     let value = value.trim();
@@ -44,3 +45,6 @@ pub fn install_succeeded(code: Option<u8>, output: &str) -> bool {
 pub mod signing;
 
 pub mod connection;
+pub mod discovery;
+
+pub mod apk_set;

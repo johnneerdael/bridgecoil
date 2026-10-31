@@ -42,6 +42,7 @@ async fn stale_install_is_rejected_before_reading_file() {
         abis: vec![],
         bytes: 12,
         sha256: "test".into(),
+        ..Default::default()
     };
     let e = c
         .install("expired", std::path::Path::new("missing.apk"), &apk, |_| {})

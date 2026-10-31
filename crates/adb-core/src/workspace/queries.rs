@@ -1,9 +1,13 @@
 use super::metadata::Metadata;
-use super::{commands::*, driver::*, engine::parse_package_state, types::*};
-use crate::{backend::PocError, shell_quote};
+use crate::ratings::{
+    RatingList,
+    groups::{Group, group_for},
+};
+use super::{commands::*, driver::*, engine::parse_package_state, files, types::*};
+use crate::backend::PocError;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 type Result<T> = std::result::Result<T, PocError>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
@@ -74,8 +78,6 @@ pub enum Query {
     Network,
     Files {
         path: String,
-        page: usize,
-        page_size: usize,
     },
 }
 async fn checked(d: &mut dyn ShellDriver, t: &Target, c: &str) -> Result<String> {
@@ -108,6 +110,14 @@ fn paged<T>(mut items: Vec<T>, page: usize, size: usize) -> Result<Page<T>> {
     })
 }
 pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Value> {
+    query_rated(d, t, q, None).await
+}
+pub async fn query_rated(
+    d: &mut dyn ShellDriver,
+    t: &Target,
+    q: Query,
+    ratings: Option<&RatingList>,
+) -> Result<Value> {
     validate_target(d.current_target().as_ref(), t)?;
     let user = t.profile_id;
     match q {
@@ -206,7 +216,27 @@ pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Valu
             };
             let needle = search.to_lowercase();
             packages.retain(|p| p.to_lowercase().contains(&needle) || label(p).contains(&needle));
-            packages.sort_by_cached_key(|p| (label(p), p.clone()));
+            let user_installed: HashSet<String> = match ratings {
+                None => HashSet::new(),
+                Some(_) if filter == "user" => packages.iter().cloned().collect(),
+                Some(_) => match checked(d, t, &format!("pm list packages --user {user} -3")).await
+                {
+                    Ok(raw) => parse_packages(&raw).into_iter().collect(),
+                    Err(e) => {
+                        validate_target(d.current_target().as_ref(), t)?;
+                        label_note.get_or_insert(e.message);
+                        HashSet::new()
+                    }
+                },
+            };
+            let group_of = |p: &String| {
+                ratings.map(|list| group_for(list.get(p), user_installed.contains(p)))
+            };
+            packages.sort_by_cached_key(|p| (group_of(p), label(p), p.clone()));
+            let mut group_counts = BTreeMap::<Group, usize>::new();
+            for group in packages.iter().filter_map(group_of) {
+                *group_counts.entry(group).or_default() += 1;
+            }
             let ids = paged(packages, page, page_size)?;
             let details = match d.metadata(t, &ids.items).await {
                 Ok(Some(rows)) => rows,
@@ -225,19 +255,33 @@ pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Valu
                 .items
                 .into_iter()
                 .map(|p| {
-                    details
-                        .get(&p)
-                        .cloned()
-                        .or_else(|| labels.get(&p).cloned())
-                        .unwrap_or_else(|| Metadata {
-                            package: p,
-                            ..Default::default()
-                        })
+                    let group = group_of(&p);
+                    let rating = ratings.and_then(|list| list.get(&p));
+                    let mut item = json!(
+                        details
+                            .get(&p)
+                            .cloned()
+                            .or_else(|| labels.get(&p).cloned())
+                            .unwrap_or_else(|| Metadata {
+                                package: p.clone(),
+                                ..Default::default()
+                            })
+                    );
+                    if let Some(group) = group {
+                        item["group"] = json!(group);
+                        item["rating"] = json!(rating);
+                    }
+                    item
                 })
                 .collect();
-            Ok(
-                json!({"items":items,"total":ids.total,"page":ids.page,"pageSize":ids.page_size,"metadataNote":label_note.map(|_|"Some app details could not be read. Package IDs remain available.")}),
-            )
+            let mut page = json!({"items":items,"total":ids.total,"page":ids.page,"pageSize":ids.page_size,"metadataNote":label_note.map(|_|"Some app details could not be read. Package IDs remain available.")});
+            if ratings.is_some() {
+                page["groups"] = group_counts
+                    .into_iter()
+                    .map(|(id, count)| json!({"id":id,"count":count}))
+                    .collect();
+            }
+            Ok(page)
         }
 
         Query::Package { package } => {
@@ -281,9 +325,29 @@ pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Valu
             if launch_activity.is_none() {
                 launch_activity = activities.first().cloned();
             }
-            Ok(
-                json!({"package":package,"state":state,"versionName":version_name,"activities":activities,"launchActivity":launch_activity,"permissions":permissions,"raw":raw,"metadata":metadata}),
-            )
+            let mut detail = json!({"package":package,"state":state,"versionName":version_name,"activities":activities,"launchActivity":launch_activity,"permissions":permissions,"raw":raw,"metadata":metadata});
+            if let Some(list) = ratings {
+                let rating = list.get(&package);
+                let related: BTreeSet<_> = rating
+                    .into_iter()
+                    .flat_map(|r| r.dependencies.iter().chain(&r.needed_by))
+                    .collect();
+                let installed = if related.is_empty() {
+                    Vec::new()
+                } else {
+                    checked(d, t, &format!("pm list packages --user {user}"))
+                        .await
+                        .map(|raw| parse_packages(&raw))
+                        .unwrap_or_default()
+                };
+                detail["rating"] = json!(rating);
+                detail["installedRelated"] = related
+                    .into_iter()
+                    .filter(|p| installed.contains(p))
+                    .map(|p| json!(p))
+                    .collect();
+            }
+            Ok(detail)
         }
 
         Query::Launchers => {
@@ -340,29 +404,10 @@ pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Valu
         Query::Network => Ok(
             json!({"output":checked(d,t,"ip address; ip route").await?,"forwarding":"Direct forwarding is not available in this build."}),
         ),
-        Query::Files {
-            path,
-            page,
-            page_size,
-        } => {
+        Query::Files { path } => {
             let path = remote_path(&path)?;
-            // NUL separates paths, so whitespace/newlines in names cannot inject rows or commands.
-            let raw = checked(
-                d,
-                t,
-                &format!(
-                    "find {} -maxdepth 1 -mindepth 1 -print0",
-                    shell_quote(&path)
-                ),
-            )
-            .await?;
-            let mut entries: Vec<_> = raw
-                .split('\0')
-                .filter(|s| !s.is_empty())
-                .map(str::to_owned)
-                .collect();
-            entries.sort();
-            Ok(json!({"path":path,"entries":paged(entries,page,page_size)?}))
+            let raw = checked(d, t, &files::listing_command(&path)).await?;
+            Ok(json!(files::parse_listing(&path, &raw)?))
         }
     }
 }

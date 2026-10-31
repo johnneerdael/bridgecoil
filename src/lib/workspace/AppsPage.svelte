@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { errorMessage, type Device } from "../model";
   import {
     targetOf,
@@ -16,6 +17,15 @@
   import Pager from "./Pager.svelte";
   import Icon from "./Icon.svelte";
   import AppOps from "./AppOps.svelte";
+  import RatingBadge from "./RatingBadge.svelte";
+  import RatingDetail from "./RatingDetail.svelte";
+  import RatingsSheet from "./RatingsSheet.svelte";
+  import {
+    groupLabels,
+    levelInfo,
+    type Group,
+    type RatingsStatus,
+  } from "./ratings";
   let {
     device,
     api,
@@ -25,7 +35,6 @@
     filter = $bindable("all"),
     search = $bindable(""),
     submitted = $bindable(""),
-    page = $bindable(0),
   }: {
     device: Device;
     api: Platform;
@@ -35,9 +44,13 @@
     filter?: string;
     search?: string;
     submitted?: string;
-    page?: number;
   } = $props();
-  const pageSize = 3;
+  const pageSize = 32;
+  let list = $state<HTMLDivElement>();
+  let loadingMore = $state(false);
+  let loadError = $state("");
+  let nextPage = 1;
+  let generation = 0;
   let selecting = $state(false),
     selected = $state<string[]>([]),
     bulkAction = $state<PackageAction>("disable");
@@ -66,13 +79,88 @@
   let notice = $state("");
   let activitiesOpen = $state(false),
     activityPage = $state(0);
-  type AppPage = Page<AppMetadata> & { metadataNote?: string | null };
+  type AppPage = Page<AppMetadata> & {
+    metadataNote?: string | null;
+    groups?: { id: Group; count: number }[];
+  };
   let result = $state<AppPage>({
     items: [],
     total: 0,
     page: 0,
     pageSize,
   });
+  const cardDismissedKey = "bridgecoil.ratingsCardDismissed";
+  function storedDismissal() {
+    try {
+      return localStorage.getItem(cardDismissedKey) !== null;
+    } catch {
+      return false;
+    }
+  }
+  let ratings = $state<RatingsStatus | null>(null);
+  let cardDismissed = $state(storedDismissal());
+  let ratingsOpen = $state(false);
+  let ratingsBusy = $state(false);
+  let ratingsError = $state("");
+  const showRatingsCard = $derived(
+    ratings !== null && !ratings.stored && !cardDismissed,
+  );
+  async function loadRatings() {
+    try {
+      ratings = await api.ratingsStatus();
+    } catch {
+      ratings = null;
+    }
+  }
+  function ratingsChanged() {
+    void loadRatings();
+    refresh++;
+  }
+  async function downloadRatings() {
+    ratingsBusy = true;
+    ratingsError = "";
+    try {
+      await api.ratingsUpdate();
+      ratingsChanged();
+    } catch (e) {
+      ratingsError = errorMessage(e);
+    } finally {
+      ratingsBusy = false;
+    }
+  }
+  function dismissRatingsCard() {
+    cardDismissed = true;
+    try {
+      localStorage.setItem(cardDismissedKey, "1");
+    } catch {
+      // Only a convenience: the card returns next time.
+    }
+  }
+  onMount(() => {
+    void loadRatings();
+    // Failures stay silent here; the Ratings sheet reports them when asked. A new list
+    // applies on the next load, so it can't clear a selection or close an open app.
+    void (async () => {
+      try {
+        if (await api.ratingsUpdateIfDue()) await loadRatings();
+      } catch {
+        return;
+      }
+    })();
+  });
+  let unsafeOpen = $state(false);
+  const groupCount = (id: Group) =>
+    result.groups?.find((group) => group.id === id)?.count ?? 0;
+  const unsafeCollapsed = $derived(
+    groupCount("unsafe") > 0 && !unsafeOpen && !submitted,
+  );
+  // Unsafe is always last, so the list simply stops loading where it would begin.
+  const atCollapsedUnsafe = $derived(
+    unsafeCollapsed &&
+      result.items.length >= result.total - groupCount("unsafe"),
+  );
+  const showsBadge = (app: AppMetadata) =>
+    !!app.group && (app.group !== "installed" || !!app.rating?.level);
   let detail = $state<PackageDetail | null>(null);
   let tab = $state("overview");
   let actionPage = $state(0);
@@ -93,18 +181,34 @@
     { id: "clearData", label: "Clear app data" },
     { id: "resetEnabled", label: "Default enabled state" },
   ];
+  const blockedOnUnsafe: PackageAction[] = ["disable", "remove", "clearData"];
+  let unsafeUnlocked = $state(false);
+  const unsafeLocked = $derived(
+    detail?.rating?.level === "unsafe" && !unsafeUnlocked,
+  );
+  const detailActions = $derived(
+    unsafeLocked
+      ? actions.filter((a) => !blockedOnUnsafe.includes(a.id))
+      : actions,
+  );
   $effect(() => {
     const target = targetOf(device);
     const q = {
       kind: "packages" as const,
       filter,
       search: submitted,
-      page,
+      page: 0,
       pageSize,
     };
     refresh;
+    generation++;
     let cancelled = false;
     busy = true;
+    loadingMore = false;
+    loadError = "";
+    nextPage = 1;
+    selected = [];
+    if (list) list.scrollTop = 0;
     error = "";
     result = { items: [], total: 0, page: 0, pageSize };
     detail = null;
@@ -123,12 +227,49 @@
       cancelled = true;
     };
   });
+  async function loadMore() {
+    if (
+      busy ||
+      loadingMore ||
+      loadError ||
+      atCollapsedUnsafe ||
+      result.items.length >= result.total
+    )
+      return;
+    const request = generation;
+    loadingMore = true;
+    try {
+      const more = await api.query<AppPage>(targetOf(device), {
+        kind: "packages",
+        filter,
+        search: submitted,
+        page: nextPage,
+        pageSize,
+      });
+      if (request !== generation) return;
+      const seen = new Set(result.items.map((app) => app.package));
+      const additional = more.items.filter((app) => !seen.has(app.package));
+      result = {
+        ...result,
+        items: [...result.items, ...additional],
+        total: additional.length ? more.total : result.items.length,
+        metadataNote: result.metadataNote || more.metadataNote,
+        groups: more.groups,
+      };
+      nextPage++;
+    } catch (e) {
+      if (request === generation) loadError = errorMessage(e);
+    } finally {
+      if (request === generation) loadingMore = false;
+    }
+  }
   async function inspect(packageId: string) {
     busy = true;
     error = "";
     notice = "";
     activityPage = 0;
     activitiesOpen = false;
+    unsafeUnlocked = false;
     const id = device.id;
     try {
       const r = await api.query<PackageDetail>(targetOf(device), {
@@ -148,11 +289,13 @@
       busy = false;
     }
   }
-  async function plan(action: Action) {
+  async function plan(action: Action, allowUnsafe = false) {
     busy = true;
     error = "";
     try {
-      const r = await api.prepare(targetOf(device), action);
+      const r = allowUnsafe
+        ? await api.prepare(targetOf(device), action, true)
+        : await api.prepare(targetOf(device), action);
       detail = null;
       onreview(r);
     } catch (e) {
@@ -188,14 +331,29 @@
     ><strong>{app.label || app.package}</strong>{#if app.label}<small
         >{app.package}</small
       >{/if}</span
-  >
+  >{#if showsBadge(app)}<RatingBadge level={app.rating?.level ?? null} />{/if}
+{/snippet}
+{#snippet groupHeader(group: Group)}
+  <h3 class="app-group">
+    {#if group === "unsafe"}<button
+        aria-expanded={!unsafeCollapsed}
+        disabled={!!submitted}
+        onclick={() => {
+          unsafeOpen = !unsafeOpen;
+          void loadMore();
+        }}
+        ><span>{groupLabels[group]}</span> <span>{groupCount(group)}</span
+        ><Icon name={unsafeCollapsed ? "chevron-right" : "chevron-down"} size={14} /></button
+      >
+    {:else}<span>{groupLabels[group]}</span>
+      <span>{groupCount(group)}</span>{/if}
+  </h3>
 {/snippet}
 <section class="feature-page">
   <div class="toolbar">
     <label class="sr-only" for="app-filter">App filter</label><select
       id="app-filter"
       bind:value={filter}
-      onchange={() => (page = 0)}
       disabled={busy}
       >{#each [["all", "All apps"], ["user", "User apps"], ["system", "System apps"], ["disabled", "Disabled"], ["removed", "Removed for profile"]] as [value, label]}<option
           {value}>{label}</option
@@ -209,7 +367,6 @@
     onsubmit={(e) => {
       e.preventDefault();
       submitted = search;
-      page = 0;
       refresh++;
     }}
   >
@@ -243,17 +400,61 @@
         {selected.length === 1 ? "app" : "apps"}</button
       >
     </div>
-  {:else}<p class="subtle">
-      Profile {device.profileId} · {busy
-        ? "Reading apps…"
-        : `${result.total} apps`}{result.metadataNote
-        ? " · Some app details unavailable"
-        : ""}
-    </p>{/if}
+  {:else}<div class="apps-summary">
+      <p class="subtle">
+        Profile {device.profileId} · {busy
+          ? "Reading apps…"
+          : `${result.total} apps`}{result.metadataNote
+          ? " · Some app details unavailable"
+          : ""}
+      </p>
+      <button class="text-action" onclick={() => (ratingsOpen = true)}
+        >Ratings</button
+      >
+    </div>{/if}
+  {#if showRatingsCard}<aside class="ratings-card">
+      <strong>Get community ratings</strong>
+      <p class="subtle">
+        Downloads the Universal Android Debloater list from GitHub to show what
+        each app does and how risky it is to remove.
+      </p>
+      {#if ratingsError}<p class="error-text" role="alert">
+          {ratingsError}
+        </p>{/if}
+      <div>
+        <button
+          class="secondary"
+          disabled={ratingsBusy}
+          onclick={dismissRatingsCard}>Not now</button
+        ><button
+          class="primary"
+          disabled={ratingsBusy}
+          onclick={downloadRatings}
+          >{ratingsError ? "Try again" : "Download"}</button
+        >
+      </div>
+    </aside>{/if}
   {#if error}<p class="error-text" role="status">{error}</p>{/if}
-  <div class="row-list">
-    {#each result.items as app}
-      {#if selecting}<label class="checkbox list-row bulk-choice"
+  <!-- Keyboard users need to focus the scrolling region to use arrow/Page keys. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <div
+    class="row-list app-list"
+    bind:this={list}
+    role="region"
+    aria-label="Installed apps"
+    tabindex="0"
+    onscroll={(event) => {
+      const element = event.currentTarget;
+      if (element.scrollHeight - element.scrollTop - element.clientHeight < 240)
+        void loadMore();
+    }}
+  >
+    {#each result.items as app, index (app.package)}
+      {#if app.group && app.group !== result.items[index - 1]?.group}{@render groupHeader(
+          app.group,
+        )}{/if}
+      {#if app.group === "unsafe" && unsafeCollapsed}<!-- Hidden until expanded. -->
+      {:else if selecting}<label class="checkbox list-row bulk-choice"
           ><input
             type="checkbox"
             checked={selected.includes(app.package)}
@@ -270,22 +471,39 @@
           >{@render appSummary(app)}<Icon name="chevron-right" /></button
         >{/if}
     {/each}
+    {#if atCollapsedUnsafe && result.items.at(-1)?.group !== "unsafe"}{@render groupHeader(
+        "unsafe",
+      )}{/if}
     {#if !busy && !result.items.length}<p class="empty-caption">
         No apps match this view.
       </p>{/if}
+    {#if loadingMore}<p class="subtle" role="status">Reading more apps…</p>{/if}
+    {#if loadError}<p class="error-text" role="status">{loadError}</p>
+      <button
+        class="secondary"
+        onclick={() => {
+          loadError = "";
+          void loadMore();
+        }}>Retry loading apps</button
+      >{/if}
   </div>
-  <Pager
-    {page}
-    total={result.total}
-    size={pageSize}
-    {busy}
-    onpage={(n) => (page = n)}
-  />
 </section>
+<RatingsSheet
+  open={ratingsOpen}
+  {api}
+  status={ratings}
+  onclose={() => (ratingsOpen = false)}
+  onchange={ratingsChanged}
+/>
 <Modal open={!!detail} title="Application" onclose={() => (detail = null)}>
-  {#if detail}<h3 class="break-word">
-      {detail.metadata?.label || detail.package}
-    </h3>
+  {#if detail}<div class="app-detail-heading">
+      <h3 class="break-word">
+        {detail.metadata?.label || detail.package}
+      </h3>
+      {#if detail.rating !== undefined}<RatingBadge
+          level={detail.rating?.level ?? null}
+        />{/if}
+    </div>
     {#if detail.metadata?.label}<p class="subtle break-word">
         {detail.package}
       </p>{/if}
@@ -295,7 +513,11 @@
           onclick={() => (tab = section)}>{title}</button
         >{/each}
     </div>
-    {#if tab === "overview"}<dl>
+    {#if tab === "overview"}{#if detail.rating !== undefined}<RatingDetail
+          rating={detail.rating}
+          installedRelated={detail.installedRelated ?? []}
+          listDate={ratings?.committedAt ?? null}
+        />{/if}<dl>
         <div>
           <dt>Version</dt>
           <dd>
@@ -343,22 +565,41 @@
             detail && launch(detail.launchActivity || detail.activities[0])}
           >Open app</button
         >{:else}<p class="subtle">No launch activity reported.</p>{/if}
-    {:else if tab === "actions"}<div class="action-grid">
-        {#each actions.slice(actionPage * 4, actionPage * 4 + 4) as action}<button
+    {:else if tab === "actions"}{#if unsafeLocked}<div
+          class="risk-note rating-warning"
+        >
+          <p>
+            {levelInfo.unsafe.explanation} Disabling, removing and clearing data are
+            hidden for this app.
+          </p>
+          <button
+            class="secondary"
+            onclick={() => {
+              unsafeUnlocked = true;
+              actionPage = 0;
+            }}>Show these actions anyway</button
+          >
+        </div>{/if}<div class="action-grid">
+        {#each detailActions.slice(actionPage * 4, actionPage * 4 + 4) as action}<button
             class="secondary"
             disabled={busy}
             onclick={() =>
               detail &&
-              plan({
-                kind: "package",
-                package: detail.package,
-                action: action.id,
-              })}>{action.label}</button
+              plan(
+                {
+                  kind: "package",
+                  package: detail.package,
+                  action: action.id,
+                },
+                unsafeUnlocked &&
+                  detail.rating?.level === "unsafe" &&
+                  blockedOnUnsafe.includes(action.id),
+              )}>{action.label}</button
           >{/each}
       </div>
       <Pager
         page={actionPage}
-        total={actions.length}
+        total={detailActions.length}
         size={4}
         {busy}
         onpage={(n) => (actionPage = n)}

@@ -1,27 +1,83 @@
-//! Android 17 runtime LAN permission, requested only when the user starts pairing/connecting.
-#[cfg(target_os = "android")]
+//! On-demand LAN permission and bounded platform-native mobile discovery.
 use tauri::Manager;
 use tauri::{
     AppHandle, Runtime,
     plugin::{Builder, TauriPlugin},
 };
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 struct LanHandle<R: Runtime>(tauri::plugin::PluginHandle<R>);
+#[cfg(target_os = "ios")]
+tauri::ios_plugin_binding!(init_plugin_bridgecoil_network);
+#[derive(Default)]
+struct DiscoveryScan(tokio::sync::Mutex<()>);
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("local-network")
         .setup(|app, api| {
+            app.manage(DiscoveryScan::default());
             #[cfg(target_os = "android")]
             {
                 let handle =
-                    api.register_android_plugin("nl.neerdael.adbstudio.poc", "LanAccessPlugin")?;
+                    api.register_android_plugin("nl.neerdael.bridgecoil", "LanAccessPlugin")?;
                 app.manage(LanHandle(handle));
             }
-            #[cfg(not(target_os = "android"))]
+            #[cfg(target_os = "ios")]
+            {
+                app.manage(LanHandle(
+                    api.register_ios_plugin(init_plugin_bridgecoil_network)?,
+                ));
+            }
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             let _ = (app, api);
             Ok(())
         })
         .build()
+}
+pub async fn discover(app: &AppHandle) -> crate::Result<adb_core::discovery::DiscoveryResult> {
+    ensure(app).await?;
+    let state = app.state::<DiscoveryScan>();
+    let _scan = state.0.try_lock().map_err(|_| {
+        adb_core::backend::PocError::new("busy", "A discovery scan is already running.")
+    })?;
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let handle = app.state::<LanHandle<tauri::Wry>>().0.clone();
+        let raw = tauri::async_runtime::spawn_blocking(move || {
+            handle.run_mobile_plugin::<adb_core::discovery::RawDiscovery>(
+                "discover",
+                serde_json::json!({}),
+            )
+        })
+        .await
+        .map_err(|e| adb_core::backend::PocError::new("discovery", e.to_string()))?
+        .map_err(|e| {
+            let code = match &e {
+                tauri::plugin::mobile::PluginInvokeError::InvokeRejected(response) => {
+                    response.code.as_deref()
+                }
+                _ => None,
+            };
+            discovery_error(code, e.to_string())
+        })?;
+        Ok(adb_core::discovery::normalize(raw))
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    tauri::async_runtime::spawn_blocking(|| {
+        adb_core::discovery::discover(std::time::Duration::from_secs(4))
+    })
+    .await
+    .map_err(|e| adb_core::backend::PocError::new("discovery", e.to_string()))?
+}
+#[cfg(any(target_os = "android", target_os = "ios", test))]
+fn discovery_error(code: Option<&str>, message: String) -> adb_core::backend::PocError {
+    adb_core::backend::PocError::new(
+        if code == Some("permission") {
+            "permission"
+        } else {
+            "discovery"
+        },
+        message,
+    )
 }
 #[cfg(any(target_os = "android", test))]
 fn require_grant(granted: bool) -> crate::Result<()> {
@@ -65,6 +121,11 @@ pub async fn ensure(app: &AppHandle) -> crate::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn discovery_permission_denial_stays_distinct_from_an_empty_scan() {
+        assert_eq!(discovery_error(Some("permission"), "Allow access".into()).kind, "permission");
+        assert_eq!(discovery_error(None, "Scan failed".into()).kind, "discovery");
+    }
     #[test]
     fn denied_access_has_recoverable_permission_result() {
         let e = require_grant(false).unwrap_err();

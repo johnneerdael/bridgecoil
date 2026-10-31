@@ -20,6 +20,8 @@
   --bc-warningSoft: #3a3020;
   --bc-danger: #ffa2b2;
   --bc-dangerSoft: #40262f;
+  --bc-unsafe: #f28cff;
+  --bc-unsafeSoft: #3a2342;
   --bc-focus: #d4f56b;
   --bc-controlBorder: #6b7c95;
   color-scheme: dark;
@@ -44,6 +46,8 @@
   --bc-warningSoft: #fff0cf;
   --bc-danger: #a02643;
   --bc-dangerSoft: #fce5eb;
+  --bc-unsafe: #8e1a9c;
+  --bc-unsafeSoft: #f8e6fb;
   --bc-focus: #436000;
   --bc-controlBorder: #758298;
   color-scheme: light;

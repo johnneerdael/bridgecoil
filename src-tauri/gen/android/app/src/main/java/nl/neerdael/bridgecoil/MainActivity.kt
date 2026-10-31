@@ -1,4 +1,4 @@
-package nl.neerdael.adbstudio.poc
+package nl.neerdael.bridgecoil
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge

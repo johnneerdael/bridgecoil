@@ -16,3 +16,8 @@ artifacts/
 src-tauri/gen/schemas/
 
 dist-ui/
+
+src-tauri/gen/android/keystore.properties
+*.jks
+*.keystore
+*.p12

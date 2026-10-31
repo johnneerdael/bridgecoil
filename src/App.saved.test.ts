@@ -1,0 +1,325 @@
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  waitFor,
+} from "@testing-library/svelte";
+import { afterEach, beforeAll, it, expect, vi } from "vitest";
+import App from "./App.svelte";
+import { savedDevicesKey } from "./lib/saved-devices";
+import type { Device } from "./lib/model";
+const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({
+  isTauri: () => true,
+  invoke,
+  Channel: class {
+    onmessage = () => {};
+  },
+}));
+vi.mock("@tauri-apps/api/event", () => ({ listen: async () => () => {} }));
+const tv: Device = {
+  id: "fresh-session",
+  deviceId: "android:tv",
+  profileId: 0,
+  serial: "tv",
+  build: "build",
+  manufacturer: "TCL",
+  model: "Smart TV Pro",
+  endpoint: "192.0.2.12:46833",
+  encrypted: true,
+  androidVersion: "14",
+  sdk: 34,
+  abis: [],
+};
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () {
+    this.setAttribute("open", "");
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.removeAttribute("open");
+    this.dispatchEvent(new Event("close"));
+  };
+});
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+  invoke.mockReset();
+});
+function backend(services: unknown[] = []) {
+  let active: Device | null = null;
+  invoke.mockImplementation(async (command, args) => {
+    if (command === "connection_status") return active;
+    if (command === "discover_adb") return { services, warnings: [] };
+    if (command === "disconnect_device") {
+      active = null;
+      return;
+    }
+    if (command === "connect_device") {
+      active = { ...tv, endpoint: args.endpoint };
+      return active;
+    }
+    if (command === "workspace_query")
+      return args.query.kind === "profiles"
+        ? [{ id: 0, name: "Owner", running: true }]
+        : {};
+    return undefined;
+  });
+}
+it("recovers the old connection and remembers the TV for one-tap reconnect after restart", async () => {
+  backend();
+  localStorage.setItem("adb.connectionEndpoint", tv.endpoint);
+  const first = render(App);
+  const quick = await screen.findByRole("button", {
+    name: "Quick connect to 192.0.2.12",
+  });
+  await waitFor(() =>
+    expect((quick as HTMLButtonElement).disabled).toBe(false),
+  );
+  await fireEvent.click(quick);
+  await screen.findByRole("button", { name: "Connection status: Connected" });
+  expect(invoke).toHaveBeenCalledWith(
+    "connect_device",
+    expect.objectContaining({ endpoint: tv.endpoint, allowLegacy: false }),
+  );
+  expect(
+    invoke.mock.calls.filter(([command]) => command === "connect_device"),
+  ).toHaveLength(1);
+  first.unmount();
+  backend();
+  render(App);
+  expect(
+    await screen.findByRole("button", {
+      name: "Quick connect to Smart TV Pro",
+    }),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Connection status: Not connected" }),
+  ).toBeTruthy();
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Quick connect to Smart TV Pro",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false),
+  );
+  await fireEvent.click(
+    screen.getByRole("button", { name: "Quick connect to Smart TV Pro" }),
+  );
+  await waitFor(() =>
+    expect(invoke).toHaveBeenCalledWith(
+      "connect_device",
+      expect.objectContaining({ expectedDeviceId: "android:tv" }),
+    ),
+  );
+});
+it("can browse discovery while connected without disconnecting or changing the TV", async () => {
+  backend([
+    {
+      name: "adb-other",
+      kind: "connect",
+      host: "192.0.2.15",
+      endpoint: "192.0.2.15:49000",
+    },
+  ]);
+  localStorage.setItem("adb.connectionEndpoint", tv.endpoint);
+  render(App);
+  const quick = await screen.findByRole("button", {
+    name: "Quick connect to 192.0.2.12",
+  });
+  await waitFor(() =>
+    expect((quick as HTMLButtonElement).disabled).toBe(false),
+  );
+  await fireEvent.click(quick);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Connection status: Connected" }),
+  );
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Find devices" }),
+  );
+  await screen.findByRole("button", { name: /adb-other.*Wireless connection/ });
+  expect(
+    invoke.mock.calls.some(([command]) => command === "disconnect_device"),
+  ).toBe(false);
+  expect(
+    invoke.mock.calls.filter(([command]) => command === "connect_device"),
+  ).toHaveLength(1);
+});
+it("Quick connect discovers a changed TLS port while ignoring the pairing port", async () => {
+  const service = {
+    name: "adb-tv",
+    kind: "connect",
+    host: "192.0.2.12",
+    endpoint: "192.0.2.12:49000",
+  };
+  backend([
+    service,
+    { ...service, kind: "pairing", endpoint: "192.0.2.12:35000" },
+  ]);
+  localStorage.setItem("adb.connectionEndpoint", tv.endpoint);
+  render(App);
+  const quick = await screen.findByRole("button", {
+    name: "Quick connect to 192.0.2.12",
+  });
+  await waitFor(() =>
+    expect((quick as HTMLButtonElement).disabled).toBe(false),
+  );
+  await fireEvent.click(quick);
+  await screen.findByRole("button", { name: "Connection status: Connected" });
+  expect(invoke).toHaveBeenCalledWith(
+    "connect_device",
+    expect.objectContaining({ endpoint: service.endpoint, allowLegacy: false }),
+  );
+  expect(
+    JSON.parse(localStorage.getItem(savedDevicesKey)!)[0].discoveryName,
+  ).toBe("adb-tv");
+});
+it("cancelling during discovery prevents a connection when its late result arrives", async () => {
+  let complete!: (value: unknown) => void;
+  invoke.mockImplementation(async (command) => {
+    if (command === "connection_status") return null;
+    if (command === "discover_adb")
+      return new Promise((resolve) => (complete = resolve));
+  });
+  localStorage.setItem("adb.connectionEndpoint", tv.endpoint);
+  render(App);
+  const quick = await screen.findByRole("button", {
+    name: "Quick connect to 192.0.2.12",
+  });
+  await waitFor(() =>
+    expect((quick as HTMLButtonElement).disabled).toBe(false),
+  );
+  await fireEvent.click(quick);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Cancel attempt" }),
+  );
+  complete({ services: [], warnings: [] });
+  await screen.findByText("Connection cancelled.", { selector: ".feedback p" });
+  expect(
+    invoke.mock.calls.some(([command]) => command === "connect_device"),
+  ).toBe(false);
+});
+it("reports denied discovery access instead of falling back to a connection attempt", async () => {
+  invoke.mockImplementation(async (command) => {
+    if (command === "connection_status") return null;
+    if (command === "discover_adb") throw { kind: "permission", message: "Allow local network access." };
+  });
+  localStorage.setItem("adb.connectionEndpoint", tv.endpoint);
+  render(App);
+  const quick = await screen.findByRole("button", { name: "Quick connect to 192.0.2.12" });
+  await waitFor(() => expect((quick as HTMLButtonElement).disabled).toBe(false));
+  await fireEvent.click(quick);
+  expect((await screen.findByRole("alert")).textContent).toContain("Allow local network access.");
+  expect(invoke.mock.calls.some(([command]) => command === "connect_device")).toBe(false);
+});
+it("choosing a discovered pairing port fills the form without pairing or connecting", async () => {
+  backend([
+    {
+      name: "adb-tv",
+      kind: "pairing",
+      host: "192.0.2.12",
+      endpoint: "192.0.2.12:35000",
+    },
+  ]);
+  render(App);
+  const find = screen.getByRole("button", { name: "Find nearby ADB devices" });
+  await waitFor(() => expect((find as HTMLButtonElement).disabled).toBe(false));
+  await fireEvent.click(find);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: /adb-tv.*Pairing port/ }),
+  );
+  expect(
+    (screen.getByLabelText(/Pairing address/) as HTMLInputElement).value,
+  ).toBe("192.0.2.12:35000");
+  expect(
+    invoke.mock.calls.some(
+      ([command]) => command === "connect_device" || command === "pair_device",
+    ),
+  ).toBe(false);
+});
+it("keeps saved TVs after a failed reconnect and offers address editing", async () => {
+  backend();
+  localStorage.setItem(
+    savedDevicesKey,
+    JSON.stringify([
+      {
+        deviceId: tv.deviceId,
+        name: tv.model,
+        host: "192.0.2.12",
+        endpoint: tv.endpoint,
+        legacy: false,
+        pairedAt: 10,
+        lastConnectedAt: 20,
+      },
+    ]),
+  );
+  invoke.mockImplementation(async (command) => {
+    if (command === "connect_device")
+      throw { kind: "connection", message: "TV is offline." };
+    if (command === "connection_status") return null;
+  });
+  render(App);
+  const quick = await screen.findByRole("button", {
+    name: "Quick connect to Smart TV Pro",
+  });
+  await waitFor(() =>
+    expect((quick as HTMLButtonElement).disabled).toBe(false),
+  );
+  await fireEvent.click(quick);
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "TV is offline.",
+  );
+  await fireEvent.click(
+    screen.getByRole("button", { name: "← Saved devices" }),
+  );
+  expect(
+    screen.getByRole("button", { name: "Quick connect to Smart TV Pro" }),
+  ).toBeTruthy();
+  await fireEvent.click(
+    screen.getByRole("button", { name: "Update connection address" }),
+  );
+  expect(
+    (screen.getByLabelText(/Connection address/) as HTMLInputElement).value,
+  ).toBe(tv.endpoint);
+});
+it("returns to saved TVs from the Device menu item while disconnected", async () => {
+  localStorage.setItem(
+    savedDevicesKey,
+    JSON.stringify([
+      {
+        deviceId: tv.deviceId,
+        name: tv.model,
+        host: "192.0.2.12",
+        endpoint: tv.endpoint,
+        legacy: false,
+        pairedAt: 10,
+        lastConnectedAt: 20,
+      },
+    ]),
+  );
+  invoke.mockImplementation(async (command) => {
+    if (command === "connect_device")
+      throw { kind: "connection", message: "TV is offline." };
+    if (command === "connection_status") return null;
+  });
+  render(App);
+  const quick = await screen.findByRole("button", {
+    name: "Quick connect to Smart TV Pro",
+  });
+  await waitFor(() =>
+    expect((quick as HTMLButtonElement).disabled).toBe(false),
+  );
+  await fireEvent.click(quick);
+  await screen.findByRole("alert");
+  await fireEvent.click(
+    screen.getByRole("button", { name: "Open navigation" }),
+  );
+  await fireEvent.click(await screen.findByRole("button", { name: /^Device/ }));
+  expect(
+    screen.getByRole("button", { name: "Quick connect to Smart TV Pro" }),
+  ).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Add device" })).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
+});

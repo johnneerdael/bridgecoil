@@ -18,6 +18,7 @@
   import BulkActionReview from "./BulkReview.svelte";
   import Modal from "../Modal.svelte";
   import Output from "./Output.svelte";
+  import { internalStorage } from "./files";
   let {
     page,
     device,
@@ -37,7 +38,8 @@
   let appFilter = $state("all"),
     appSearch = $state(""),
     appSubmitted = $state(""),
-    appPage = $state(0);
+    toolChoice = $state(""),
+    toolFilePath = $state(internalStorage);
   let originalSession = $state("");
   $effect(() => {
     const session = device?.id ?? "";
@@ -46,7 +48,8 @@
       appFilter = "all";
       appSearch = "";
       appSubmitted = "";
-      appPage = 0;
+      toolChoice = "";
+      toolFilePath = internalStorage;
       if (review) void api.discard(review.id).catch(() => {});
       review = null;
       if (bulkReview) void api.discardBulk(bulkReview.id).catch(() => {});
@@ -72,7 +75,8 @@
   }
   function result(r: Operation) {
     if (device && !sameTarget(targetOf(device), r.target)) return;
-    outcome = r;
+    // A verified file change shows in the list itself, and History keeps the record.
+    if (r.kind !== "file" || r.status !== "verified") outcome = r;
     reload++;
   }
 </script>
@@ -105,7 +109,6 @@
         bind:filter={appFilter}
         bind:search={appSearch}
         bind:submitted={appSubmitted}
-        bind:page={appPage}
         onreview={acceptReview}
         oninstall={() => onnavigate("install")}
       />
@@ -120,6 +123,8 @@
     {:else if page === "tools"}<ToolsPage
         {device}
         {api}
+        bind:tool={toolChoice}
+        bind:filePath={toolFilePath}
         onreview={acceptReview}
         oninstall={() => onnavigate("install")}
       />{/if}

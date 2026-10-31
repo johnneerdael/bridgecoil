@@ -1,5 +1,6 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 import type { Device } from "../model";
+import type { Group, Level, Rating, RatingsStatus } from "./ratings";
 export type Destination =
   "device" | "apps" | "remote" | "tools" | "history" | "connect" | "install";
 export const destinations = [
@@ -52,6 +53,7 @@ export type Review = {
   reversible: boolean;
   commands: string[];
   expiresMs: number;
+  rating?: Level | null;
 };
 export type BulkReview = {
   id: string;
@@ -82,7 +84,10 @@ export type Action =
   | { kind: "defaultHome"; component: string }
   | { kind: "setting"; namespace: string; key: string; value: string | null }
   | { kind: "permission"; package: string; permission: string; grant: boolean }
-  | { kind: "appOp"; package: string; op: string; mode: string };
+  | { kind: "appOp"; package: string; op: string; mode: string }
+  | { kind: "fileDelete"; path: string }
+  | { kind: "fileMove"; from: string; to: string }
+  | { kind: "fileCreateFolder"; path: string };
 export type Query =
   | {
       kind:
@@ -103,11 +108,30 @@ export type Query =
   | { kind: "package"; package: string }
   | { kind: "appOps"; package: string }
   | { kind: "diagnostics"; section: string }
-  | { kind: "files"; path: string; page: number; pageSize: number };
+  | { kind: "files"; path: string };
 export type RemoteAction =
   | { kind: "key"; key: string; longPress: boolean }
   | { kind: "text"; text: string }
   | { kind: "launch"; component: string };
+export type FileEntry = {
+  name: string;
+  path: string;
+  kind: "folder" | "file" | "other" | "brokenLink" | "denied";
+  link: boolean;
+  canOpen: boolean;
+  readable: boolean;
+  size: number | null;
+  modified: number | null;
+};
+export type FileListing = {
+  path: string;
+  status: "ok" | "denied" | "missing" | "notDirectory";
+  writable: boolean;
+  entries: FileEntry[];
+  total: number;
+  truncated: boolean;
+};
+export type UploadChoice = { id: string; name: string; size: number };
 export type Profile = { id: number; name: string; running: boolean };
 export type AppMetadata = {
   package: string;
@@ -117,6 +141,8 @@ export type AppMetadata = {
   permissions?: { name: string; granted: boolean; protection: number | null }[];
   signers?: string[];
   error?: string | null;
+  group?: Group;
+  rating?: Rating | null;
 };
 export type PackageDetail = {
   launchActivity?: string | null;
@@ -132,6 +158,8 @@ export type PackageDetail = {
   activities: string[];
   permissions: string[];
   raw: string;
+  rating?: Rating | null;
+  installedRelated?: string[];
 };
 export type Platform = {
   readonly native: boolean;
@@ -144,7 +172,24 @@ export type Platform = {
   cancelBulk(id: string): Promise<void>;
   discardBulk(id: string): Promise<void>;
   query<T>(target: Target, query: Query): Promise<T>;
-  prepare(target: Target, action: Action): Promise<Review>;
+  chooseUpload(sessionId: string): Promise<UploadChoice | null>;
+  upload(
+    sessionId: string,
+    uploadId: string,
+    folder: string,
+    name: string,
+    onprogress: (sent: number) => void,
+  ): Promise<void>;
+  cancelUpload(): Promise<void>;
+  prepare(
+    target: Target,
+    action: Action,
+    allowUnsafe?: boolean,
+  ): Promise<Review>;
+  ratingsStatus(): Promise<RatingsStatus>;
+  ratingsUpdate(): Promise<boolean>;
+  ratingsUpdateIfDue(): Promise<boolean>;
+  ratingsRemove(): Promise<void>;
   apply(id: string): Promise<Operation>;
   discard(id: string): Promise<void>;
   remote(target: Target, action: RemoteAction): Promise<Operation>;
@@ -181,7 +226,25 @@ export function nativePlatform(
     cancelBulk: (reviewId) => call("cancel_bulk", { reviewId }),
     discardBulk: (reviewId) => call("discard_bulk", { reviewId }),
     query: (target, query) => call("workspace_query", { target, query }),
-    prepare: (target, action) => call("prepare_action", { target, action }),
+    chooseUpload: (sessionId) => call("choose_upload", { sessionId }),
+    upload: (sessionId, uploadId, folder, name, onprogress) => {
+      const onProgress = new Channel<number>();
+      onProgress.onmessage = onprogress;
+      return call("start_upload", {
+        sessionId,
+        uploadId,
+        folder,
+        name,
+        onProgress,
+      });
+    },
+    cancelUpload: () => call("cancel_upload", {}),
+    prepare: (target, action, allowUnsafe) =>
+      call("prepare_action", { target, action, allowUnsafe }),
+    ratingsStatus: () => call("ratings_status"),
+    ratingsUpdate: () => call("ratings_update"),
+    ratingsUpdateIfDue: () => call("ratings_update_if_due"),
+    ratingsRemove: () => call("ratings_remove"),
     apply: (reviewId) => call("apply_action", { reviewId }),
     discard: (reviewId) => call("discard_review", { reviewId }),
     remote: (target, action) => call("remote_action", { target, action }),

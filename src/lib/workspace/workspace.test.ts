@@ -59,6 +59,84 @@ const operation: Operation = {
   recovery: null,
   createdMs: 1,
 };
+it("scrolls continuously through app batches without page controls", async () => {
+  const apps = Array.from({ length: 64 }, (_, i) => ({
+    package: `org.demo.app${i}`,
+    label: `Player ${i}`,
+    icon: null,
+  }));
+  const query = vi.fn(async (_target, q) => ({
+    items: apps.slice(q.page * q.pageSize, (q.page + 1) * q.pageSize),
+    total: apps.length,
+    page: q.page,
+    pageSize: q.pageSize,
+  }));
+  render(AppsPage, {
+    device,
+    api: { query } as unknown as Platform,
+    onreview: vi.fn(),
+    onbulk: vi.fn(),
+    oninstall: vi.fn(),
+  });
+  await screen.findByRole("button", { name: /Player 31/ });
+  expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /Player 63/ })).toBeNull();
+  const list = screen.getByRole("region", { name: "Installed apps" });
+  Object.defineProperties(list, {
+    scrollHeight: { value: 2000 },
+    clientHeight: { value: 400 },
+    scrollTop: { value: 1500, writable: true },
+  });
+  await fireEvent.scroll(list);
+  await screen.findByRole("button", { name: /Player 63/ });
+  expect(screen.getByText("Player 0")).toBeTruthy();
+  await fireEvent.scroll(list);
+  expect(query).toHaveBeenCalledTimes(2);
+});
+
+it("discards an old app batch when the filter changes", async () => {
+  let complete!: (value: unknown) => void;
+  const query = vi
+    .fn()
+    .mockResolvedValueOnce({
+      items: [{ package: "org.demo.old", label: "Old app" }],
+      total: 64,
+      page: 0,
+      pageSize: 32,
+    })
+    .mockReturnValueOnce(new Promise((resolve) => (complete = resolve)))
+    .mockResolvedValueOnce({
+      items: [{ package: "org.demo.new", label: "New app" }],
+      total: 1,
+      page: 0,
+      pageSize: 32,
+    });
+  render(AppsPage, {
+    device,
+    api: { query } as unknown as Platform,
+    onreview: vi.fn(),
+    onbulk: vi.fn(),
+    oninstall: vi.fn(),
+  });
+  await screen.findByRole("button", { name: /Old app/ });
+  await fireEvent.scroll(
+    screen.getByRole("region", { name: "Installed apps" }),
+  );
+  await fireEvent.change(screen.getByLabelText("App filter"), {
+    target: { value: "user" },
+  });
+  await screen.findByRole("button", { name: /New app/ });
+  complete({
+    items: [{ package: "org.demo.stale", label: "Stale app" }],
+    total: 64,
+    page: 1,
+    pageSize: 32,
+  });
+  await waitFor(() =>
+    expect(screen.queryByRole("button", { name: /Stale app/ })).toBeNull(),
+  );
+  expect(screen.queryByRole("button", { name: /Old app/ })).toBeNull();
+});
 it("browses an app and prepares its selected-profile action without executing it", async () => {
   const query = vi
     .fn()
@@ -265,8 +343,32 @@ it("opens a browsed app without exposing or requiring a typed activity name", as
   expect(prepare).not.toHaveBeenCalled();
 });
 
-it("identifies original devices in history when package and profile match",async()=>{
- const rows=[{...operation,id:"living",title:"Disable app",deviceLabel:"Living room TV"},{...operation,id:"bedroom",title:"Disable app",deviceLabel:"Bedroom TV"}];
- const history=vi.fn().mockResolvedValue({items:rows,total:2,page:0,pageSize:4}),recovery=vi.fn();render(HistoryPage,{api:{history,recovery} as unknown as Platform,onreview:vi.fn()});
- expect(await screen.findByRole("button",{name:/Living room TV/})).toBeTruthy();expect(screen.getByRole("button",{name:/Bedroom TV/})).toBeTruthy();expect(recovery).not.toHaveBeenCalled();
+it("identifies original devices in history when package and profile match", async () => {
+  const rows = [
+    {
+      ...operation,
+      id: "living",
+      title: "Disable app",
+      deviceLabel: "Living room TV",
+    },
+    {
+      ...operation,
+      id: "bedroom",
+      title: "Disable app",
+      deviceLabel: "Bedroom TV",
+    },
+  ];
+  const history = vi
+      .fn()
+      .mockResolvedValue({ items: rows, total: 2, page: 0, pageSize: 4 }),
+    recovery = vi.fn();
+  render(HistoryPage, {
+    api: { history, recovery } as unknown as Platform,
+    onreview: vi.fn(),
+  });
+  expect(
+    await screen.findByRole("button", { name: /Living room TV/ }),
+  ).toBeTruthy();
+  expect(screen.getByRole("button", { name: /Bedroom TV/ })).toBeTruthy();
+  expect(recovery).not.toHaveBeenCalled();
 });

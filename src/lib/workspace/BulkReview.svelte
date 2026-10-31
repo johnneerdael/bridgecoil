@@ -1,4 +1,6 @@
 <script lang="ts">
+  import RatingBadge from "./RatingBadge.svelte";
+  import { levelInfo } from "./ratings";
   import type { Platform, BulkReview, Operation } from "./client";
   import { errorMessage } from "../model";
   import Modal from "../Modal.svelte";
@@ -41,12 +43,14 @@
             text: i.review.effect,
             losses: i.review.losses,
             excluded: false,
+            rating: i.review.rating ?? null,
           })),
           ...review.excluded.map((i) => ({
             package: i.package,
             text: i.reason,
             losses: [],
             excluded: true,
+            rating: null,
           })),
         ]
       : [],
@@ -101,6 +105,12 @@
         <p class="subtle">
           {item.excluded ? "Excluded · will not run" : "Included"}
         </p>
+        {#if item.rating === "expert" || item.rating === "unsafe"}<div
+            class="risk-note rating-warning"
+          >
+            <RatingBadge level={item.rating} />
+            <p>{levelInfo[item.rating].explanation}</p>
+          </div>{:else if item.rating}<RatingBadge level={item.rating} />{/if}
         <button class="text-action" onclick={() => (detail = !detail)}
           >{detail ? "Show review" : "Inspect this item's impact"}</button
         >{#if detail}<Output

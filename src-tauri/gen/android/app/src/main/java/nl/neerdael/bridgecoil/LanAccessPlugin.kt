@@ -1,4 +1,4 @@
-package nl.neerdael.adbstudio.poc
+package nl.neerdael.bridgecoil
 
 import android.app.Activity
 import android.os.Build
@@ -19,6 +19,16 @@ class AppearanceArgs { var dark: Boolean = false }
 
 @TauriPlugin(permissions = [Permission(strings = ["android.permission.ACCESS_LOCAL_NETWORK"], alias = "localNetwork")])
 class LanAccessPlugin(private val hostActivity: Activity) : Plugin(hostActivity) {
+    private var discovery: AdbDiscovery? = null
+    @Command
+    fun discover(invoke: Invoke) {
+        hostActivity.runOnUiThread {
+            if (discovery != null) { invoke.reject("A discovery scan is already running."); return@runOnUiThread }
+            val scan = AdbDiscovery(hostActivity) { discovery = null }
+            discovery = scan
+            scan.start(invoke)
+        }
+    }
     @Command
     fun setAppearance(invoke: Invoke) {
         val dark = invoke.parseArgs(AppearanceArgs::class.java).dark

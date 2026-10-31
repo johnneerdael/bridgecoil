@@ -1,6 +1,6 @@
 name: adb-studio-app
 options:
-  bundleIdPrefix: nl.neerdael.adbstudio.poc
+  bundleIdPrefix: nl.neerdael.bridgecoil
   deploymentTarget:
     iOS: 15.0
 fileGroups: [../../src]
@@ -11,7 +11,7 @@ settingGroups:
   app:
     base:
       PRODUCT_NAME: Bridgecoil
-      PRODUCT_BUNDLE_IDENTIFIER: nl.neerdael.adbstudio.poc
+      PRODUCT_BUNDLE_IDENTIFIER: nl.neerdael.bridgecoil
 targetTemplates:
   app:
     type: application
@@ -45,6 +45,7 @@ targets:
       path: adb-studio-app_iOS/Info.plist
       properties:
         LSRequiresIPhoneOS: true
+        NSBonjourServices: ["_adb-tls-connect._tcp", "_adb-tls-pairing._tcp", "_adb._tcp"]
         UILaunchStoryboardName: LaunchScreen
         UIRequiredDeviceCapabilities: [arm64, metal]
         UISupportedInterfaceOrientations:
@@ -78,6 +79,7 @@ targets:
       - framework: libapp.a
         embed: false
       - sdk: CoreGraphics.framework
+      - sdk: Network.framework
       - sdk: Metal.framework
       - sdk: MetalKit.framework
       - sdk: QuartzCore.framework

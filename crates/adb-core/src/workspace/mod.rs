@@ -3,6 +3,7 @@ pub mod bulk;
 pub mod commands;
 pub mod driver;
 pub mod engine;
+pub mod files;
 pub mod history;
 pub mod metadata;
 pub mod queries;

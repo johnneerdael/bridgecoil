@@ -3,12 +3,16 @@ mod workspace;
 use adb_core::{
     apk::{self, ApkInfo},
     backend::{Client, DeviceInfo, InstallProgress, PocError},
+    workspace::files,
 };
 use serde::Serialize;
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    sync::Mutex,
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 use tauri::{Emitter, Manager, State, ipc::Channel};
 use tauri_plugin_dialog::DialogExt;
@@ -98,6 +102,10 @@ async fn connection_status(state: State<'_, Backend>) -> Result<Option<DeviceInf
     Ok(state.0.lock().await.status())
 }
 #[tauri::command]
+async fn discover_adb(app: tauri::AppHandle) -> Result<adb_core::discovery::DiscoveryResult> {
+    local_network::discover(&app).await
+}
+#[tauri::command]
 async fn pair_device(
     app: tauri::AppHandle,
     endpoint: String,
@@ -126,6 +134,7 @@ async fn connect_device(
     app: tauri::AppHandle,
     endpoint: String,
     allow_legacy: bool,
+    expected_device_id: Option<String>,
     state: State<'_, Backend>,
     selections: State<'_, Selections>,
     attempts: State<'_, ConnectionAttempt>,
@@ -141,6 +150,12 @@ async fn connect_device(
         _=await_connection_cancel(&mut cancel)=>Err(PocError::new("cancelled","Connection cancelled."))
     };
     finish_connection_attempt(&attempts, &id);
+    if let Ok(device) = &result {
+        if expected_device_id.as_ref().is_some_and(|expected| expected != &device.device_id) {
+            client.disconnect();
+            return Err(PocError::new("differentDevice", "That address belongs to a different device. Check the saved TV’s connection address."));
+        }
+    }
     result
 }
 #[tauri::command]
@@ -283,6 +298,122 @@ async fn install_apk(
         )
         .await
 }
+struct PendingUpload {
+    id: String,
+    session_id: String,
+    file: std::fs::File,
+    size: u64,
+}
+#[derive(Default)]
+struct Uploads {
+    pending: Mutex<Option<PendingUpload>>,
+    cancel: AtomicBool,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UploadChoice {
+    id: String,
+    name: String,
+    size: u64,
+}
+#[tauri::command]
+async fn choose_upload(
+    app: tauri::AppHandle,
+    session_id: String,
+    state: State<'_, Backend>,
+    uploads: State<'_, Uploads>,
+) -> Result<Option<UploadChoice>> {
+    if state
+        .0
+        .lock()
+        .await
+        .status()
+        .is_none_or(|v| v.id != session_id)
+    {
+        return Err(PocError::new(
+            "staleSession",
+            "Connect to a device before choosing a file.",
+        ));
+    }
+    let picker_app = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(
+        move || -> Result<Option<(std::fs::File, String, u64)>> {
+            let Some(path) = picker_app.dialog().file().blocking_pick_file() else {
+                return Ok(None);
+            };
+            let name = files::picked_name(&path.to_string());
+            let mut opts = tauri_plugin_fs::OpenOptions::new();
+            opts.read(true);
+            let opened = picker_app.fs().open(path.clone(), opts).map_err(err);
+            #[cfg(target_os = "ios")]
+            let _ = picker_app
+                .fs()
+                .stop_accessing_security_scoped_resource(path);
+            let file = opened?;
+            let size = file.metadata().map_err(err)?.len();
+            Ok(Some((file, name, size)))
+        },
+    )
+    .await
+    .map_err(err)??;
+    let Some((file, name, size)) = picked else {
+        return Ok(None);
+    };
+    let id = uuid::Uuid::new_v4().to_string();
+    *uploads.pending.lock().map_err(err)? = Some(PendingUpload {
+        id: id.clone(),
+        session_id,
+        file,
+        size,
+    });
+    Ok(Some(UploadChoice { id, name, size }))
+}
+#[tauri::command]
+async fn start_upload(
+    session_id: String,
+    upload_id: String,
+    folder: String,
+    name: String,
+    on_progress: Channel<u64>,
+    state: State<'_, Backend>,
+    uploads: State<'_, Uploads>,
+) -> Result<()> {
+    let remote = files::child_path(&folder, &name)?;
+    let pending = {
+        let mut slot = uploads.pending.lock().map_err(err)?;
+        if slot
+            .as_ref()
+            .is_none_or(|p| p.id != upload_id || p.session_id != session_id)
+        {
+            return Err(PocError::new(
+                "staleSelection",
+                "Choose the file again for this connection.",
+            ));
+        }
+        slot.take()
+            .ok_or_else(|| PocError::new("staleSelection", "This file was already used."))?
+    };
+    uploads.cancel.store(false, Ordering::SeqCst);
+    state
+        .0
+        .lock()
+        .await
+        .upload(
+            &session_id,
+            tokio::fs::File::from_std(pending.file),
+            pending.size,
+            &remote,
+            &uploads.cancel,
+            move |sent| {
+                let _ = on_progress.send(sent);
+            },
+        )
+        .await
+}
+#[tauri::command]
+fn cancel_upload(uploads: State<'_, Uploads>) {
+    uploads.cancel.store(true, Ordering::SeqCst);
+}
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProgressEvent {
@@ -316,11 +447,19 @@ pub fn run() {
                 data.join("identity"),
             ))));
             app.manage(Selections::default());
+            app.manage(Uploads::default());
+            let ratings = std::sync::Arc::new(adb_core::ratings::store::Ratings::open(
+                &data.join("ratings"),
+            ));
+            app.manage(ratings.clone());
             app.manage(ConnectionAttempt::default());
             app.manage(adb_core::workspace::bulk::Bulk::default());
-            app.manage(adb_core::workspace::engine::Workspace::new(
-                adb_core::workspace::history::History::open(&data.join("history.sqlite3"))?,
-            ));
+            app.manage(
+                adb_core::workspace::engine::Workspace::new(
+                    adb_core::workspace::history::History::open(&data.join("history.sqlite3"))?,
+                )
+                .with_ratings(ratings),
+            );
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -340,11 +479,19 @@ pub fn run() {
             set_appearance,
             cancel_connection,
             connection_status,
+            discover_adb,
             pair_device,
             connect_device,
             disconnect_device,
             choose_apk,
-            install_apk
+            install_apk,
+            choose_upload,
+            start_upload,
+            cancel_upload,
+            ratings_status,
+            ratings_update,
+            ratings_update_if_due,
+            ratings_remove
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Bridgecoil");

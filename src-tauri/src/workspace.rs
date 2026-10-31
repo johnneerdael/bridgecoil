@@ -1,6 +1,10 @@
 use crate::{Backend, Result, Selections, err};
 use adb_core::{
     backend::{DeviceInfo, PocError},
+    ratings::{
+        fetch::GithubSource,
+        store::{Ratings, RatingsStatus},
+    },
     workspace::{
         bulk::{Bulk, BulkReview},
         engine::{Action, PackageAction, Review, Workspace},
@@ -10,8 +14,33 @@ use adb_core::{
     },
 };
 use serde::Deserialize;
+use std::sync::Arc;
 use tauri::State;
 
+#[tauri::command]
+pub fn ratings_status(ratings: State<'_, Arc<Ratings>>) -> RatingsStatus {
+    ratings.status()
+}
+#[tauri::command]
+pub async fn ratings_update(ratings: State<'_, Arc<Ratings>>) -> Result<bool> {
+    let ratings = ratings.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || ratings.update(&GithubSource::default()))
+        .await
+        .map_err(err)?
+}
+#[tauri::command]
+pub async fn ratings_update_if_due(ratings: State<'_, Arc<Ratings>>) -> Result<bool> {
+    let ratings = ratings.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        ratings.update_if_due(&GithubSource::default(), now_ms())
+    })
+    .await
+    .map_err(err)?
+}
+#[tauri::command]
+pub async fn ratings_remove(ratings: State<'_, Arc<Ratings>>) -> Result<()> {
+    ratings.inner().clone().remove_off_thread().await
+}
 #[tauri::command]
 pub async fn prepare_bulk(
     target: Target,
@@ -64,18 +93,32 @@ pub async fn workspace_query(
     target: Target,
     query: Query,
     backend: State<'_, Backend>,
+    ratings: State<'_, Arc<Ratings>>,
 ) -> Result<serde_json::Value> {
-    queries::query(&mut *backend.0.lock().await, &target, query).await
+    let list = ratings.current();
+    queries::query_rated(
+        &mut *backend.0.lock().await,
+        &target,
+        query,
+        list.as_deref(),
+    )
+    .await
 }
 #[tauri::command]
 pub async fn prepare_action(
     target: Target,
     action: Action,
+    allow_unsafe: Option<bool>,
     backend: State<'_, Backend>,
     workspace: State<'_, Workspace>,
 ) -> Result<Review> {
     workspace
-        .prepare(&mut *backend.0.lock().await, &target, action)
+        .prepare_with(
+            &mut *backend.0.lock().await,
+            &target,
+            action,
+            allow_unsafe.unwrap_or(false),
+        )
         .await
 }
 #[tauri::command]

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Bridgecoil",
-  "version": "0.1.3",
-  "identifier": "nl.neerdael.adbstudio.poc",
+  "version": "0.1.7",
+  "identifier": "nl.neerdael.bridgecoil",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:1420",

@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use std::{fs::File, io::Read, path::Path};
 
 pub const MAX_APK_BYTES: u64 = 1024 * 1024 * 1024;
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApkInfo {
     pub package: String,
@@ -13,6 +13,12 @@ pub struct ApkInfo {
     pub abis: Vec<String>,
     pub bytes: u64,
     pub sha256: String,
+    pub split: Option<String>,
+    pub required_splits: Vec<String>,
+    pub config_for_split: Option<String>,
+    pub requires_splits: bool,
+    pub required_split_types: Vec<String>,
+    pub split_types: Vec<String>,
 }
 pub fn valid_package(value: &str) -> bool {
     value.contains('.')
@@ -23,7 +29,20 @@ pub fn valid_package(value: &str) -> bool {
                 })
         })
 }
+pub fn valid_split_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
+}
 pub fn inspect(path: &Path) -> Result<ApkInfo, String> {
+    inspect_inner(path, false)
+}
+pub fn inspect_package(path: &Path) -> Result<ApkInfo, String> {
+    inspect_inner(path, true)
+}
+fn inspect_inner(path: &Path, allow_split: bool) -> Result<ApkInfo, String> {
     let mut file = File::open(path).map_err(|e| e.to_string())?;
     let bytes = file.metadata().map_err(|e| e.to_string())?.len();
     if bytes == 0 || bytes > MAX_APK_BYTES {
@@ -58,7 +77,11 @@ pub fn inspect(path: &Path) -> Result<ApkInfo, String> {
     if data.len() > 2 * 1024 * 1024 {
         return Err("APK manifest exceeds the limit.".into());
     }
-    let metadata = crate::manifest::parse(&data)?;
+    let metadata = if allow_split {
+        crate::manifest::parse_package(&data)
+    } else {
+        crate::manifest::parse(&data)
+    }?;
     drop(manifest);
     let mut abis: Vec<_> = zip
         .file_names()
@@ -72,6 +95,12 @@ pub fn inspect(path: &Path) -> Result<ApkInfo, String> {
     abis.sort();
     abis.dedup();
     Ok(ApkInfo {
+        split: metadata.split,
+        required_splits: metadata.required_splits,
+        config_for_split: metadata.config_for_split,
+        requires_splits: metadata.requires_splits,
+        required_split_types: metadata.required_split_types,
+        split_types: metadata.split_types,
         package: metadata.package,
         version_code: metadata.version_code,
         version_name: metadata.version_name,

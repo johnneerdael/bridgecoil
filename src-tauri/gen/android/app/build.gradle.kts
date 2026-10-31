@@ -16,17 +16,35 @@ val tauriProperties = Properties().apply {
 
 val uiValidation = providers.environmentVariable("BRIDGECOIL_UI_VALIDATION").orNull == "1"
 
+// Written by CI from repository secrets, and never committed. Without it, release builds are unsigned.
+val keystoreProperties = Properties().apply {
+    val propFile = rootProject.file("keystore.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     compileSdk = 37
-    namespace = "nl.neerdael.adbstudio.poc"
+    namespace = "nl.neerdael.bridgecoil"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = if (uiValidation) "nl.neerdael.adbstudio.poc.uitest" else "nl.neerdael.adbstudio.poc"
+        applicationId = if (uiValidation) "nl.neerdael.bridgecoil.uitest" else "nl.neerdael.bridgecoil"
         manifestPlaceholders["appLabel"] = if (uiValidation) "Bridgecoil UI test" else "@string/app_name"
         minSdk = 24
         targetSdk = 37
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        if (!keystoreProperties.isEmpty) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("password")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("password")
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -42,6 +60,7 @@ android {
             }
         }
         getByName("release") {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             optimization {
                enable = true
             }

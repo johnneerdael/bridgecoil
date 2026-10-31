@@ -1,13 +1,21 @@
 //! Single-use, target-bound reviews. Only this module turns a review into a mutation.
 use super::{
+    files,
     commands::*,
     driver::*,
     history::{History, now_ms},
     types::*,
 };
-use crate::{backend::PocError, shell_quote};
+use crate::{
+    backend::PocError,
+    ratings::{Level, store::Ratings},
+    shell_quote,
+};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use uuid::Uuid;
 type Result<T> = std::result::Result<T, PocError>;
 
@@ -55,6 +63,16 @@ pub enum Action {
         permission: String,
         grant: bool,
     },
+    FileDelete {
+        path: String,
+    },
+    FileMove {
+        from: String,
+        to: String,
+    },
+    FileCreateFolder {
+        path: String,
+    },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -95,6 +113,7 @@ pub struct Review {
     pub reversible: bool,
     pub commands: Vec<String>,
     pub expires_ms: i64,
+    pub rating: Option<Level>,
 }
 #[derive(Serialize, Deserialize)]
 struct Recovery {
@@ -111,13 +130,29 @@ struct Prepared {
 pub struct Workspace {
     pub history: History,
     plans: Mutex<HashMap<String, Prepared>>,
+    ratings: Option<Arc<Ratings>>,
 }
 impl Workspace {
     pub fn new(history: History) -> Self {
         Self {
             history,
             plans: Mutex::new(HashMap::new()),
+            ratings: None,
         }
+    }
+    pub fn with_ratings(mut self, ratings: Arc<Ratings>) -> Self {
+        self.ratings = Some(ratings);
+        self
+    }
+    fn rating_of(&self, action: &Action) -> Option<Level> {
+        let Action::Package { package, .. } = action else {
+            return None;
+        };
+        self.ratings
+            .as_ref()?
+            .current()?
+            .get(package)
+            .and_then(|r| r.level)
     }
     pub async fn prepare(
         &self,
@@ -125,10 +160,63 @@ impl Workspace {
         target: &Target,
         action: Action,
     ) -> Result<Review> {
+        self.prepare_with(driver, target, action, false).await
+    }
+    /// Only a direct request from the app's detail view passes `allow_unsafe`; bulk and
+    /// recovery go through `prepare`, so they can never skip the block.
+    pub async fn prepare_with(
+        &self,
+        driver: &mut dyn ShellDriver,
+        target: &Target,
+        action: Action,
+        allow_unsafe: bool,
+    ) -> Result<Review> {
         validate_target(driver.current_target().as_ref(), target)?;
-        let (title, effect, losses, command) = describe(&action, target.profile_id)?;
+        let rating = self.rating_of(&action);
+        if !allow_unsafe
+            && rating == Some(Level::Unsafe)
+            && matches!(
+                action,
+                Action::Package {
+                    action: PackageAction::Disable
+                        | PackageAction::Remove
+                        | PackageAction::ClearData,
+                    ..
+                }
+            )
+        {
+            return Err(PocError::new(
+                "unsafeRating",
+                "The community list rates this app Unsafe: changing it can break vital parts of Android.",
+            ));
+        }
+        let (title, effect, mut losses, command) = describe(&action, target.profile_id)?;
         let before = probe(driver, target, &action).await?;
         let mut recovery = None;
+        if !file_paths(&action).is_empty() {
+            let states: Vec<files::PathState> = serde_json::from_str(&before).map_err(internal)?;
+            match &action {
+                Action::FileDelete { path } => {
+                    let state = files::state_of(&states, path)?;
+                    files::check_delete(state)?;
+                    losses.push(files::delete_loss(state));
+                }
+                Action::FileMove { from, to } => {
+                    files::check_move(
+                        files::state_of(&states, from)?,
+                        files::state_of(&states, to)?,
+                    )?;
+                    recovery = Some(Action::FileMove {
+                        from: to.clone(),
+                        to: from.clone(),
+                    });
+                }
+                Action::FileCreateFolder { path } => {
+                    files::check_create(files::state_of(&states, path)?)?;
+                }
+                _ => {}
+            }
+        }
         if let Action::Package {
             package,
             action: kind,
@@ -212,6 +300,7 @@ impl Workspace {
             reversible: recovery.is_some(),
             commands: vec![command],
             expires_ms: now_ms() + 600_000,
+            rating,
         };
         let mut plans = self.plans.lock().map_err(internal)?;
         plans.retain(|_, p| p.review.expires_ms > now_ms());
@@ -415,6 +504,11 @@ fn state_label(action: &Action, before: &str) -> String {
             "Arbitrary shell commands have no general readback or automatic undo.".into()
         }
         Action::Permission { .. } => format!("Current permission: {before}"),
+        Action::FileDelete { .. } | Action::FileMove { .. } | Action::FileCreateFolder { .. } => {
+            serde_json::from_str::<Vec<files::PathState>>(before)
+                .map(|states| files::state_summary(&states))
+                .unwrap_or_else(|_| "Current state unavailable.".into())
+        }
         _ => format!("Current value: {before}"),
     }
 }
@@ -430,6 +524,16 @@ fn kind(a: &Action) -> &str {
         Action::Setting { .. } => "setting",
         Action::DefaultHome { .. } => "launcher",
         Action::Permission { .. } => "permission",
+        Action::FileDelete { .. } | Action::FileMove { .. } | Action::FileCreateFolder { .. } => {
+            "file"
+        }
+    }
+}
+fn file_paths(a: &Action) -> Vec<&str> {
+    match a {
+        Action::FileDelete { path } | Action::FileCreateFolder { path } => vec![path],
+        Action::FileMove { from, to } => vec![from, to],
+        _ => Vec::new(),
     }
 }
 fn home_query(user: u32) -> String {
@@ -514,6 +618,11 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
         }
         return Ok(if entry.granted { "granted" } else { "denied" }.into());
     }
+    let paths = file_paths(a);
+    if !paths.is_empty() {
+        let output = d.shell(t, &files::state_command(&paths)).await?;
+        return serde_json::to_string(&files::parse_states(&output.stdout)?).map_err(internal);
+    }
     let command = match a {
         Action::AppOp { package, op, .. } => {
             super::app_ops::probe_command(t.profile_id, package, op)?
@@ -530,7 +639,10 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
         }
         Action::DefaultHome { .. } => home_query(t.profile_id),
         Action::Shell { .. } => return Ok(String::new()),
-        Action::Permission { .. } => unreachable!(),
+        Action::Permission { .. }
+        | Action::FileDelete { .. }
+        | Action::FileMove { .. }
+        | Action::FileCreateFolder { .. } => unreachable!(),
     };
     let output = d.shell(t, &command).await?;
     if !output.success() {
@@ -579,6 +691,21 @@ fn verified(a: &Action, after: &str) -> bool {
         Action::DefaultHome { component } => after == component,
         Action::Shell { .. } => false,
         Action::Permission { grant, .. } => after == if *grant { "granted" } else { "denied" },
+        Action::FileDelete { path } | Action::FileCreateFolder { path } => {
+            let exists = matches!(a, Action::FileCreateFolder { .. });
+            serde_json::from_str::<Vec<files::PathState>>(after)
+                .ok()
+                .as_deref()
+                .and_then(|states| files::state_of(states, path).ok())
+                .is_some_and(|state| state.exists == exists)
+        }
+        Action::FileMove { from, to } => serde_json::from_str::<Vec<files::PathState>>(after)
+            .ok()
+            .as_deref()
+            .is_some_and(|states| {
+                files::state_of(states, from).is_ok_and(|s| !s.exists)
+                    && files::state_of(states, to).is_ok_and(|s| s.exists)
+            }),
     }
 }
 fn validate_setting(namespace: &str, key: &str, value: Option<&str>) -> Result<()> {
@@ -735,12 +862,50 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
                 command,
             )
         }
+        Action::FileDelete { path } => {
+            let path = files::action_path(path)?;
+            (
+                format!("Delete {}", base_name(path)),
+                format!("Delete {path} from the TV."),
+                format!("rm -rf {}", shell_quote(path)),
+            )
+        }
+        Action::FileMove { from, to } => {
+            let (from, to) = (files::action_path(from)?, files::action_path(to)?);
+            if from == to {
+                return Err(PocError::new("input", "Choose a different name or folder."));
+            }
+            let renamed = parent_path(from) == parent_path(to);
+            (
+                format!(
+                    "{} {}",
+                    if renamed { "Rename" } else { "Move" },
+                    base_name(from)
+                ),
+                format!("Change {from} to {to}."),
+                format!("mv -n {} {}", shell_quote(from), shell_quote(to)),
+            )
+        }
+        Action::FileCreateFolder { path } => {
+            let path = files::action_path(path)?;
+            (
+                format!("Create folder {}", base_name(path)),
+                format!("Create {path} on the TV."),
+                format!("mkdir {}", shell_quote(path)),
+            )
+        }
         Action::DefaultHome { component } => {
             let c = component_arg(component)?;
             ("Set default Home app".into(),"Request this Home activity for the profile. OEM firmware may reject it or show a TV chooser. Test the physical Home button afterwards.".into(),format!("cmd package set-home-activity --user {user} {c}"))
         }
     };
     Ok((result.0, result.1, losses, result.2))
+}
+fn base_name(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
+}
+fn parent_path(path: &str) -> &str {
+    path.rsplit_once('/').map_or(path, |(parent, _)| parent)
 }
 fn permission_arg(permission: &str) -> Result<String> {
     if permission.is_empty()

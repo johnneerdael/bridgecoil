@@ -1,6 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { startNative } from "./lib/native-startup";
+  import DiscoveryDialog from "./lib/DiscoveryDialog.svelte";
+  import {
+    reconnectService,
+    type DiscoveredService,
+    type DiscoveryResult,
+  } from "./lib/discovery";
+  import {
+    loadSavedDevices,
+    rememberConnected,
+    rememberPaired,
+    savedDevicesKey,
+    type SavedDevice,
+  } from "./lib/saved-devices";
   import Modal from "./lib/Modal.svelte";
   import WorkspaceScreen from "./lib/workspace/WorkspaceScreen.svelte";
   import Icon from "./lib/workspace/Icon.svelte";
@@ -11,7 +24,15 @@
     themeKey,
     type ThemePreference,
   } from "./lib/theme/theme";
-  import {endpointHost,loadPairs,recordPair,pairStoreKey,stageLabel,type PairRecord,type ConnectionProgress} from "./lib/connection-model";
+  import {
+    endpointHost,
+    loadPairs,
+    recordPair,
+    pairStoreKey,
+    stageLabel,
+    type PairRecord,
+    type ConnectionProgress,
+  } from "./lib/connection-model";
   import { invoke, isTauri, Channel } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import {
@@ -56,13 +77,108 @@
   let busyLabel = $state("");
   let error = $state("");
   let notice = $state("");
-  let errorDetails=$state("");
-  let pairingRequired=$state(false);
-  let pairs=$state<PairRecord[]>(loadPairs(localStorage.getItem(pairStoreKey)));
-  const pairingRecord=$derived(pairs.find(record=>record.host===endpointHost(endpoint)));
-  let attemptId=$state("");let connectionSequence=0;
-  function progressChannel(){const generation=++connectionSequence;const channel=new Channel<ConnectionProgress>();channel.onmessage=event=>{if(generation===connectionSequence&&busy){attemptId=event.attemptId;busyLabel=stageLabel[event.stage]??"Connecting to TV";}};return channel;}
-  async function cancelConnection(){if(!attemptId)return;busyLabel="Cancelling…";try{await invoke("cancel_connection",{attemptId});}catch(e){error=errorMessage(e);}}
+  let errorDetails = $state("");
+  let pairingRequired = $state(false);
+  let pairs = $state<PairRecord[]>(
+    loadPairs(localStorage.getItem(pairStoreKey)),
+  );
+  let savedDevices = $state(
+    loadSavedDevices(
+      localStorage.getItem(savedDevicesKey),
+      loadPairs(localStorage.getItem(pairStoreKey)),
+      localStorage.getItem("adb.connectionEndpoint"),
+    ),
+  );
+  let showSaved = $state(true);
+  let connectionChoice = $state<SavedDevice | null>(null);
+  let discoveryOpen = $state(false);
+  let discoveryPhase = $state(false);
+  let cancelRefresh = false;
+  let selectedAdvertisement = $state<DiscoveredService | null>(null);
+  const discover = () => invoke<DiscoveryResult>("discover_adb");
+  async function chooseDiscovered(service: DiscoveredService) {
+    discoveryOpen = false;
+    if (device) {
+      if (service.endpoint === device.endpoint && service.kind !== "pairing")
+        return;
+      await disconnect();
+      if (device) return;
+    }
+    editConnection(
+      savedDevices.find((d) => d.discoveryName === service.name) ?? null,
+    );
+    selectedAdvertisement = service;
+    if (service.kind === "pairing") {
+      pairEndpoint = service.endpoint;
+      code = "";
+      step = "pair";
+    } else {
+      endpoint = service.endpoint;
+      legacy = service.kind === "legacy" && legacy;
+    }
+  }
+  const savedView = $derived(
+    !device &&
+      showSaved &&
+      savedDevices.length > 0 &&
+      (page === "connect" || page === "device"),
+  );
+  function storeSaved() {
+    try {
+      localStorage.setItem(savedDevicesKey, JSON.stringify(savedDevices));
+    } catch {
+      notice = "Device details could not be saved on this phone.";
+    }
+  }
+  function editConnection(saved: SavedDevice | null) {
+    selectedAdvertisement = null;
+    connectionChoice = saved;
+    showSaved = false;
+    page = "connect";
+    step = "connect";
+    endpoint =
+      saved?.endpoint ??
+      (saved
+        ? `${saved.host.includes(":") ? `[${saved.host}]` : saved.host}:`
+        : "");
+    legacy = saved?.legacy ?? false;
+    error = "";
+    notice = "";
+  }
+  async function quickConnect(saved: SavedDevice) {
+    editConnection(saved);
+    await connect(true);
+  }
+  const pairingRecord = $derived(
+    pairs.find((record) => record.host === endpointHost(endpoint)),
+  );
+  let attemptId = $state("");
+  let connectionSequence = 0;
+  function progressChannel() {
+    const generation = ++connectionSequence;
+    const channel = new Channel<ConnectionProgress>();
+    channel.onmessage = (event) => {
+      if (generation === connectionSequence && busy) {
+        attemptId = event.attemptId;
+        busyLabel = stageLabel[event.stage] ?? "Connecting to TV";
+      }
+    };
+    return channel;
+  }
+  async function cancelConnection() {
+    if (discoveryPhase) {
+      cancelRefresh = true;
+      busyLabel = "Cancelling…";
+      return;
+    }
+    if (!attemptId) return;
+    busyLabel = "Cancelling…";
+    try {
+      await invoke("cancel_connection", { attemptId });
+    } catch (e) {
+      error = errorMessage(e);
+    }
+  }
 
   let unknown = $state(false);
   let permissionDenied = $state(false);
@@ -101,6 +217,11 @@
           }
           dispose = result.unlisten;
           device = result.status;
+          if (device) {
+            savedDevices = rememberConnected(savedDevices, device);
+            storeSaved();
+            page = "device";
+          }
           nativeReady = true;
         })
         .catch((e) => {
@@ -116,17 +237,34 @@
     if (busy || !native || !nativeReady) return;
     busy = true;
     busyLabel = label;
-    error = "";errorDetails="";pairingRequired=false;
+    error = "";
+    errorDetails = "";
+    pairingRequired = false;
     notice = "";
     unknown = false;
     permissionDenied = false;
     try {
       await action();
     } catch (e) {
-      const cancelled=!!e&&typeof e==="object"&&"kind" in e&&e.kind==="cancelled";
-      if(cancelled){notice=errorMessage(e);error="";code="";}else error = errorMessage(e);
-      errorDetails=!!e&&typeof e==="object"&&"details" in e&&typeof e.details==="string"?e.details:"";
-      pairingRequired=!!e&&typeof e==="object"&&"kind" in e&&["pairingRequired","authorizationRequired"].includes(String(e.kind));
+      const cancelled =
+        !!e && typeof e === "object" && "kind" in e && e.kind === "cancelled";
+      if (cancelled) {
+        notice = errorMessage(e);
+        error = "";
+        code = "";
+      } else error = errorMessage(e);
+      errorDetails =
+        !!e &&
+        typeof e === "object" &&
+        "details" in e &&
+        typeof e.details === "string"
+          ? e.details
+          : "";
+      pairingRequired =
+        !!e &&
+        typeof e === "object" &&
+        "kind" in e &&
+        ["pairingRequired", "authorizationRequired"].includes(String(e.kind));
       permissionDenied =
         !!e && typeof e === "object" && "kind" in e && e.kind === "permission";
       unknown =
@@ -140,37 +278,107 @@
         device = null;
       }
     } finally {
-      busy = false;attemptId="";connectionSequence++;
+      busy = false;
+      discoveryPhase = false;
+      cancelRefresh = false;
+      attemptId = "";
+      connectionSequence++;
       busyLabel = "";
     }
   }
   async function pair() {
     await run("Pairing with TV", async () => {
-      const guid=await invoke<string>("pair_device", { endpoint: pairEndpoint, code,onProgress:progressChannel() });
-      pairs=recordPair(pairs,pairEndpoint,guid);
-      try{localStorage.setItem(pairStoreKey,JSON.stringify(pairs));}catch{/* Pairing itself succeeded even when local status storage is full. */}
-      const host=endpointHost(pairEndpoint);
-      if(host&&endpointHost(endpoint)!==host)endpoint=(host.includes(":")?`[${host}]`:host)+":";
+      const guid = await invoke<string>("pair_device", {
+        endpoint: pairEndpoint,
+        code,
+        onProgress: progressChannel(),
+      });
+      pairs = recordPair(pairs, pairEndpoint, guid);
+      showSaved = false;
+      savedDevices = rememberPaired(savedDevices, pairEndpoint);
+      storeSaved();
+      try {
+        localStorage.setItem(pairStoreKey, JSON.stringify(pairs));
+      } catch {
+        /* Pairing itself succeeded even when local status storage is full. */
+      }
+      const host = endpointHost(pairEndpoint);
+      if (host && endpointHost(endpoint) !== host)
+        endpoint = (host.includes(":") ? `[${host}]` : host) + ":";
       code = "";
       step = "connect";
       notice =
         "Paired. Enter the connection address from the TV’s main Wireless debugging screen.";
     });
   }
-  async function connect() {
+  async function connect(refreshAddress = false) {
+    if (busy || !native || !nativeReady) return;
     selection = null;
     confirmed = false;
     device = null;
-    await run("Connecting to TV", async () => {
-      device = await invoke<Device>("connect_device", {
-        endpoint,
-        allowLegacy: legacy,
-        onProgress:progressChannel(),
-      });
-      localStorage.setItem("adb.connectionEndpoint", endpoint.trim());
-      notice = "Connected. Your device workspace is ready.";
-      page = "device";
-    });
+    await run(
+      refreshAddress ? "Finding TV on your network" : "Connecting to TV",
+      async () => {
+        if (refreshAddress && connectionChoice) {
+          discoveryPhase = true;
+          try {
+            const result = await discover();
+            const current = reconnectService(
+              connectionChoice,
+              result.services,
+              pairs,
+            );
+            if (current) {
+              endpoint = current.endpoint;
+              selectedAdvertisement = current;
+            }
+          } catch (e) {
+            if (
+              e &&
+              typeof e === "object" &&
+              "kind" in e &&
+              e.kind === "permission"
+            )
+              throw e;
+            // Networks can block multicast. The saved endpoint remains a valid fallback.
+          } finally {
+            discoveryPhase = false;
+          }
+          if (cancelRefresh)
+            throw { kind: "cancelled", message: "Connection cancelled." };
+          if (!selectedAdvertisement && !connectionChoice.endpoint)
+            throw {
+              kind: "discovery",
+              message:
+                "No connection port was found for this paired TV. Find again or enter the address from its main Wireless debugging screen.",
+            };
+          busyLabel = "Connecting to TV";
+        }
+        device = await invoke<Device>("connect_device", {
+          endpoint,
+          allowLegacy: legacy,
+          expectedDeviceId: connectionChoice?.deviceId ?? null,
+          onProgress: progressChannel(),
+        });
+        savedDevices = rememberConnected(savedDevices, device);
+        if (selectedAdvertisement?.endpoint === device.endpoint) {
+          savedDevices = savedDevices.map((d) =>
+            d.endpoint === device?.endpoint &&
+            d.deviceId ===
+              (device.deviceId.startsWith("session:") ? null : device.deviceId)
+              ? { ...d, discoveryName: selectedAdvertisement!.name }
+              : d,
+          );
+        }
+        storeSaved();
+        try {
+          localStorage.setItem("adb.connectionEndpoint", endpoint.trim());
+        } catch {
+          /* Connection succeeded. */
+        }
+        page = "device";
+      },
+    );
   }
   async function disconnect() {
     await run("Disconnecting", async () => {
@@ -180,6 +388,7 @@
       confirmed = false;
       progress = null;
       page = "connect";
+      showSaved = true;
     });
   }
   async function pick() {
@@ -217,7 +426,9 @@
   let installHelpOpen = $state(false);
   let keyboard = $state(false);
   let messagePage = $state(0);
-  const messageText = $derived(error?[error,errorDetails].filter(Boolean).join("\n\n"):notice);
+  const messageText = $derived(
+    error ? [error, errorDetails].filter(Boolean).join("\n\n") : notice,
+  );
   const messagePages = $derived(
     Math.max(1, Math.ceil(messageText.length / 400)),
   );
@@ -228,6 +439,11 @@
   function navigate(next: Destination) {
     page = next;
     menuOpen = false;
+    if (!device && (next === "device" || next === "connect")) {
+      showSaved = true;
+      error = "";
+      notice = "";
+    }
   }
   function focusInput(event: FocusEvent) {
     keyboard =
@@ -235,10 +451,21 @@
       (event.target instanceof HTMLInputElement &&
         event.target.type !== "checkbox");
   }
+  function keepFormSteady(event: PointerEvent) {
+    // Blur expands the form before click. Keep focus until the button activates.
+    if (
+      keyboard &&
+      event.button === 0 &&
+      event.target instanceof Element &&
+      event.target.closest("button")
+    )
+      event.preventDefault();
+  }
   const label = (value: string | undefined, max = 100) =>
     value && value.length > max ? value.slice(0, max) + "…" : value;
 </script>
 
+<svelte:window onpointerdown={keepFormSteady} />
 <div
   class="workspace"
   class:keyboard
@@ -280,7 +507,7 @@
       aria-label={`Connection status: ${device ? "Connected" : "Not connected"}`}
       onclick={() => {
         if (device) deviceOpen = true;
-        else page = "connect";
+        else navigate("connect");
       }}
       disabled={busy}
       ><span class="status-dot" class:online={device}></span>{busy
@@ -301,11 +528,13 @@
       >{/if}
     <header class="page-heading">
       <h1>
-        {page === "connect"
-          ? "Connect a device"
-          : page === "install"
-            ? "Install an app"
-            : destinations.find((d) => d.id === page)?.label}
+        {savedView
+          ? "Your devices"
+          : page === "connect"
+            ? "Connect a device"
+            : page === "install"
+              ? "Install an app"
+              : destinations.find((d) => d.id === page)?.label}
       </h1>
       {#if page === "connect" || page === "install"}
         <button
@@ -333,7 +562,9 @@
                 ? "Installation outcome unknown"
                 : permissionDenied
                   ? "Local network access is off"
-                  : pairingRequired?"This app needs TV authorization":"Action needs attention"
+                  : pairingRequired
+                    ? "This app needs TV authorization"
+                    : "Action needs attention"
               : "Done"}</strong
           >
           <p>{messageText.slice(0, 200)}</p>
@@ -341,7 +572,7 @@
         <button class="text-action" onclick={showFeedback}>Details</button>
       </aside>{/if}
     <div class="page-content">
-      {#if page !== "connect" && page !== "install"}
+      {#if page !== "connect" && page !== "install" && !(page === "device" && !device)}
         <WorkspaceScreen
           {page}
           {device}
@@ -354,7 +585,7 @@
           }}
           onnavigate={navigate}
         />
-      {:else if page === "connect"}
+      {:else if page === "connect" || page === "device"}
         {#if device}
           <section class="center-state">
             <div class="state-icon" aria-hidden="true">✓</div>
@@ -376,8 +607,72 @@
               disabled={busy}>Connection details</button
             >
           </section>
+        {:else if savedView}
+          <section class="feature-page saved-devices">
+            <div class="toolbar">
+              <h2>Saved TVs</h2>
+              <button
+                class="icon-button"
+                aria-label="Find nearby ADB devices"
+                onclick={() => (discoveryOpen = true)}
+                disabled={busy || !native || !nativeReady}
+                ><Icon name="search" /></button
+              >
+              <button
+                class="secondary"
+                onclick={() => {
+                  editConnection(null);
+                  step = "pair";
+                }}
+                disabled={busy}>Add device</button
+              >
+            </div>
+            <p class="subtle">Choose a TV to reconnect.</p>
+            <div class="row-list app-list">
+              {#each savedDevices as saved}
+                <article class="saved-device">
+                  <div class="truncate">
+                    <h3>{saved.name}</h3>
+                    <p class="subtle">{saved.endpoint ?? saved.host}</p>
+                    <small class="subtle"
+                      >{saved.lastConnectedAt !== null
+                        ? "Previously connected"
+                        : "Paired · connection address needed"}{saved.legacy
+                        ? " · Legacy ADB"
+                        : ""}</small
+                    >
+                  </div>
+                  <button
+                    class="primary"
+                    disabled={!native ||
+                      !nativeReady ||
+                      busy ||
+                      (!saved.endpoint && saved.pairedAt === null)}
+                    onclick={() => quickConnect(saved)}
+                    aria-label={`Quick connect to ${saved.name}`}
+                    >Quick connect <span aria-hidden="true">→</span></button
+                  >
+                  <button
+                    class="text-action"
+                    disabled={busy}
+                    onclick={() => editConnection(saved)}
+                    >Update connection address</button
+                  >
+                </article>
+              {/each}
+            </div>
+          </section>
         {:else}
           <section class="connection-flow">
+            {#if savedDevices.length}<button
+                class="text-action saved-back"
+                disabled={busy}
+                onclick={() => {
+                  showSaved = true;
+                  error = "";
+                  notice = "";
+                }}>← Saved devices</button
+              >{/if}
             <div class="steps" role="group" aria-label="Connection step">
               <button
                 class:chosen={step === "pair"}
@@ -390,9 +685,28 @@
                 onclick={() => (step = "connect")}
                 disabled={busy}><span>2</span> Connect</button
               >
+              <button
+                class="icon-button discovery-trigger"
+                aria-label="Find nearby ADB devices"
+                onclick={() => (discoveryOpen = true)}
+                disabled={busy || !native || !nativeReady}
+                ><Icon name="search" /></button
+              >
             </div>
-            {#if busy&&attemptId}
-              <section class="center-state"><h2 role="status">{busyLabel}</h2><p class="subtle">{busyLabel==="Approve debugging on the TV"?"Check the TV for its Allow USB debugging prompt. This installation has its own key.":"Pairing and connection use different TV ports. You can cancel this attempt."}</p><button class="secondary" onclick={cancelConnection}>Cancel attempt</button></section>
+            {#if busy && (attemptId || discoveryPhase)}
+              <section class="center-state">
+                <h2 role="status">{busyLabel}</h2>
+                <p class="subtle">
+                  {busyLabel === "Approve debugging on the TV"
+                    ? "Check the TV for its Allow USB debugging prompt. This installation has its own key."
+                    : discoveryPhase
+                      ? "Looking for the TV’s current connection port."
+                      : "Pairing and connection use different TV ports. You can cancel this attempt."}
+                </p>
+                <button class="secondary" onclick={cancelConnection}
+                  >Cancel attempt</button
+                >
+              </section>
             {:else if step === "pair"}
               <p class="connection-hint">
                 Open <strong>Pair device with pairing code</strong> in your TV’s Wireless
@@ -422,7 +736,7 @@
                   bind:value={code}
                   placeholder="000000"
                   inputmode="numeric"
-                  pattern="[0-9]{6}"
+                  pattern={"[0-9]{6}"}
                   maxlength="6"
                   autocomplete="off"
                   disabled={busy}
@@ -430,7 +744,8 @@
                 <button
                   class="primary"
                   type="submit"
-                  disabled={!native || !nativeReady ||
+                  disabled={!native ||
+                    !nativeReady ||
                     busy ||
                     !pairEndpoint.trim() ||
                     !/^[0-9]{6}$/.test(code)}
@@ -444,11 +759,22 @@
                 Connect above.
               </p>
             {:else}
-              {#if !legacy}<p class="pair-status">{pairingRecord?`Pairing completed in this app · ${new Date(pairingRecord.pairedAt).toLocaleString()}`:"For Wireless debugging, pair this app once before using its connection port."}</p>{/if}
+              {#if !legacy && selectedAdvertisement?.kind !== "legacy"}<p
+                  class="pair-status"
+                >
+                  {pairingRecord
+                    ? `Pairing completed in this app · ${new Date(pairingRecord.pairedAt).toLocaleString()}`
+                    : "For Wireless debugging, pair this app once before using its connection port."}
+                </p>{/if}
               <p class="connection-hint">
-                Use the address on the <strong
-                  >main Wireless debugging screen</strong
-                >. Its port differs from the pairing port.
+                {#if selectedAdvertisement?.kind === "legacy"}This TV advertises
+                  legacy ADB. Allow legacy below only on a trusted local
+                  network.
+                {:else}
+                  Use the address on the <strong
+                    >main Wireless debugging screen</strong
+                  >. Its port differs from the pairing port.
+                {/if}
               </p>
               <form
                 onsubmit={(e) => {
@@ -498,7 +824,7 @@
             <div class="state-icon" aria-hidden="true">⇄</div>
             <h2>Connect your device first</h2>
             <p class="subtle">Choose where the app will be installed.</p>
-            <button class="primary" onclick={() => (page = "connect")}
+            <button class="primary" onclick={() => navigate("connect")}
               >Set up connection <span aria-hidden="true">→</span></button
             >
           </section>
@@ -600,6 +926,13 @@
   </main>
 </div>
 
+<DiscoveryDialog
+  open={discoveryOpen}
+  {discover}
+  connected={!!device}
+  onselect={chooseDiscovered}
+  onclose={() => (discoveryOpen = false)}
+/>
 <Modal
   open={menuOpen}
   title="Navigation"
@@ -647,8 +980,8 @@
     an unauthorised device.
   </p>
   <p>
-    This version uses manual addresses. Copy the pairing and connection ports
-    from their separate TV screens.
+    Use Find to look for nearby ADB devices. You can also copy the pairing and
+    connection addresses from their separate TV screens.
   </p>
 </Modal>
 <Modal
@@ -675,14 +1008,23 @@
         <dd>Profile {device.profileId}</dd>
       </div>
     </dl>
-    <button
-      class="secondary"
-      onclick={() => {
-        deviceOpen = false;
-        void disconnect();
-      }}
-      disabled={busy}>Disconnect</button
-    >{/if}
+    <div class="toolbar">
+      <button
+        class="secondary"
+        disabled={busy}
+        onclick={() => {
+          deviceOpen = false;
+          discoveryOpen = true;
+        }}><Icon name="search" />Find devices</button
+      ><button
+        class="secondary"
+        onclick={() => {
+          deviceOpen = false;
+          void disconnect();
+        }}
+        disabled={busy}>Disconnect</button
+      >
+    </div>{/if}
 </Modal>
 <Modal
   open={fileOpen}

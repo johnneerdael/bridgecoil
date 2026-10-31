@@ -272,6 +272,13 @@ fn attributes(b: &[u8], header: usize, pool: &Pool<'_>) -> Result<HashMap<String
                 | "android:versionCodeMajor"
                 | "android:versionName"
                 | "android:minSdkVersion"
+                | "android:name"
+                | "android:value"
+                | "android:isFeatureSplit"
+                | "android:isSplitRequired"
+                | "android:configForSplit"
+                | "android:requiredSplitTypes"
+                | "android:splitTypes"
         ) {
             continue;
         }
@@ -280,7 +287,7 @@ fn attributes(b: &[u8], header: usize, pool: &Pool<'_>) -> Result<HashMap<String
         } else {
             match kind {
                 3 => Value::Text(pool.text(data, 65536)?),
-                0x10 | 0x11 => Value::Number(data),
+                0x10 | 0x11 | 0x12 => Value::Number(data),
                 _ => Value::Other,
             }
         };
@@ -312,8 +319,32 @@ pub(crate) struct Metadata {
     pub version_code: u64,
     pub version_name: Option<String>,
     pub min_sdk: Option<u32>,
+    pub split: Option<String>,
+    pub required_splits: Vec<String>,
+    pub config_for_split: Option<String>,
+    pub requires_splits: bool,
+    pub required_split_types: Vec<String>,
+    pub split_types: Vec<String>,
 }
 pub(crate) fn parse(bytes: &[u8]) -> Result<Metadata> {
+    parse_inner(bytes, false)
+}
+pub(crate) fn parse_package(bytes: &[u8]) -> Result<Metadata> {
+    parse_inner(bytes, true)
+}
+fn names(value: Option<String>) -> Result<Vec<String>> {
+    let mut result = Vec::new();
+    if let Some(value) = value {
+        for name in value.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            if !crate::apk::valid_split_name(name) || result.len() >= 64 {
+                return Err(bad());
+            }
+            result.push(name.into());
+        }
+    }
+    Ok(result)
+}
+fn parse_inner(bytes: &[u8], allow_split: bool) -> Result<Metadata> {
     if bytes.len() > 2 * 1024 * 1024
         || u16_at(bytes, 0)? != 3
         || u16_at(bytes, 2)? != 8
@@ -360,7 +391,7 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Metadata> {
                         return Err(bad());
                     }
                     let mut attrs = attributes(b, header, pool)?;
-                    if attrs.contains_key("split") {
+                    if !allow_split && attrs.contains_key("split") {
                         return Err(
                             "This POC installs standalone APKs, not individual split APKs.".into(),
                         );
@@ -372,7 +403,31 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Metadata> {
                         .ok_or("APK version code is missing or invalid.")?
                         as u64;
                     let high = number(&attrs, "android:versionCodeMajor").unwrap_or(0) as u64;
+                    let split = text(&mut attrs, "split").filter(|s| !s.is_empty());
+                    if split
+                        .as_deref()
+                        .is_some_and(|s| !crate::apk::valid_split_name(s))
+                    {
+                        return Err(bad());
+                    }
+                    let config_for_split =
+                        text(&mut attrs, "android:configForSplit").filter(|s| !s.is_empty());
+                    if config_for_split
+                        .as_deref()
+                        .is_some_and(|s| !crate::apk::valid_split_name(s))
+                    {
+                        return Err(bad());
+                    }
+                    let required_split_types =
+                        names(text(&mut attrs, "android:requiredSplitTypes"))?;
+                    let split_types = names(text(&mut attrs, "android:splitTypes"))?;
                     metadata = Some(Metadata {
+                        split,
+                        config_for_split,
+                        required_split_types,
+                        split_types,
+                        required_splits: Vec::new(),
+                        requires_splits: false,
                         package,
                         version_code: (high << 32) | low,
                         version_name: text(&mut attrs, "android:versionName"),
@@ -382,6 +437,28 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Metadata> {
                     let attrs = attributes(b, header, pool)?;
                     metadata.as_mut().ok_or_else(bad)?.min_sdk =
                         number(&attrs, "android:minSdkVersion");
+                } else if depth == 1 && tag == "uses-split" {
+                    let mut attrs = attributes(b, header, pool)?;
+                    let name = text(&mut attrs, "android:name")
+                        .filter(|s| crate::apk::valid_split_name(s))
+                        .ok_or_else(bad)?;
+                    let m = metadata.as_mut().ok_or_else(bad)?;
+                    if m.required_splits.len() >= 64 {
+                        return Err(bad());
+                    }
+                    m.required_splits.push(name);
+                } else if depth == 1 && tag == "application" {
+                    let attrs = attributes(b, header, pool)?;
+                    metadata.as_mut().ok_or_else(bad)?.requires_splits =
+                        number(&attrs, "android:isSplitRequired").is_some_and(|v| v != 0);
+                } else if depth == 2 && tag == "meta-data" {
+                    let mut attrs = attributes(b, header, pool)?;
+                    if text(&mut attrs, "android:name").as_deref()
+                        == Some("com.android.vending.splits.required")
+                        && number(&attrs, "android:value").is_some_and(|v| v != 0)
+                    {
+                        metadata.as_mut().ok_or_else(bad)?.requires_splits = true;
+                    }
                 }
                 depth = depth.checked_add(1).ok_or_else(bad)?;
             }

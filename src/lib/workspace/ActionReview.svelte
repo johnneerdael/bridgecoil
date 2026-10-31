@@ -3,6 +3,8 @@
   import type { Platform, Review, Operation } from "./client";
   import { errorMessage } from "../model";
   import Output from "./Output.svelte";
+  import RatingBadge from "./RatingBadge.svelte";
+  import { levelInfo } from "./ratings";
   let {
     review,
     deviceName = "Connected device",
@@ -63,7 +65,14 @@
         onclick={() => (tab = "commands")}>Commands</button
       >
     </div>
-    {#if tab === "effect"}<p class="subtle">{review.currentState}</p>
+    {#if tab === "effect"}{#if review.rating === "expert" || review.rating === "unsafe"}<div
+          class="risk-note rating-warning"
+        >
+          <RatingBadge level={review.rating} />
+          <p>{levelInfo[review.rating].explanation}</p>
+        </div>{:else if review.rating}<RatingBadge
+          level={review.rating}
+        />{/if}<p class="subtle">{review.currentState}</p>
       <p>{review.effect}</p>
       {#each review.losses as loss}<p class="risk-note">{loss}</p>{/each}
       <p class="subtle">

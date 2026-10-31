@@ -11,6 +11,7 @@
 		1388D0D76F9E326E8F0DA6A9 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A4357304BFC72AFC9009A10 /* CoreGraphics.framework */; };
 		5EA87DE6B52869C67917F6B6 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C8E873882898B568BBECDE16 /* MetalKit.framework */; };
 		73D2DF6AEE944848BCE48B92 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 9086301492C4E8228AF1AE06 /* assets */; };
+		86583A070DA45AD34234EAC6 /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 66253D96C7366D5EDBA2A957 /* Network.framework */; };
 		87990457E495AA7DC81174C0 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D85AE561AA96C76AE7063A81 /* UIKit.framework */; };
 		96AB5401B71A1EDDBB9AA5C6 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5EADDDC74D678A6771779C7B /* WebKit.framework */; };
 		A4D2BE9E2109B3C84F429BD6 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 663A3D4D5B8A37D7CF5940BB /* Metal.framework */; };
@@ -25,9 +26,11 @@
 		19272F978F44EFA43BBA0519 /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
 		195540EEF5EB52823B0677AF /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		1E299F3F843C46ABDA575F7B /* adb-studio-app_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "adb-studio-app_iOS.entitlements"; sourceTree = "<group>"; };
+		4423D647D27F7684F02731CD /* local_network.rs */ = {isa = PBXFileReference; path = local_network.rs; sourceTree = "<group>"; };
 		58D7B8CB181947AC1BE88A50 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		5C1DF54BB62115E249C7105C /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		5EADDDC74D678A6771779C7B /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		66253D96C7366D5EDBA2A957 /* Network.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Network.framework; path = System/Library/Frameworks/Network.framework; sourceTree = SDKROOT; };
 		663A3D4D5B8A37D7CF5940BB /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		7A142B4A720115B82008BBEF /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		8A4357304BFC72AFC9009A10 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
@@ -40,6 +43,7 @@
 		D85AE561AA96C76AE7063A81 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		E40891C8CE533B63D061C637 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		F8E2BA314AD2CE1650428DE5 /* adb-studio-app_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "adb-studio-app_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		F95E8E8181F5DCBEF7CC9CB7 /* workspace.rs */ = {isa = PBXFileReference; path = workspace.rs; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -49,6 +53,7 @@
 			files = (
 				C4AB23D65950384DB3AABE5B /* libapp.a in Frameworks */,
 				1388D0D76F9E326E8F0DA6A9 /* CoreGraphics.framework in Frameworks */,
+				86583A070DA45AD34234EAC6 /* Network.framework in Frameworks */,
 				A4D2BE9E2109B3C84F429BD6 /* Metal.framework in Frameworks */,
 				5EA87DE6B52869C67917F6B6 /* MetalKit.framework in Frameworks */,
 				BC4BCF8664351BE783979BDB /* QuartzCore.framework in Frameworks */,
@@ -74,7 +79,9 @@
 			isa = PBXGroup;
 			children = (
 				19272F978F44EFA43BBA0519 /* lib.rs */,
+				4423D647D27F7684F02731CD /* local_network.rs */,
 				8BB6FA3924FBE30DB5E21034 /* main.rs */,
+				F95E8E8181F5DCBEF7CC9CB7 /* workspace.rs */,
 			);
 			name = src;
 			path = ../../src;
@@ -142,12 +149,27 @@
 				7A142B4A720115B82008BBEF /* libapp.a */,
 				663A3D4D5B8A37D7CF5940BB /* Metal.framework */,
 				C8E873882898B568BBECDE16 /* MetalKit.framework */,
+				66253D96C7366D5EDBA2A957 /* Network.framework */,
 				195540EEF5EB52823B0677AF /* QuartzCore.framework */,
 				E40891C8CE533B63D061C637 /* Security.framework */,
 				D85AE561AA96C76AE7063A81 /* UIKit.framework */,
 				5EADDDC74D678A6771779C7B /* WebKit.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		"TEMP_53961A29-9780-4971-BE2A-A74A9030E2BC" /* x86_64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = x86_64;
+			sourceTree = "<group>";
+		};
+		"TEMP_D07012AD-B6F0-49BC-92BA-DCC9F08BFE73" /* arm64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = arm64;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -275,7 +297,7 @@
 				);
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
-				PRODUCT_BUNDLE_IDENTIFIER = nl.neerdael.adbstudio.poc;
+				PRODUCT_BUNDLE_IDENTIFIER = nl.neerdael.bridgecoil;
 				PRODUCT_NAME = "Bridgecoil";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -425,7 +447,7 @@
 				);
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
-				PRODUCT_BUNDLE_IDENTIFIER = nl.neerdael.adbstudio.poc;
+				PRODUCT_BUNDLE_IDENTIFIER = nl.neerdael.bridgecoil;
 				PRODUCT_NAME = "Bridgecoil";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
