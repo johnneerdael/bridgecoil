@@ -596,7 +596,7 @@ pub async fn query_rated(
         Query::VerifyShell => {
             let raw = checked(d, t, setup::verify_shell_command()).await?;
             let route = raw.lines().find_map(|l| l.trim().strip_prefix("route="));
-            Ok(json!({"route":route.unwrap_or("none")}))
+            Ok(json!({"route":route.unwrap_or("unknown")}))
         }
         Query::Logs {
             level,

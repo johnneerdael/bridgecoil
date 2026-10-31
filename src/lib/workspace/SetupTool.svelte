@@ -126,7 +126,8 @@
       });
       if (route === "none")
         error = `Termux hasn't been allowed yet. Choose ${allowLabel} on the TV, then check again.`;
-      else refresh++;
+      else if (route === "shell" || route === "root") refresh++;
+      else error = "The TV didn't answer in time. Check access again.";
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -138,7 +139,18 @@
 </script>
 
 {#snippet wiredNote()}
-  {#if snapshot?.wired}<p class="risk-note" role="note">
+  {#if snapshot?.noWirelessDebugging && !snapshot?.bootStart}<p
+      class="risk-note"
+      role="note"
+    >
+      This version of Android doesn't have wireless debugging, so {managerName}
+      can only start by itself if this TV allows it another way, such as root.
+      Otherwise, connect Bridgecoil after each restart and start {managerName}
+      again here. Your mappings return once it's running.
+    </p>{:else if snapshot?.wired && !snapshot?.noWirelessDebugging}<p
+      class="risk-note"
+      role="note"
+    >
       This TV is on a network cable. Android usually allows wireless debugging
       only on Wi-Fi, so {managerName} can't start by itself after a restart.
       To fix that, unplug the cable and join Wi-Fi. If you stay wired, connect
@@ -212,10 +224,11 @@
           class="risk-note"
           role="note"
         >
-          Google Play Protect may stop this on the TV with "Unsafe app blocked",
-          because Termux is built for an older version of Android. Bridgecoil
-          has checked it really is Termux. To continue, use your remote on the
-          TV and choose <strong>More details</strong>, then
+          Google Play Protect may stop this on the TV with "Unsafe app blocked"
+          or "Blocked by Play Protect", because Termux is built for an older
+          version of Android. Bridgecoil has checked it really is Termux. To
+          continue, use your remote on the TV to open
+          <strong>More details</strong> or <strong>Details</strong>, then choose
           <strong>Install anyway</strong>.
         </p>{/if}
       {#if snapshot.termux.installed && !snapshot.termux.official}<p
@@ -304,8 +317,15 @@
         >2. Open {managerName} on the TV</button
       >
       <p class="subtle">
-        In {managerName}, turn on start at boot and pair it with wireless
-        debugging. This part happens on the TV.
+        {#if snapshot.noWirelessDebugging}In {managerName}, open Settings and
+          turn on <strong>Start on boot</strong>.{:else}In {managerName}, open
+          Settings, turn on <strong>Start on boot</strong> and pair it with
+          wireless debugging.{/if} This part happens on the TV.
+      </p>
+      <p class="subtle" role="status">
+        {snapshot.bootStart
+          ? "Start on boot is on."
+          : "Start on boot isn't on yet."}
       </p>
       <button
         class="primary"
@@ -316,6 +336,10 @@
     {:else if snapshot.stage === "done"}
       <h3>Your TV is ready</h3>
       <p>Everything is in place to remap buttons.</p>
+      {#if !snapshot.bootStart}<p class="risk-note" role="note">
+          Start on boot is off in {managerName}, so it won't come back by itself
+          after a restart. Turn it on in {managerName}'s settings on the TV.
+        </p>{/if}
       {@render wiredNote()}
       {#if survived}<p class="subtle">
           Proven on this TV: your button mappings came back by themselves after

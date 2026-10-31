@@ -97,15 +97,27 @@ pub fn plan(step: SetupStep) -> SetupPlan {
             &[],
             TERMINAL_OPEN.to_owned(),
         ),
-        SetupStep::AllowBackground { manager } => make(
-            format!("Let Termux and {} keep running", manager.name()),
-            &format!(
-                "Allow {}, Termux and Termux:Boot to start with the TV and keep running, without being stopped to save power. Settings a TV doesn't have are skipped.",
-                manager.name()
-            ),
-            &["Background apps use a little memory, and some TVs ignore these settings."],
-            with_args(&[manager.package()], BACKGROUND),
-        ),
+        SetupStep::AllowBackground { manager } => {
+            let package = manager.package();
+            let (watchdog, command) = match manager {
+                Manager::ShizukuNext => (
+                    " It also turns on Shizuku-Next's watchdog, which restarts its service if it stops.",
+                    format!(
+                        "am broadcast -n {package}/moe.shizuku.manager.receiver.WatchdogToggleReceiver -a {package}.WATCHDOG_ON >/dev/null 2>&1\n"
+                    ),
+                ),
+                Manager::Porter => ("", String::new()),
+            };
+            make(
+                format!("Let Termux and {} keep running", manager.name()),
+                &format!(
+                    "Allow {}, Termux and Termux:Boot to start with the TV and keep running, without being stopped to save power. Settings a TV doesn't have are skipped.{watchdog}",
+                    manager.name()
+                ),
+                &["Background apps use a little memory, and some TVs ignore these settings."],
+                format!("{command}{}", with_args(&[package], BACKGROUND)),
+            )
+        }
         SetupStep::DeployShell { manager } => make(
             format!("Connect Termux to {}", manager.name()),
             "Copy the shell tool from the installed manager into Termux.",

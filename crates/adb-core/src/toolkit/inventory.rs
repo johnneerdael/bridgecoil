@@ -35,6 +35,12 @@ impl Manager {
             Self::Porter => "porterServer",
         }
     }
+    fn boot_fact(self) -> &'static str {
+        match self {
+            Self::ShizukuNext => "shizukuBoot",
+            Self::Porter => "porterBoot",
+        }
+    }
 }
 
 /// What occupies the Shizuku package name, which several unrelated apps can claim.
@@ -83,6 +89,9 @@ pub struct ToolkitSnapshot {
     pub monitor: bool,
     pub listener: bool,
     pub wired: bool,
+    pub no_wireless_debugging: bool,
+    pub boot_start: bool,
+    pub watchdog: bool,
     pub stage: Stage,
 }
 
@@ -210,6 +219,9 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
         monitor,
         listener: facts.flag("listener"),
         wired: facts.flag("wired"),
+        no_wireless_debugging: facts.flag("noWirelessDebugging"),
+        boot_start: manager.is_some_and(|m| facts.flag(m.boot_fact())),
+        watchdog: facts.flag("watchdog"),
         stage,
     })
 }

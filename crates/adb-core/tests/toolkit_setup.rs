@@ -153,9 +153,60 @@ fn keeps_the_helper_app_running_as_well_as_termux() {
         assert!(shizuku.contains(&format!("deviceidle whitelist +{package}\n")));
         assert!(shizuku.contains(&format!("set {package} RUN_IN_BACKGROUND allow\n")));
     }
+    assert!(shizuku.contains(
+        "am broadcast -n moe.shizuku.privileged.api/moe.shizuku.manager.receiver.WatchdogToggleReceiver -a moe.shizuku.privileged.api.WATCHDOG_ON\n"
+    ));
     let porter = background_calls(Manager::Porter);
     assert!(porter.contains("deviceidle whitelist +eu.darken.porter\n"));
     assert!(!porter.contains("moe.shizuku.privileged.api"));
+}
+
+/// Runs the real probe against a stand-in `dumpsys`, `am` and `getprop` in the formats a real
+/// Android 9 box printed.
+fn old_tv_facts(start_on_boot: bool) -> String {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let tool = |name: &str, body: &str| {
+        let path = dir.path().join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    let boot = "        moe.shizuku.manager.receiver.BootCompleteReceiver";
+    let other = "        moe.shizuku.manager.service.Other";
+    let lists = if start_on_boot {
+        format!("disabledComponents:\n{other}\nenabledComponents:\n{boot}")
+    } else {
+        format!("disabledComponents:\n{boot}\nenabledComponents:\n{other}")
+    };
+    tool(
+        "dumpsys",
+        &format!(
+            "case \"$2\" in moe.shizuku.privileged.api) cat <<'OUT'\n{lists}\nOUT\n;; esac"
+        ),
+    );
+    tool("getprop", "echo 28");
+    tool("am", "echo 'Broadcast completed: result=0, data=\"1\"'");
+    let path = format!(
+        "{}:{}",
+        dir.path().display(),
+        std::env::var("PATH").unwrap()
+    );
+    let output = std::process::Command::new("sh")
+        .args(["-c", facts_command()])
+        .env("PATH", path)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+#[test]
+fn reads_start_on_boot_and_the_watchdog_from_the_tv() {
+    let on = parse_facts(&old_tv_facts(true));
+    assert!(on.flag("shizukuBoot"));
+    assert!(on.flag("watchdog"));
+    assert!(on.flag("noWirelessDebugging"));
+    assert!(!on.flag("porterBoot"));
+    assert!(!parse_facts(&old_tv_facts(false)).flag("shizukuBoot"));
 }
 
 #[test]

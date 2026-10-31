@@ -35,6 +35,9 @@ const snapshot = (over: Partial<ToolkitSnapshot>): ToolkitSnapshot => ({
   monitor: false,
   listener: false,
   wired: false,
+  noWirelessDebugging: false,
+  bootStart: false,
+  watchdog: false,
   stage: "manager",
   ...over,
 });
@@ -215,6 +218,23 @@ it("says plainly when access was not granted", async () => {
   );
 });
 
+it.each(["timeout", "unknown"])(
+  "doesn't blame the viewer when the check got no answer (%s)",
+  async (route) => {
+    const api = platform(
+      snapshot({ manager: "porter", porter: official, stage: "access" }),
+      route,
+    );
+    open(api);
+    await fireEvent.click(
+      await screen.findByRole("button", { name: "Check access" }),
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("didn't answer in time");
+    expect(alert.textContent).not.toContain("hasn't been allowed");
+  },
+);
+
 it("never calls a step done until the TV proves it", async () => {
   open(
     platform(
@@ -283,6 +303,50 @@ it("warns a wired TV that its manager can't start itself", async () => {
   open(platform(snapshot({ ...ready, stage: "startup" })));
   await screen.findByRole("button", { name: /Keep mappings running/ });
   expect(screen.queryByText(/on a network cable/)).toBeNull();
+});
+
+it("tells older Android that wireless debugging isn't the answer", async () => {
+  const ready = {
+    manager: "shizukuNext" as const,
+    shizuku: "shizukuNext" as const,
+    terminalReady: true,
+    shellReady: true,
+    authorized: true,
+    serverRunning: true,
+  };
+  open(
+    platform(
+      snapshot({
+        ...ready,
+        wired: true,
+        noWirelessDebugging: true,
+        stage: "startup",
+      }),
+    ),
+  );
+  expect(await screen.findByText(/doesn't have wireless debugging/)).toBeTruthy();
+  expect(screen.queryByText(/join Wi-Fi/)).toBeNull();
+  expect(screen.queryByText(/pair it with/)).toBeNull();
+});
+
+it("shows whether start on boot is really on", async () => {
+  const ready = {
+    manager: "porter" as const,
+    terminalReady: true,
+    shellReady: true,
+    authorized: true,
+    serverRunning: true,
+    monitor: true,
+  };
+  const off = open(platform(snapshot({ ...ready, stage: "done" })));
+  expect(await screen.findByText(/Start on boot is off/)).toBeTruthy();
+  off.unmount();
+  const on = open(platform(snapshot({ ...ready, bootStart: true, stage: "done" })));
+  await screen.findByText("Your TV is ready");
+  expect(screen.queryByText(/Start on boot is off/)).toBeNull();
+  on.unmount();
+  open(platform(snapshot({ ...ready, monitor: false, stage: "startup" })));
+  expect(await screen.findByText("Start on boot isn't on yet.")).toBeTruthy();
 });
 
 it("stops and explains when a TV blocks setting up Termux", async () => {

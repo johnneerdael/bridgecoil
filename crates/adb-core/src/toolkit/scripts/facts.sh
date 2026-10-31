@@ -14,6 +14,20 @@ case "$(ip -o -4 addr show 2>/dev/null)" in
   *" wlan"*) ;;
   *" eth"*) echo wired=1 ;;
 esac
+# Wireless debugging arrived in Android 11.
+case "$(getprop ro.build.version.sdk)" in
+  [1-9]|[12][0-9]) echo noWirelessDebugging=1 ;;
+esac
+# A manager only enables this receiver while its start on boot is on.
+for manager in moe.shizuku.privileged.api:shizukuBoot eu.darken.porter:porterBoot; do
+  case "$(dumpsys package "${manager%:*}" 2>/dev/null | sed -n '/enabledComponents:/,/disabledComponents:/p')" in
+    *BootCompleteReceiver*) echo "${manager#*:}=1" ;;
+  esac
+done
+case "$(am broadcast -n moe.shizuku.privileged.api/moe.shizuku.manager.receiver.WatchdogStatusReceiver \
+  -a moe.shizuku.privileged.api.WATCHDOG_STATUS 2>/dev/null)" in
+  *'data="1"'*) echo watchdog=1 ;;
+esac
 run-as com.termux sh 2>/dev/null <<'INNER'
 files=/data/data/com.termux/files
 echo runAs=1

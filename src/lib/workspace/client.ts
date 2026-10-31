@@ -154,6 +154,9 @@ export type ToolkitSnapshot = {
   monitor: boolean;
   listener: boolean;
   wired: boolean;
+  noWirelessDebugging: boolean;
+  bootStart: boolean;
+  watchdog: boolean;
   stage: Stage;
 };
 export type InstallProgress = { stage: string; sent: number; total: number };

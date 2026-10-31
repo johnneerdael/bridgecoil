@@ -273,6 +273,9 @@ async function query<T>(t: Target, q: Query): Promise<T> {
         monitor: false,
         listener: false,
         wired: false,
+        noWirelessDebugging: false,
+        bootStart: false,
+        watchdog: false,
         stage: "manager",
       };
       break;

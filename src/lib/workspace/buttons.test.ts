@@ -47,6 +47,9 @@ function platform(current: MappingState, presses: KeyIdentity[] = [remote]) {
         monitor: true,
         listener: current.running,
         wired: false,
+        noWirelessDebugging: false,
+        bootStart: false,
+        watchdog: false,
       };
     }),
     prepare: vi.fn(async () => ({ id: "review" })),
