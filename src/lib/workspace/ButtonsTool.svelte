@@ -306,7 +306,7 @@
         button.
       </p>
     </section>{/if}
-  {#if toolkit && toolkit.stage !== "done"}<p class="subtle">
+  {#if toolkit && toolkit.stage !== "done" && !toolkit.monitor}<p class="subtle">
       Mappings only stay running after setup is finished.
       <button class="text-action" onclick={onsetup}>Finish TV setup</button>
     </p>{/if}

@@ -19,9 +19,9 @@ On a TV with a different app holding the Shizuku name, use Porter. Shizuku-Next 
 6. Start it, then install Termux and Termux:Boot.
 7. If the TV shows **Unsafe app blocked**, use the real remote to choose **More details**, then **Install anyway**.
 8. Connect Termux, then choose **Ask the TV**. On the TV choose **Allow all the time** for Porter or **Always allow** for Shizuku-Next.
-9. Under **Survive restarts**, do all three steps. In the helper app, turn on start at boot and pair it with wireless debugging.
+9. Under **Survive restarts**, do all three steps. In the helper app, open Settings and turn on **Start on boot**. On Android 11 or later, also pair it with wireless debugging.
 
-**Expect:** the setup ends at **Your TV is ready**.
+**Expect:** the setup ends at **Your TV is ready**, with no warning that start on boot is off. The helper app shows no battery warning, and Shizuku-Next's watchdog is on.
 
 ## Buttons
 

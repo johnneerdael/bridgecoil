@@ -329,24 +329,65 @@ it("tells older Android that wireless debugging isn't the answer", async () => {
   expect(screen.queryByText(/pair it with/)).toBeNull();
 });
 
-it("shows whether start on boot is really on", async () => {
+it("only calls the TV ready once it can come back by itself", async () => {
   const ready = {
-    manager: "porter" as const,
+    manager: "shizukuNext" as const,
+    shizuku: "shizukuNext" as const,
     terminalReady: true,
     shellReady: true,
     authorized: true,
     serverRunning: true,
     monitor: true,
   };
-  const off = open(platform(snapshot({ ...ready, stage: "done" })));
-  expect(await screen.findByText(/Start on boot is off/)).toBeTruthy();
-  off.unmount();
-  const on = open(platform(snapshot({ ...ready, bootStart: true, stage: "done" })));
-  await screen.findByText("Your TV is ready");
-  expect(screen.queryByText(/Start on boot is off/)).toBeNull();
-  on.unmount();
-  open(platform(snapshot({ ...ready, monitor: false, stage: "startup" })));
-  expect(await screen.findByText("Start on boot isn't on yet.")).toBeTruthy();
+  const onbuttons = vi.fn();
+  const api = platform(snapshot({ ...ready, stage: "startup" }));
+  const missing = render(SetupTool, {
+    device,
+    api,
+    reload: 0,
+    onreview: vi.fn(),
+    onbuttons,
+  });
+  expect(await screen.findByText("Not ready for restarts yet")).toBeTruthy();
+  expect(screen.queryByText("Your TV is ready")).toBeNull();
+  expect(screen.getByText("Start on boot isn't on yet.")).toBeTruthy();
+  expect(screen.getByText(/watchdog is off/)).toBeTruthy();
+  await fireEvent.click(screen.getByRole("button", { name: "Remap buttons" }));
+  expect(onbuttons).toHaveBeenCalled();
+  missing.unmount();
+  open(
+    platform(
+      snapshot({ ...ready, bootStart: true, watchdog: true, stage: "done" }),
+    ),
+  );
+  expect(await screen.findByText("Your TV is ready")).toBeTruthy();
+  expect(screen.queryByText("Not ready for restarts yet")).toBeNull();
+});
+
+it("reads the TV again after the viewer turns start on boot on", async () => {
+  const ready = {
+    manager: "porter" as const,
+    porter: official,
+    terminalReady: true,
+    shellReady: true,
+    authorized: true,
+    serverRunning: true,
+    monitor: true,
+    stage: "startup" as const,
+  };
+  const api = platform(snapshot(ready));
+  open(api);
+  const check = await screen.findByRole("button", {
+    name: "Check start on boot",
+  });
+  expect(screen.getByRole("button", { name: /Open Porter/ })).toBeTruthy();
+  await fireEvent.click(check);
+  expect(await screen.findByText(/still isn't on/)).toBeTruthy();
+  vi.mocked(api.query).mockImplementation(
+    async () => snapshot({ ...ready, bootStart: true, stage: "done" }) as never,
+  );
+  await fireEvent.click(screen.getByRole("button", { name: "Check start on boot" }));
+  expect(await screen.findByText("Your TV is ready")).toBeTruthy();
 });
 
 it("stops and explains when a TV blocks setting up Termux", async () => {

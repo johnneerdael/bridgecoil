@@ -189,6 +189,10 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
     let shell_ready = facts.flag("shell");
     let authorized = shell_ready && facts.flag("authorized");
     let monitor = facts.flag("monitor");
+    let boot_start = manager.is_some_and(|m| facts.flag(m.boot_fact()));
+    let watchdog = facts.flag("watchdog");
+    // Only Shizuku-Next has a watchdog to turn on.
+    let comes_back = boot_start && (manager != Some(Manager::ShizukuNext) || watchdog);
     let stage = if manager.is_none() {
         Stage::Manager
     } else if !server_running {
@@ -199,7 +203,7 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
         Stage::Shell
     } else if !authorized {
         Stage::Access
-    } else if !monitor {
+    } else if !monitor || !comes_back {
         Stage::Startup
     } else {
         Stage::Done
@@ -220,8 +224,8 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
         listener: facts.flag("listener"),
         wired: facts.flag("wired"),
         no_wireless_debugging: facts.flag("noWirelessDebugging"),
-        boot_start: manager.is_some_and(|m| facts.flag(m.boot_fact())),
-        watchdog: facts.flag("watchdog"),
+        boot_start,
+        watchdog,
         stage,
     })
 }

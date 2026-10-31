@@ -58,6 +58,7 @@
   let error = $state("");
   let installing = $state<InstallProgress | null>(null);
   let survived = $state(false);
+  let bootChecked = $state(false);
   const current = $derived(steps.findIndex((s) => s.id === snapshot?.stage));
   const finished = $derived(snapshot?.stage === "done");
   const managerName = $derived(
@@ -297,10 +298,15 @@
         >Check access</button
       >
     {:else if snapshot.stage === "startup" && snapshot.manager}
-      <p>
-        When a TV restarts, these background services stop. Do these three
-        things so they come back without your phone.
-      </p>
+      {#if snapshot.monitor}<h3>Not ready for restarts yet</h3>
+        <p>
+          You can remap buttons now, but they won't come back by themselves
+          after a restart until everything below is on.
+        </p>
+      {:else}<p>
+          When a TV restarts, these background services stop. Do these three
+          things so they come back without your phone.
+        </p>{/if}
       {@render wiredNote()}
       <button
         class="secondary"
@@ -309,6 +315,11 @@
           run({ kind: "allowBackground", manager: snapshot!.manager! })}
         >1. Let Termux and {managerName} keep running</button
       >
+      {#if snapshot.manager === "shizukuNext"}<p class="subtle" role="status">
+          {snapshot.watchdog
+            ? "The watchdog is on."
+            : "The watchdog is off. Step 1 turns it on."}
+        </p>{/if}
       <button
         class="secondary"
         disabled={busy}
@@ -317,29 +328,36 @@
         >2. Open {managerName} on the TV</button
       >
       <p class="subtle">
-        {#if snapshot.noWirelessDebugging}In {managerName}, open Settings and
-          turn on <strong>Start on boot</strong>.{:else}In {managerName}, open
-          Settings, turn on <strong>Start on boot</strong> and pair it with
-          wireless debugging.{/if} This part happens on the TV.
+        Then, on the TV, use your remote to open <strong>Settings</strong> in
+        {managerName} and turn on <strong>Start on boot</strong>.
+        {#if !snapshot.noWirelessDebugging}Pair it with wireless debugging as
+          well.{/if}
       </p>
       <p class="subtle" role="status">
-        {snapshot.bootStart
-          ? "Start on boot is on."
-          : "Start on boot isn't on yet."}
+        {#if snapshot.bootStart}Start on boot is on.
+        {:else if bootChecked}Start on boot still isn't on. Check {managerName}
+          on the TV, then try again.
+        {:else}Start on boot isn't on yet.{/if}
       </p>
-      <button
-        class="primary"
-        disabled={busy}
-        onclick={() => run({ kind: "installMonitor" })}
-        >3. Keep mappings running</button
-      >
+      {#if !snapshot.bootStart}<button
+          class="secondary"
+          disabled={busy}
+          onclick={() => {
+            bootChecked = true;
+            refresh++;
+          }}>Check start on boot</button
+        >{/if}
+      {#if snapshot.monitor}
+        <button class="primary" onclick={onbuttons}>Remap buttons</button>
+      {:else}<button
+          class="primary"
+          disabled={busy}
+          onclick={() => run({ kind: "installMonitor" })}
+          >3. Keep mappings running</button
+        >{/if}
     {:else if snapshot.stage === "done"}
       <h3>Your TV is ready</h3>
       <p>Everything is in place to remap buttons.</p>
-      {#if !snapshot.bootStart}<p class="risk-note" role="note">
-          Start on boot is off in {managerName}, so it won't come back by itself
-          after a restart. Turn it on in {managerName}'s settings on the TV.
-        </p>{/if}
       {@render wiredNote()}
       {#if survived}<p class="subtle">
           Proven on this TV: your button mappings came back by themselves after

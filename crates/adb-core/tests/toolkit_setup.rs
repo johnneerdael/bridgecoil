@@ -285,6 +285,18 @@ async fn stages_follow_what_is_actually_proven() {
         ),
         (
             "shizukuServer=1\nrunAs=1\nterminal=1\nshell=1\nauthorized=1\nmonitor=1\n",
+            Stage::Startup,
+        ),
+        (
+            "shizukuServer=1\nrunAs=1\nterminal=1\nshell=1\nauthorized=1\nmonitor=1\nshizukuBoot=1\n",
+            Stage::Startup,
+        ),
+        (
+            "shizukuServer=1\nrunAs=1\nterminal=1\nshell=1\nauthorized=1\nmonitor=1\nwatchdog=1\n",
+            Stage::Startup,
+        ),
+        (
+            "shizukuServer=1\nrunAs=1\nterminal=1\nshell=1\nauthorized=1\nmonitor=1\nshizukuBoot=1\nwatchdog=1\n",
             Stage::Done,
         ),
     ] {

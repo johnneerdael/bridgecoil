@@ -144,7 +144,8 @@ async fn walks_every_stage() {
         step(&w, &mut c, &t, SetupStep::InstallMonitor).await,
         OperationStatus::Verified
     );
-    assert_eq!(stage(&mut c, &t).await, Stage::Done);
+    // Start on boot is a switch inside the manager, which this run doesn't press.
+    assert_eq!(stage(&mut c, &t).await, Stage::Startup);
     println!(
         "snapshot {}",
         serde_json::to_string(&inspect(&mut c, &t).await.unwrap()).unwrap()
