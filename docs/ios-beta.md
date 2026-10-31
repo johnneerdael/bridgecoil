@@ -19,10 +19,10 @@ The macOS runner uses an iOS 26+ SDK, runs frontend checks/tests and Rust core t
 
 ## Apple account setup
 
-Use team **6DF93UDRBJ** and bundle ID **nl.neerdael.bridgecoil**.
+Use team **6DF93UDRBJ** and bundle ID **nl.neerdael.bridgecoil**. The existing App Store Connect record is **Bridgecoil**, app ID **6829245214**, SKU **bridgecoil**, with iOS and macOS platforms. The current workflow builds iOS. Future macOS delivery can use the same app record.
 
 1. Register the app identifier in Apple Developer, or let Xcode automatic provisioning register it when authorized.
-2. Create the **Bridgecoil app record in App Store Connect** using that exact bundle ID. Choose iOS, a primary language and a unique SKU such as `bridgecoil-ios`. Xcode provisioning does not create the App Store Connect app record.
+2. Reuse the existing **Bridgecoil app record in App Store Connect**, with primary language English (U.S.) and SKU `bridgecoil`. Xcode provisioning does not create app records. Retain the shared record for future macOS delivery.
 3. Create a dedicated Team API key under **Users and Access → Integrations → App Store Connect API → Team Keys**. Tauri's automatic-provisioning guide uses Admin access. Copy the Key ID and Issuer ID, and download the `.p8` file once. Keep it outside Git.
 4. Configure the repository secrets below. Automatic signing authenticates with the API key and obtains the app-specific App Store Connect provisioning profile. Existing development/wildcard profiles are not TestFlight profiles.
 5. Run `testflight` on `main`. Verify processing in App Store Connect before adding the build to testers. Complete any requested beta information and encryption questionnaire there. Do not declare encryption exempt merely to skip a question.
