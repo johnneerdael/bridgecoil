@@ -414,6 +414,109 @@ async fn start_upload(
         )
         .await
 }
+/// Asks where to put a file. The answer stays a `FilePath`, because on Android it's a document
+/// URI rather than somewhere this app can write to by name.
+async fn choose_destination(
+    app: &tauri::AppHandle,
+    name: &str,
+) -> Result<Option<(std::fs::File, tauri_plugin_fs::FilePath)>> {
+    let picker_app = app.clone();
+    let name = name.to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(path) = picker_app
+            .dialog()
+            .file()
+            .set_file_name(name)
+            .blocking_save_file()
+        else {
+            return Ok(None);
+        };
+        let mut opts = tauri_plugin_fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        let opened = picker_app.fs().open(path.clone(), opts).map_err(err);
+        #[cfg(target_os = "ios")]
+        let _ = picker_app
+            .fs()
+            .stop_accessing_security_scoped_resource(path.clone());
+        Ok(Some((opened?, path)))
+    })
+    .await
+    .map_err(err)?
+}
+#[derive(Clone, serde::Serialize)]
+struct SaveProgress {
+    received: u64,
+    total: u64,
+}
+/// Copies a file from the TV to wherever the user picks.
+#[tauri::command]
+async fn save_tv_file(
+    app: tauri::AppHandle,
+    session_id: String,
+    remote: String,
+    name: String,
+    on_progress: Channel<SaveProgress>,
+    state: State<'_, Backend>,
+    uploads: State<'_, Uploads>,
+) -> Result<bool> {
+    let Some((file, path)) = choose_destination(&app, &name).await? else {
+        return Ok(false);
+    };
+    uploads.cancel.store(false, Ordering::SeqCst);
+    let mut sink = tokio::fs::File::from_std(file);
+    let copied = state
+        .0
+        .lock()
+        .await
+        .download(
+            &session_id,
+            &remote,
+            &mut sink,
+            &uploads.cancel,
+            move |received, total| {
+                let _ = on_progress.send(SaveProgress { received, total });
+            },
+        )
+        .await;
+    if copied.is_err() {
+        // A document URI has no path to remove, so a picked document can stay behind empty.
+        if let tauri_plugin_fs::FilePath::Path(partial) = path {
+            let _ = std::fs::remove_file(partial);
+        }
+    }
+    copied.map(|_| true)
+}
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveContent {
+    text: Option<String>,
+    base64: Option<String>,
+}
+/// Saves something the app already holds, such as a screenshot or a log.
+#[tauri::command]
+async fn save_file(app: tauri::AppHandle, name: String, content: SaveContent) -> Result<bool> {
+    use base64::Engine;
+    use std::io::Write;
+    let bytes = match content {
+        SaveContent {
+            base64: Some(data), ..
+        } => base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .map_err(err)?,
+        SaveContent {
+            text: Some(text), ..
+        } => text.into_bytes(),
+        _ => return Err(PocError::new("input", "There's nothing to save.")),
+    };
+    let Some((mut file, _)) = choose_destination(&app, &name).await? else {
+        return Ok(false);
+    };
+    tauri::async_runtime::spawn_blocking(move || file.write_all(&bytes))
+        .await
+        .map_err(err)?
+        .map_err(err)?;
+    Ok(true)
+}
 /// Downloads the newest verified release of a tool and installs it on the connected TV.
 #[tauri::command]
 async fn install_tool(
@@ -531,6 +634,8 @@ pub fn run() {
             choose_upload,
             start_upload,
             cancel_upload,
+            save_tv_file,
+            save_file,
             install_tool,
             ratings_status,
             ratings_update,

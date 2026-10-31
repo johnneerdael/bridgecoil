@@ -374,6 +374,8 @@ export const api: Platform = {
     committedAt: "2026-10-24T07:42:13Z",
     packages: 5382,
   }),
+  saveTvFile: async () => true,
+  saveFile: async () => true,
   ratingsUpdate: async () => false,
   ratingsUpdateIfDue: async () => false,
   ratingsRemove: async () => {},

@@ -586,6 +586,96 @@ impl Client {
         }
         Err(files::after_disconnect(failure))
     }
+    /// Copies a file off the TV. The write side is the caller's, because on a phone it is a
+    /// document the user picked rather than a plain path.
+    pub async fn download(
+        &mut self,
+        session: &str,
+        remote: &str,
+        sink: &mut (impl tokio::io::AsyncWrite + Unpin + Send),
+        cancel: &AtomicBool,
+        mut progress: impl FnMut(u64, u64) + Send,
+    ) -> Result<u64> {
+        use tokio::io::AsyncWriteExt;
+        if self.active.as_ref().is_none_or(|a| a.info.id != session) {
+            return Err(PocError::new(
+                "staleSession",
+                "The connection changed. Reconnect and try again.",
+            ));
+        }
+        let mut active = self
+            .active
+            .take()
+            .ok_or_else(|| PocError::new("staleSession", "Device disconnected."))?;
+        let quoted = shell_quote(remote);
+        let total = match command(&mut active.wire, &format!("stat -L -c %s {quoted}")).await {
+            Ok((Some(0), output)) => output.trim().parse::<u64>().ok(),
+            Ok(_) => None,
+            Err(e) => return Err(files::after_disconnect(e)),
+        };
+        let Some(total) = total else {
+            self.active = Some(active);
+            return Err(PocError::new(
+                "fileUnavailable",
+                "This file can't be read over ADB.",
+            ));
+        };
+        let transfer: Result<u64> = async {
+            let mut buffer = vec![0u8; 66000];
+            let mut sync = libadb::sync::open(&mut active.wire, &mut buffer)
+                .await
+                .map_err(connection_error)?;
+            sync.recv_start(remote).await.map_err(connection_error)?;
+            let mut received = 0;
+            loop {
+                let next = match files::interruptible(sync.recv_next(), cancel, UPLOAD_STALL).await
+                {
+                    Ok(next) => next.map_err(connection_error)?,
+                    Err(files::Interrupted::Cancelled) => {
+                        return Err(PocError::new("cancelled", "Download cancelled."));
+                    }
+                    Err(files::Interrupted::Stalled) => {
+                        return Err(PocError::new("timeout", "The download stalled."));
+                    }
+                };
+                let Some(chunk) = next else { break };
+                sink.write_all(chunk).await.map_err(connection_error)?;
+                received += chunk.len() as u64;
+                progress(received, total);
+            }
+            sink.flush().await.map_err(connection_error)?;
+            sync.quit().await.map_err(connection_error)?;
+            Ok(received)
+        }
+        .await;
+        match transfer {
+            Ok(received) if received == total => {
+                self.active = Some(active);
+                Ok(received)
+            }
+            Ok(_) => {
+                self.active = Some(active);
+                Err(PocError::new(
+                    "fileChanged",
+                    "The file changed while it was being copied.",
+                ))
+            }
+            Err(failure) => {
+                // A stopped transfer can leave data in flight, so only keep a connection that
+                // still answers.
+                let alive = timeout(
+                    Duration::from_secs(5),
+                    command(&mut active.wire, "echo ok"),
+                )
+                .await;
+                if matches!(alive, Ok(Ok((Some(0), _)))) {
+                    self.active = Some(active);
+                    return Err(failure);
+                }
+                Err(files::after_disconnect(failure))
+            }
+        }
+    }
 }
 const UPLOAD_STALL: Duration = Duration::from_secs(60);
 const SHELL_OUTPUT_LIMIT: usize = 1024 * 1024;

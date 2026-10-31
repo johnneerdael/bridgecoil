@@ -16,6 +16,16 @@ export const targetOf = (device: Device): Target => ({
   sessionId: device.id,
   profileId: device.profileId,
 });
+export type RecordingStep =
+  | { kind: "start"; seconds: number }
+  | { kind: "status" }
+  | { kind: "stop" }
+  | { kind: "discard" };
+export type RecordingState = {
+  running: boolean;
+  size: number | null;
+  path: string;
+};
 export type Page<T> = {
   items: T[];
   page: number;
@@ -117,6 +127,7 @@ export type MappingChange =
 export type MappingState = {
   running: boolean;
   paused: boolean;
+  survivedRestart?: boolean;
   mappings: Mapping[];
   log: string[];
 };
@@ -165,6 +176,8 @@ export type Query =
   | { kind: "package"; package: string }
   | { kind: "appOps"; package: string }
   | { kind: "diagnostics"; section: string }
+  | { kind: "logs"; level: string; package: string | null; lines: number }
+  | { kind: "recording"; step: RecordingStep }
   | { kind: "files"; path: string }
   | { kind: "verifyShell" }
   | { kind: "captureKeys"; seconds: number }
@@ -248,6 +261,17 @@ export type Platform = {
     onprogress: (sent: number) => void,
   ): Promise<void>;
   cancelUpload(): Promise<void>;
+  /** Each resolves false when the user closes the picker without choosing. */
+  saveTvFile(
+    sessionId: string,
+    remote: string,
+    name: string,
+    onprogress: (progress: { received: number; total: number }) => void,
+  ): Promise<boolean>;
+  saveFile(
+    name: string,
+    content: { text: string } | { base64: string },
+  ): Promise<boolean>;
   prepare(
     target: Target,
     action: Action,
@@ -311,6 +335,12 @@ export function nativePlatform(
       });
     },
     cancelUpload: () => call("cancel_upload", {}),
+    saveTvFile: (sessionId, remote, name, onprogress) => {
+      const onProgress = new Channel<{ received: number; total: number }>();
+      onProgress.onmessage = onprogress;
+      return call("save_tv_file", { sessionId, remote, name, onProgress });
+    },
+    saveFile: (name, content) => call("save_file", { name, content }),
     prepare: (target, action, allowUnsafe) =>
       call("prepare_action", { target, action, allowUnsafe }),
     ratingsStatus: () => call("ratings_status"),

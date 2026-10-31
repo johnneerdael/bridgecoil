@@ -244,9 +244,22 @@ it("is honest about restarts when finished", async () => {
     onreview: vi.fn(),
     onbuttons,
   });
-  expect(await screen.findByText(/not been tested/)).toBeTruthy();
+  expect(await screen.findByText(/hasn't been proven/)).toBeTruthy();
   await fireEvent.click(screen.getByRole("button", { name: "Remap buttons" }));
   expect(onbuttons).toHaveBeenCalled();
+});
+
+it("says so once mappings have come back after a restart", async () => {
+  const api = platform(
+    snapshot({ manager: "porter", porter: official, stage: "done", monitor: true }),
+  );
+  const query = api.query as unknown as ReturnType<typeof vi.fn<(t: unknown, q: { kind: string }) => unknown>>;
+  const answer = query.getMockImplementation()!;
+  query.mockImplementation(async (t, q) =>
+    q.kind === "mappings" ? { survivedRestart: true } : answer(t, q),
+  );
+  render(SetupTool, { device, api, reload: 0, onreview: vi.fn(), onbuttons: vi.fn() });
+  expect(await screen.findByText(/Proven on this TV/)).toBeTruthy();
 });
 
 it("stops and explains when a TV blocks setting up Termux", async () => {

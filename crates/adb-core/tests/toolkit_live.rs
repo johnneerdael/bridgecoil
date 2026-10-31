@@ -12,7 +12,7 @@ use adb_core::{
         driver::ShellDriver,
         engine::{Action, Workspace},
         history::History,
-        queries::{Query, query},
+        queries::{Query, RECORDING_PATH, RecordingStep, query},
         types::{OperationStatus, Target},
     },
 };
@@ -380,6 +380,75 @@ async fn a_screenshot_and_launchers_come_back_whole() {
     println!("large output {} chars", big.stdout.len());
     assert_eq!(big.stdout.len(), 8000000);
     assert!(c.status().is_some(), "the connection survives it");
+    let id = c.status().unwrap().id;
+    let path = "/data/local/tmp/bridgecoil-download-test";
+    c.shell(&t, &format!("head -c 3000000 /dev/urandom > {path}"))
+        .await
+        .unwrap();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let mut copied = Vec::new();
+    let n = c
+        .download(&id, path, &mut copied, &cancel, |_, _| {})
+        .await
+        .unwrap();
+    assert_eq!((n, copied.len()), (3_000_000, 3_000_000));
+    let hash = c.shell(&t, &format!("sha256sum {path}")).await.unwrap();
+    use sha2::Digest;
+    assert!(hash.stdout.starts_with(&hex::encode(sha2::Sha256::digest(&copied))));
+    let denied = c
+        .download(&id, "/data/system/users/0.xml", &mut Vec::new(), &cancel, |_, _| {})
+        .await
+        .unwrap_err();
+    println!("denied {} {}", denied.kind, denied.message);
+    assert!(c.status().is_some(), "a refused file leaves the connection up");
+    c.shell(&t, &format!("rm -f {path}")).await.unwrap();
+
+    let start = Query::Recording {
+        step: RecordingStep::Start { seconds: 3 },
+    };
+    query(&mut c, &t, start).await.unwrap();
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    let done = query(
+        &mut c,
+        &t,
+        Query::Recording {
+            step: RecordingStep::Status,
+        },
+    )
+    .await
+    .unwrap();
+    println!("recording {done}");
+    assert_eq!(done["running"], false);
+    assert!(done["size"].as_u64().unwrap() > 0);
+    let mut video = Vec::new();
+    c.download(&id, RECORDING_PATH, &mut video, &cancel, |_, _| {})
+        .await
+        .unwrap();
+    assert_eq!(&video[4..8], b"ftyp", "a playable mp4");
+    query(
+        &mut c,
+        &t,
+        Query::Recording {
+            step: RecordingStep::Discard,
+        },
+    )
+    .await
+    .unwrap();
+
+    let logs = Query::Logs {
+        level: "error".into(),
+        package: Some("com.android.settings".into()),
+        lines: 200,
+    };
+    println!("logs {}", &query(&mut c, &t, logs).await.unwrap().to_string()[..60]);
+    let logs = Query::Logs {
+        level: "debug".into(),
+        package: None,
+        lines: 5000,
+    };
+    let all = query(&mut c, &t, logs).await.unwrap();
+    println!("full logs {} chars", all["output"].as_str().unwrap().len());
+
     let homes = query(&mut c, &t, Query::Launchers).await.unwrap();
     println!("launchers {homes}");
 }

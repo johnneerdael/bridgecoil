@@ -6,6 +6,7 @@ use std::collections::HashSet;
 pub const RUNTIME_DIR: &str = "/data/local/tmp/bridgecoil";
 const MAX_MAPPINGS: usize = 64;
 const END: &str = "BRIDGECOIL_END_OF_FILE";
+const BOOT_ID: &str = "/proc/sys/kernel/random/boot_id";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,6 +51,8 @@ pub const SENDABLE: &[&str] = &[
 pub struct MappingState {
     pub running: bool,
     pub paused: bool,
+    /// Running in a later boot than the one mappings were saved in, so it restarted itself.
+    pub survived_restart: bool,
     pub mappings: Vec<Mapping>,
     pub log: Vec<String>,
 }
@@ -238,6 +241,7 @@ pub fn apply_command(mappings: &[Mapping]) -> Result<String, PocError> {
          cat > {RUNTIME_DIR}/listener.sh <<'{END}'\n{script}{END}\n\
          cat > {RUNTIME_DIR}/mappings.json <<'{END}'\n{stored}\n{END}\n\
          chmod 700 {RUNTIME_DIR}/listener.sh\n\
+         cat {BOOT_ID} > {RUNTIME_DIR}/saved_boot 2>/dev/null\n\
          sh {RUNTIME_DIR}/listener.sh --start\n\
          sleep 1\n\
          exit 0"
@@ -264,6 +268,8 @@ pub fn state_command() -> String {
          [ -x {RUNTIME_DIR}/listener.sh ] && sh {RUNTIME_DIR}/listener.sh --status && running=1\n\
          echo \"running=$running\"\n\
          [ -f {RUNTIME_DIR}/paused ] && echo paused=1 || echo paused=\n\
+         echo \"boot=$(cat {BOOT_ID} 2>/dev/null)\"\n\
+         echo \"saved=$(cat {RUNTIME_DIR}/saved_boot 2>/dev/null)\"\n\
          echo ---mappings\n\
          cat {RUNTIME_DIR}/mappings.json 2>/dev/null\n\
          echo ---log\n\
@@ -274,9 +280,17 @@ pub fn state_command() -> String {
 pub fn parse_state(raw: &str) -> MappingState {
     let (head, rest) = raw.split_once("---mappings").unwrap_or((raw, ""));
     let (stored, log) = rest.split_once("---log").unwrap_or((rest, ""));
+    let running = head.lines().any(|l| l.trim() == "running=1");
+    let field = |name: &str| {
+        head.lines()
+            .find_map(|l| l.trim().strip_prefix(name))
+            .unwrap_or("")
+    };
+    let (boot, saved) = (field("boot="), field("saved="));
     MappingState {
-        running: head.lines().any(|l| l.trim() == "running=1"),
+        running,
         paused: head.lines().any(|l| l.trim() == "paused=1"),
+        survived_restart: running && !boot.is_empty() && !saved.is_empty() && boot != saved,
         mappings: serde_json::from_str(stored.trim()).unwrap_or_default(),
         log: log
             .lines()

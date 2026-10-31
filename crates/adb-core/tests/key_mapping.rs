@@ -335,6 +335,16 @@ fn reads_back_what_the_tv_holds() {
 }
 
 #[test]
+fn only_a_later_boot_counts_as_surviving_a_restart() {
+    let state = |head: &str| parse_state(&format!("{head}\n---mappings\n[]\n---log\n"));
+    assert!(state("running=1\nboot=b\nsaved=a").survived_restart);
+    assert!(!state("running=1\nboot=a\nsaved=a").survived_restart);
+    assert!(!state("running=\nboot=b\nsaved=a").survived_restart);
+    assert!(!state("running=1\nboot=b\nsaved=").survived_restart);
+    assert!(!state("running=1\nboot=\nsaved=a").survived_restart);
+}
+
+#[test]
 fn a_tv_with_nothing_set_up_reads_as_empty() {
     let state = parse_state("running=\npaused=\n---mappings\n---log\n");
     assert!(!state.running);

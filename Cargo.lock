@@ -29,6 +29,7 @@ name = "adb-studio-app"
 version = "0.1.7"
 dependencies = [
  "adb-core",
+ "base64 0.22.1",
  "serde",
  "serde_json",
  "tauri",

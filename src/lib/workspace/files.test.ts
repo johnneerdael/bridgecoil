@@ -270,9 +270,31 @@ it("offers no changes in a folder ADB can't write", async () => {
   });
   tool(api);
   expect(await screen.findByText("This folder is read-only for ADB.")).toBeTruthy();
-  expect(screen.queryByRole("button", { name: /Actions for/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Actions for Movies" })).toBeNull();
   expect(screen.queryByRole("button", { name: /Upload file/ })).toBeNull();
   expect(screen.queryByRole("button", { name: /New folder/ })).toBeNull();
+  await fireEvent.click(screen.getByRole("button", { name: "Actions for a.txt" }));
+  expect(await screen.findByRole("button", { name: "Save to this device" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+});
+
+it("saves a file from the TV and reports it", async () => {
+  const api = platform({ "/sdcard": folderWithFile() });
+  (api as { saveTvFile?: unknown }).saveTvFile = vi.fn(async () => true);
+  tool(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Actions for a.txt" }),
+  );
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Save to this device" }),
+  );
+  expect(await screen.findByText("Saved a.txt.")).toBeTruthy();
+  expect(api.saveTvFile).toHaveBeenCalledWith(
+    expect.anything(),
+    "/sdcard/a.txt",
+    "a.txt",
+    expect.any(Function),
+  );
 });
 
 it("shows a refused action without losing the folder", async () => {

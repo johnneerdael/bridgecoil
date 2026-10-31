@@ -85,6 +85,14 @@ pub enum Query {
     Mappings,
     LaunchableApps,
     Screenshot,
+    Logs {
+        level: String,
+        package: Option<String>,
+        lines: u32,
+    },
+    Recording {
+        step: RecordingStep,
+    },
     Diagnostics {
         section: String,
     },
@@ -93,6 +101,93 @@ pub enum Query {
     Files {
         path: String,
     },
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum RecordingStep {
+    Start { seconds: u32 },
+    Status,
+    Stop,
+    Discard,
+}
+/// In the shell user's own folder, so nothing lands in the owner's media.
+pub const RECORDING_PATH: &str = "/data/local/tmp/bridgecoil-recording.mp4";
+const NOT_RUNNING: u8 = 3;
+const NO_RECORDER: u8 = 3;
+const ALREADY_RECORDING: u8 = 4;
+const RECORDER_REFUSED: u8 = 5;
+
+pub fn logs_command(level: &str, package: Option<&str>, lines: u32) -> Result<String> {
+    let priority = match level {
+        "error" => "E",
+        "warning" => "W",
+        "info" => "I",
+        "debug" => "D",
+        _ => return Err(PocError::new("input", "Choose how much detail to show.")),
+    };
+    if !(50..=5000).contains(&lines) {
+        return Err(PocError::new("input", "Choose how many lines to show."));
+    }
+    let base = format!("logcat -d -t {lines} -v threadtime '*:{priority}'");
+    Ok(match package {
+        None => base,
+        Some(package) => {
+            let package = package_arg(package)?;
+            format!(
+                "pid=$(pidof {package} | cut -d' ' -f1)\n\
+                 [ -n \"$pid\" ] || exit {NOT_RUNNING}\n\
+                 {base} --pid=\"$pid\""
+            )
+        }
+    })
+}
+pub fn recording_command(step: RecordingStep) -> Result<String> {
+    Ok(match step {
+        RecordingStep::Start { seconds } => {
+            if !(1..=180).contains(&seconds) {
+                return Err(PocError::new("input", "Choose a recording length."));
+            }
+            format!(
+                "command -v screenrecord >/dev/null || exit {NO_RECORDER}\n\
+                 pidof screenrecord >/dev/null && exit {ALREADY_RECORDING}\n\
+                 rm -f {RECORDING_PATH}\n\
+                 nohup screenrecord --time-limit {seconds} {RECORDING_PATH} >/dev/null 2>&1 </dev/null &\n\
+                 sleep 1\n\
+                 pidof screenrecord >/dev/null || exit {RECORDER_REFUSED}\n\
+                 exit 0"
+            )
+        }
+        RecordingStep::Status => format!(
+            "pidof screenrecord >/dev/null && echo running=1\n\
+             echo \"size=$(stat -c %s {RECORDING_PATH} 2>/dev/null)\"\n\
+             exit 0"
+        ),
+        // SIGINT lets screenrecord finish the file. Killing it leaves something unplayable.
+        RecordingStep::Stop => format!(
+            "pid=$(pidof screenrecord)\n\
+             [ -n \"$pid\" ] && kill -INT $pid\n\
+             i=0\n\
+             while pidof screenrecord >/dev/null && [ $i -lt 8 ]; do sleep 0.5; i=$((i + 1)); done\n\
+             echo \"size=$(stat -c %s {RECORDING_PATH} 2>/dev/null)\"\n\
+             exit 0"
+        ),
+        RecordingStep::Discard => format!("rm -f {RECORDING_PATH}"),
+    })
+}
+fn parse_recording(raw: &str) -> Value {
+    let size = raw
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("size="))
+        .and_then(|v| v.parse::<u64>().ok());
+    json!({
+        "running": raw.lines().any(|l| l.trim() == "running=1"),
+        "size": size,
+        "path": RECORDING_PATH,
+    })
 }
 async fn checked(d: &mut dyn ShellDriver, t: &Target, c: &str) -> Result<String> {
     validate_target(d.current_target().as_ref(), t)?;
@@ -453,6 +548,46 @@ pub async fn query_rated(
             let raw = checked(d, t, setup::verify_shell_command()).await?;
             let route = raw.lines().find_map(|l| l.trim().strip_prefix("route="));
             Ok(json!({"route":route.unwrap_or("none")}))
+        }
+        Query::Logs {
+            level,
+            package,
+            lines,
+        } => {
+            let command = logs_command(&level, package.as_deref(), lines)?;
+            validate_target(d.current_target().as_ref(), t)?;
+            let o = d.shell_large(t, &command).await?;
+            if package.is_some() && o.exit_code == Some(NOT_RUNNING) {
+                return Ok(json!({"output":"","notRunning":true}));
+            }
+            if !o.success() {
+                return Err(PocError::new("deviceCommand", o.combined()));
+            }
+            Ok(json!({"output":o.stdout,"notRunning":false}))
+        }
+        Query::Recording { step } => {
+            validate_target(d.current_target().as_ref(), t)?;
+            let o = d.shell(t, &recording_command(step)?).await?;
+            if let RecordingStep::Start { .. } = step {
+                match o.exit_code {
+                    Some(0) => {}
+                    Some(ALREADY_RECORDING) => {
+                        return Err(PocError::new(
+                            "captureBusy",
+                            "The TV is already recording its screen.",
+                        ));
+                    }
+                    _ => {
+                        return Err(PocError::new(
+                            "captureUnavailable",
+                            "This TV doesn't allow its screen to be recorded.",
+                        ));
+                    }
+                }
+            } else if !o.success() {
+                return Err(PocError::new("deviceCommand", o.combined()));
+            }
+            Ok(parse_recording(&o.stdout))
         }
         Query::Diagnostics { section } => {
             let command = match section.as_str() {

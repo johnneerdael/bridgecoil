@@ -52,6 +52,7 @@
   let menu = $state<FileEntry | null>(null);
   let moving = $state<FileEntry | null>(null);
   let naming = $state<{ entry: FileEntry | null; value: string } | null>(null);
+  let saving = $state<{ name: string; percent: number } | null>(null);
   let upload = $state<{
     choice: UploadChoice;
     name: string;
@@ -144,6 +145,29 @@
           }
         : { kind: "fileCreateFolder", path: joinPath(path, value) },
     );
+  }
+  async function download(entry: FileEntry) {
+    menu = null;
+    actionError = "";
+    notice = "";
+    saving = { name: entry.name, percent: 0 };
+    try {
+      const saved = await api.saveTvFile(
+        device.id,
+        entry.path,
+        entry.name,
+        ({ received, total }) => {
+          if (saving)
+            saving.percent = total ? Math.round((received / total) * 100) : 100;
+        },
+      );
+      if (saved) notice = `Saved ${entry.name}.`;
+    } catch (e) {
+      if ((e as { kind?: string }).kind !== "cancelled")
+        actionError = errorMessage(e);
+    } finally {
+      saving = null;
+    }
   }
   async function chooseUpload() {
     actionError = "";
@@ -280,7 +304,7 @@
           {:else}<div class="list-row entry-static">
               {@render row(entry, false)}
             </div>{/if}
-          {#if changeable}<button
+          {#if changeable || (entry.kind === "file" && entry.readable && !moving)}<button
               class="icon-button file-more"
               aria-label={`Actions for ${entry.name}`}
               onclick={() => (menu = entry)}><Icon name="more" /></button
@@ -292,6 +316,10 @@
         </p>{/if}
     </div>{/if}
 {/if}
+{#if saving}<div class="file-moving">
+    <p role="status">Saving {saving.name}… {saving.percent}%</p>
+    <button class="secondary" onclick={() => api.cancelUpload()}>Cancel</button>
+  </div>{/if}
 {#if moving}<div class="file-moving">
     <p>Moving <strong>{moving.name}</strong></p>
     <div>
@@ -321,23 +349,27 @@
 
 <Modal open={!!menu} title={menu?.name ?? ""} onclose={() => (menu = null)}>
   {#if menu}{@const entry = menu}<div class="file-actions">
-      <button
-        class="secondary"
-        onclick={() => {
-          naming = { entry, value: entry.name };
-          menu = null;
-        }}>Rename</button
-      ><button
-        class="secondary"
-        onclick={() => {
-          moving = entry;
-          menu = null;
-        }}>Move</button
-      ><button
-        class="secondary"
-        onclick={() => plan({ kind: "fileDelete", path: entry.path })}
-        >Delete</button
-      >
+      {#if entry.kind === "file" && entry.readable}<button
+          class="secondary"
+          onclick={() => download(entry)}>Save to this device</button
+        >{/if}
+      {#if listing?.writable}<button
+          class="secondary"
+          onclick={() => {
+            naming = { entry, value: entry.name };
+            menu = null;
+          }}>Rename</button
+        ><button
+          class="secondary"
+          onclick={() => {
+            moving = entry;
+            menu = null;
+          }}>Move</button
+        ><button
+          class="secondary"
+          onclick={() => plan({ kind: "fileDelete", path: entry.path })}
+          >Delete</button
+        >{/if}
     </div>{/if}
 </Modal>
 

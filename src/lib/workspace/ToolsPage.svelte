@@ -13,6 +13,7 @@
   import CommandsTool from "./CommandsTool.svelte";
   import FilesTool from "./FilesTool.svelte";
   import LauncherTool from "./LauncherTool.svelte";
+  import LogsTool from "./LogsTool.svelte";
   import ScreenshotTool from "./ScreenshotTool.svelte";
   import SetupTool from "./SetupTool.svelte";
   import { internalStorage } from "./files";
@@ -70,8 +71,8 @@
     },
     {
       id: "capture",
-      name: "Screenshot",
-      note: "See what's on the TV",
+      name: "Screen capture",
+      note: "Screenshots and recordings",
       icon: "device",
     },
     { id: "files", name: "Files", note: "Browse TV storage", icon: "device" },
@@ -132,6 +133,7 @@
       diagnostic = section;
     reload;
     if (!choice || selfLoading.includes(choice)) return;
+    if (choice === "diagnostics" && diagnostic === "logs") return;
     let cancelled = false;
     busy = true;
     error = "";
@@ -304,6 +306,9 @@
           >{#each [["logs", "Recent logs"], ["processes", "Processes"], ["memory", "Memory"], ["services", "Services"], ["display", "Display"], ["input", "Input devices"], ["battery", "Battery"]] as [value, label]}<option
               {value}>{label}</option
             >{/each}</select
-        >{/if}<Output text={output} />{/if}
+        >{/if}{#if tool === "diagnostics" && section === "logs"}<LogsTool
+          {device}
+          {api}
+        />{:else}<Output text={output} />{/if}{/if}
   {/if}
 </section>

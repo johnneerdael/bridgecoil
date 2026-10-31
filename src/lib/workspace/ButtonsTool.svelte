@@ -63,9 +63,11 @@
       ? ""
       : tv.paused
         ? "Paused. Buttons do their normal action only."
-        : tv.running
-          ? "Listening for buttons on the TV."
-          : "The listener isn't running on the TV.",
+        : tv.survivedRestart
+          ? "Listening for buttons. It came back by itself after the TV restarted."
+          : tv.running
+            ? "Listening for buttons on the TV."
+            : "The listener isn't running on the TV.",
   );
   $effect(() => {
     const target = targetOf(device);

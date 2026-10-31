@@ -1613,6 +1613,12 @@ textarea {
 .setup-step.done svg {
   color: var(--bc-success);
 }
+.capture-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .mapping-choice {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

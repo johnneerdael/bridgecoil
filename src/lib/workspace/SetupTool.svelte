@@ -4,6 +4,7 @@
     targetOf,
     type InstallProgress,
     type Manager,
+    type MappingState,
     type Platform,
     type Review,
     type SetupStep,
@@ -56,6 +57,7 @@
   let busy = $state(false);
   let error = $state("");
   let installing = $state<InstallProgress | null>(null);
+  let survived = $state(false);
   const current = $derived(steps.findIndex((s) => s.id === snapshot?.stage));
   const finished = $derived(snapshot?.stage === "done");
   const managerName = $derived(
@@ -71,8 +73,15 @@
     let cancelled = false;
     void api
       .query<ToolkitSnapshot>(target, { kind: "toolkit" })
-      .then((r) => {
-        if (!cancelled) snapshot = r;
+      .then(async (r) => {
+        if (cancelled) return;
+        snapshot = r;
+        if (r.stage !== "done") return;
+        // Only adds a reassurance, so failing to read it changes nothing.
+        const state = await api
+          .query<MappingState>(target, { kind: "mappings" })
+          .catch(() => null);
+        if (!cancelled) survived = state?.survivedRestart ?? false;
       })
       .catch((e) => {
         if (!cancelled) error = errorMessage(e);
@@ -283,10 +292,14 @@
     {:else if snapshot.stage === "done"}
       <h3>Your TV is ready</h3>
       <p>Everything is in place to remap buttons.</p>
-      <p class="subtle">
-        Recovery after a restart has not been tested on this TV yet. After you
-        map a button, restart the TV and try it.
-      </p>
+      {#if survived}<p class="subtle">
+          Proven on this TV: your button mappings came back by themselves after
+          it restarted.
+        </p>
+      {:else}<p class="subtle">
+          Recovery after a restart hasn't been proven on this TV yet. After you
+          map a button, restart the TV and open Buttons to see if it came back.
+        </p>{/if}
       <button class="primary" onclick={onbuttons}>Remap buttons</button>
       <button
         class="secondary"
