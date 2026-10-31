@@ -986,6 +986,11 @@
     an unauthorised device.
   </p>
   <p>
+    If Wireless debugging is missing or turns itself off, check how the TV is
+    connected. Android usually allows it only on Wi-Fi, so unplug any network
+    cable and join Wi-Fi.
+  </p>
+  <p>
     Use Find to look for nearby ADB devices. You can also copy the pairing and
     connection addresses from their separate TV screens.
   </p>

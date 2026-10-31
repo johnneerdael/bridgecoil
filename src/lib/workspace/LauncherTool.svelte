@@ -12,7 +12,12 @@
     reload: number;
     onreview: (r: Review) => void;
   } = $props();
-  type Homes = { homes: string[]; current: string | null; stock: string[] };
+  type Homes = {
+    homes: string[];
+    current: string | null;
+    stock: string[];
+    chosen?: string | null;
+  };
   let homes = $state<Homes | null>(null);
   let busy = $state(false);
   let error = $state("");
@@ -20,6 +25,10 @@
   let result = $state<"proven" | "wrong" | null>(null);
   const packageOf = (component: string) => component.split("/")[0];
   const onStock = $derived(!!homes && homes.stock.includes(homes.current ?? ""));
+  // Android ignores the choice when the TV's own launcher has a higher priority.
+  const outranked = $derived(
+    onStock && !!homes?.chosen && homes.chosen !== packageOf(homes.current ?? ""),
+  );
   const others = $derived(homes?.homes.filter((h) => h !== homes!.current) ?? []);
   const stockLeft = $derived(homes?.stock.filter((h) => h !== homes!.current) ?? []);
   $effect(() => {
@@ -111,6 +120,26 @@
       }}>Yes, it works</button
     >
     <button class="secondary" onclick={() => (tried = null)}>No</button>
+  </div>
+{:else if outranked && homes.current}
+  {@const inUse = homes.current}
+  <div class="setup-card">
+    <h3>Your TV's own launcher comes first</h3>
+    <p>
+      You chose {homes.chosen}, but this TV gives {packageOf(inUse)} priority,
+      so the Home button keeps opening it. Turning it off hands Home over. Some
+      TV features can depend on it. You can undo this from History or Apps.
+    </p>
+    <button
+      class="primary"
+      disabled={busy}
+      onclick={() => turnOff(inUse)}>Turn off {packageOf(inUse)}</button
+    >
+    <button
+      class="secondary"
+      disabled={busy}
+      onclick={() => makeDefault(inUse)}>Keep {packageOf(inUse)}</button
+    >
   </div>
 {:else if !onStock && result === null && homes.current}
   <div class="setup-card">

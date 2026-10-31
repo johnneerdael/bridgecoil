@@ -247,7 +247,7 @@ impl Workspace {
                 kind,
                 PackageAction::Disable | PackageAction::Remove | PackageAction::ClearData
             ) {
-                protect_home(driver, target, package).await?;
+                protect_home(driver, target, package, kind).await?;
             }
             match kind {
                 PackageAction::Enable | PackageAction::Disable | PackageAction::ResetEnabled => {
@@ -388,7 +388,7 @@ impl Workspace {
                 PackageAction::Disable | PackageAction::Remove | PackageAction::ClearData
             )
         {
-            protect_home(driver, target, package).await?;
+            protect_home(driver, target, package, action).await?;
         }
         let now = now_ms();
         let mut row = OperationRecord {
@@ -581,7 +581,12 @@ fn home_query(user: u32) -> String {
         "cmd package resolve-activity --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME"
     )
 }
-async fn protect_home(d: &mut dyn ShellDriver, t: &Target, package: &str) -> Result<()> {
+async fn protect_home(
+    d: &mut dyn ShellDriver,
+    t: &Target,
+    package: &str,
+    action: &PackageAction,
+) -> Result<()> {
     if [
         "android",
         "com.android.systemui",
@@ -616,6 +621,13 @@ async fn protect_home(d: &mut dyn ShellDriver, t: &Target, package: &str) -> Res
             )
         })?;
     if component.trim().split('/').next() == Some(package) {
+        // A launcher with a higher priority outranks the one chosen, so turning it off is the
+        // only way to hand over. Android keeps its data, and it can be turned back on.
+        if matches!(action, PackageAction::Disable)
+            && super::queries::has_replacement_home(d, t, package).await?
+        {
+            return Ok(());
+        }
         return Err(PocError::new(
             "protected",
             "Choose and verify a replacement Home app before changing the active launcher.",
@@ -957,7 +969,7 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
         }
         Action::DefaultHome { component } => {
             let c = component_arg(component)?;
-            ("Set default Home app".into(),"Request this Home activity for the profile. OEM firmware may reject it or show a TV chooser. Test the physical Home button afterwards.".into(),format!("cmd package set-home-activity --user {user} {c}"))
+            ("Set default Home app".into(),"Request this Home activity for the profile. OEM firmware may reject it, show a TV chooser or keep its own launcher first. Test the physical Home button afterwards.".into(),format!("cmd package set-home-activity --user {user} {c}"))
         }
     };
     Ok((result.0, result.1, losses, result.2))

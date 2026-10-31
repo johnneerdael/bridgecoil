@@ -34,6 +34,7 @@ const snapshot = (over: Partial<ToolkitSnapshot>): ToolkitSnapshot => ({
   authorized: false,
   monitor: false,
   listener: false,
+  wired: false,
   stage: "manager",
   ...over,
 });
@@ -260,6 +261,28 @@ it("says so once mappings have come back after a restart", async () => {
   );
   render(SetupTool, { device, api, reload: 0, onreview: vi.fn(), onbuttons: vi.fn() });
   expect(await screen.findByText(/Proven on this TV/)).toBeTruthy();
+});
+
+it("warns a wired TV that its manager can't start itself", async () => {
+  const ready = {
+    manager: "porter" as const,
+    terminalReady: true,
+    shellReady: true,
+    authorized: true,
+    serverRunning: true,
+  };
+  const first = open(platform(snapshot({ ...ready, wired: true, stage: "startup" })));
+  expect(await screen.findByText(/on a network cable/)).toBeTruthy();
+  expect(screen.getByText(/start Porter again/)).toBeTruthy();
+  first.unmount();
+  const done = open(
+    platform(snapshot({ ...ready, wired: true, monitor: true, stage: "done" })),
+  );
+  expect(await screen.findByText(/on a network cable/)).toBeTruthy();
+  done.unmount();
+  open(platform(snapshot({ ...ready, stage: "startup" })));
+  await screen.findByRole("button", { name: /Keep mappings running/ });
+  expect(screen.queryByText(/on a network cable/)).toBeNull();
 });
 
 it("stops and explains when a TV blocks setting up Termux", async () => {

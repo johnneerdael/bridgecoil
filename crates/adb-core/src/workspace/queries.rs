@@ -225,6 +225,52 @@ pub fn eligible_homes(components: Vec<String>) -> Vec<String> {
         .filter(|c| !c.split('/').next().unwrap_or_default().ends_with(".settings"))
         .collect()
 }
+fn homes_command(user: u32) -> String {
+    format!(
+        "cmd package query-activities --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME"
+    )
+}
+/// The launcher holding the Home role. Android ignores this choice when another launcher has a
+/// higher priority, so it can differ from what the Home button opens.
+async fn chosen_home(
+    d: &mut dyn ShellDriver,
+    t: &Target,
+    homes: &[String],
+) -> Result<Option<String>> {
+    let roles = d
+        .shell(
+            t,
+            &format!(
+                "cmd role get-role-holders --user {} android.app.role.HOME",
+                t.profile_id
+            ),
+        )
+        .await?;
+    if !roles.success() {
+        return Ok(None);
+    }
+    Ok(roles
+        .stdout
+        .lines()
+        .map(str::trim)
+        .find(|package| homes.iter().any(|h| h.split('/').next() == Some(*package)))
+        .map(str::to_owned))
+}
+/// True when a different, installed launcher has been chosen to take over from `package`.
+pub async fn has_replacement_home(
+    d: &mut dyn ShellDriver,
+    t: &Target,
+    package: &str,
+) -> Result<bool> {
+    let homes = d.shell(t, &homes_command(t.profile_id)).await?;
+    if !homes.success() {
+        return Ok(false);
+    }
+    let homes = eligible_homes(parse_components(&homes.stdout));
+    Ok(chosen_home(d, t, &homes)
+        .await?
+        .is_some_and(|chosen| chosen != package))
+}
 pub fn screenshot_command() -> &'static str {
     "screencap -p | base64"
 }
@@ -485,18 +531,19 @@ pub async fn query_rated(
         }
 
         Query::Launchers => {
-            let homes=checked(d,t,&format!("cmd package query-activities --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME")).await?;
+            let homes = checked(d, t, &homes_command(user)).await?;
             let current=checked(d,t,&format!("cmd package resolve-activity --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME")).await?;
             let system = parse_packages(
                 &checked(d, t, &format!("pm list packages --user {user} -s")).await?,
             );
             let homes = eligible_homes(parse_components(&homes));
+            let chosen = chosen_home(d, t, &homes).await?;
             let stock: Vec<_> = homes
                 .iter()
                 .filter(|c| c.split('/').next().is_some_and(|p| system.iter().any(|s| s == p)))
                 .cloned()
                 .collect();
-            Ok(json!({"homes":homes,"stock":stock,"current":parse_components(&current).first()}))
+            Ok(json!({"homes":homes,"stock":stock,"chosen":chosen,"current":parse_components(&current).first()}))
         }
         Query::Screenshot => {
             let raw = d.shell_large(t, screenshot_command()).await?;

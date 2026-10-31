@@ -61,6 +61,8 @@ The certificate is pinned, so a release signed by anyone else is refused even if
 - [x] **P. Saved commands.** Filled-in commands are kept on the phone and rerun in one step.
 - [x] **Q. Android TV image.** Both managers walked from a bare TV to Done on a `user` build with secure ADB and no root, plus a real key, a cold boot and capture. This found the Play Protect block on Termux, which is now guided. See `docs/validation/android-tv-emulator.md`.
 - [x] **Second independent review.** No Critical findings. Fixed all four Important issues and all five Minor ones.
+- [x] **R. Wired TVs.** Android refuses wireless debugging on Ethernet, so setup detects a wired TV and says what that costs. See `docs/validation/android-tv-emulator.md`.
+- [x] **S. Launcher handover.** Android TV's launcher outranks any other, so choosing one changed nothing. The chosen launcher is now reported, and the one in use can be turned off once a different installed launcher holds the Home role. Proven through the engine with a real Home key, a reboot and the way back.
 - [ ] **J. On a real TV.** Needs the owner. Pairing, the access prompt, start at boot and a physical remote.
 
 ## Left out, on purpose

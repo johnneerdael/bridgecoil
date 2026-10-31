@@ -9,6 +9,11 @@ if [ -r /data/local/tmp/bridgecoil/listener.pid ]; then
     *) kill -0 "$listener" 2>/dev/null && echo "listener=$listener" ;;
   esac
 fi
+# Android turns wireless debugging off on a wired TV, so its manager can't start itself.
+case "$(ip -o -4 addr show 2>/dev/null)" in
+  *" wlan"*) ;;
+  *" eth"*) echo wired=1 ;;
+esac
 run-as com.termux sh 2>/dev/null <<'INNER'
 files=/data/data/com.termux/files
 echo runAs=1

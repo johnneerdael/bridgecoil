@@ -55,7 +55,8 @@
     {:else if error}<p class="error-text" role="alert">{error}</p>
     {:else if !result.services.length}<p class="subtle" role="status">
         No ADB services found. Check that the TV and phone are on the same
-        network and Wireless debugging is on.
+        network and Wireless debugging is on. A TV on a network cable usually
+        can't use it, so try Wi-Fi.
       </p>{/if}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div

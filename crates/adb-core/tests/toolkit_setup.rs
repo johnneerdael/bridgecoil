@@ -1,7 +1,7 @@
 use adb_core::{
     backend::PocError,
     toolkit::{
-        inventory::{Manager, ShizukuSlot, Stage, inspect, parse_facts},
+        inventory::{Manager, ShizukuSlot, Stage, facts_command, inspect, parse_facts},
         setup::{SetupStep, deploy_command, start_command},
     },
     workspace::{
@@ -87,6 +87,38 @@ fn device(packages: Vec<(&'static str, &'static str)>, facts: &str) -> Fake {
     }
 }
 const SHIZUKU: &str = "moe.shizuku.privileged.api";
+
+/// Runs the real probe against a stand-in `ip`, with output in the format the TV image prints.
+fn wired_fact(addresses: &str) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let ip = dir.path().join("ip");
+    std::fs::write(&ip, format!("#!/bin/sh\ncat <<'OUT'\n{addresses}\nOUT\n")).unwrap();
+    std::fs::set_permissions(&ip, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = format!(
+        "{}:{}",
+        dir.path().display(),
+        std::env::var("PATH").unwrap()
+    );
+    let output = std::process::Command::new("sh")
+        .args(["-c", facts_command()])
+        .env("PATH", path)
+        .output()
+        .unwrap();
+    parse_facts(&String::from_utf8_lossy(&output.stdout)).flag("wired")
+}
+
+#[test]
+fn notices_a_tv_on_a_network_cable() {
+    let lo = "1: lo    inet 127.0.0.1/8 scope host lo";
+    let eth = "15: eth0    inet 10.0.2.15/24 brd 10.0.2.255 scope global eth0";
+    let wlan = "16: wlan0    inet 192.168.1.20/24 brd 192.168.1.255 scope global wlan0";
+    assert!(wired_fact(&format!("{lo}\n{eth}")));
+    assert!(!wired_fact(&format!("{lo}\n{wlan}")));
+    assert!(!wired_fact(&format!("{lo}\n{eth}\n{wlan}")));
+    assert!(!wired_fact(lo));
+    assert!(!wired_fact(""));
+}
 
 #[test]
 fn reads_probe_facts_and_ignores_noise() {

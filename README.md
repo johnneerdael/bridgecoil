@@ -36,12 +36,14 @@ Google Play Protect may stop the Termux apps with "Unsafe app blocked", because 
 
 1. Install the APK from [Releases](https://github.com/johnneerdael/bridgecoil/releases) on an arm64 Android phone.
 2. On the TV, open **Settings → System → About** and repeatedly select **Android TV OS build** to unlock Developer options. Menu names vary between brands.
-3. In Developer options, turn on **Wireless debugging**. The phone and TV must be on the same network.
+3. In Developer options, turn on **Wireless debugging**. The phone and TV must be on the same network, and the TV must be on Wi-Fi. If it's on a network cable, Android usually turns this off again.
 4. Open Bridgecoil. It looks for the TV on your network and walks you through pairing with the code the TV shows.
 
 ## What it can't do
 
 - On Android, a "Connected to your TV" service runs while connected. Android closes a background app's connections, so without it, opening a file picker would drop the TV. On iPhone and iPad the connection may drop when you leave the app, so reconnect when you come back.
+
+- On a TV with a network cable, the helper app can't start itself after a restart, because that needs wireless debugging. Use Wi-Fi, or start it again from Bridgecoil after each restart.
 
 - A remapped button still does its normal action first, then yours. Android gives apps no way to stop that without root. If a button opens a brand's app, disable that app.
 - Power, voice and some brand buttons never reach apps, so they can't be remapped.

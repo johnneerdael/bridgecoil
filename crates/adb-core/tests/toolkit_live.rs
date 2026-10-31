@@ -10,7 +10,7 @@ use adb_core::{
     },
     workspace::{
         driver::ShellDriver,
-        engine::{Action, Workspace},
+        engine::{Action, PackageAction, Workspace},
         history::History,
         queries::{Query, RECORDING_PATH, RecordingStep, query},
         types::{OperationStatus, Target},
@@ -198,6 +198,107 @@ async fn top(c: &mut Client, t: &Target) -> String {
 }
 async fn mapping_state(c: &mut Client, t: &Target) -> serde_json::Value {
     query(c, t, Query::Mappings).await.unwrap()
+}
+
+async fn press_home(c: &mut Client, t: &Target) -> String {
+    c.shell(t, "input keyevent KEYCODE_HOME").await.unwrap();
+    tokio::time::sleep(Duration::from_secs(4)).await;
+    top(c, t).await
+}
+async fn applied(w: &Workspace, c: &mut Client, t: &Target, a: Action) -> OperationStatus {
+    let review = w.prepare(c, t, a).await.unwrap();
+    let done = w.apply(c, &review.id).await.unwrap();
+    println!("{} -> {:?}", review.title, done.status);
+    done.status
+}
+
+/// Needs a second Home app on the device, named by BC_HOME as package/.Activity. Leaves the TV
+/// as it found it.
+#[tokio::test]
+#[ignore]
+async fn a_new_launcher_takes_over_and_gives_way_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = Client::new(identity(dir.path()));
+    c.connect(std::env::var("BC_ENDPOINT").unwrap(), true)
+        .await
+        .unwrap();
+    let t = c.current_target().unwrap();
+    let w = Workspace::new(History::open(&dir.path().join("ops.db")).unwrap());
+    let mine = std::env::var("BC_HOME").unwrap();
+    let my_package = mine.split('/').next().unwrap().to_owned();
+
+    let homes = query(&mut c, &t, Query::Launchers).await.unwrap();
+    println!("{homes}");
+    let stock = homes["current"].as_str().unwrap().to_owned();
+    let stock_package = stock.split('/').next().unwrap().to_owned();
+    assert!(homes["homes"].as_array().unwrap().iter().any(|h| h == &mine));
+    assert!(homes["stock"].as_array().unwrap().iter().any(|h| h == &stock));
+    assert!(!homes["stock"].as_array().unwrap().iter().any(|h| h == &mine));
+
+    let review = w
+        .prepare(
+            &mut c,
+            &t,
+            Action::DefaultHome {
+                component: mine.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(review.reversible, "changing Home must offer a way back");
+    let asked = w.apply(&mut c, &review.id).await.unwrap().status;
+    let after = query(&mut c, &t, Query::Launchers).await.unwrap();
+    println!("asked {asked:?}: {after}");
+    assert_eq!(after["chosen"].as_str(), Some(my_package.as_str()));
+    // Android TV's launcher outranks any other, so the choice alone changes nothing.
+    assert_eq!(
+        asked == OperationStatus::Verified,
+        after["current"].as_str() == Some(mine.as_str())
+    );
+    if asked != OperationStatus::Verified {
+        assert!(press_home(&mut c, &t).await.contains(&stock_package));
+    }
+
+    let off = Action::Package {
+        package: stock_package.clone(),
+        action: PackageAction::Disable,
+    };
+    assert_eq!(
+        applied(&w, &mut c, &t, off).await,
+        OperationStatus::Verified
+    );
+    assert!(press_home(&mut c, &t).await.contains(&my_package));
+    let refused = w
+        .prepare(
+            &mut c,
+            &t,
+            Action::Package {
+                package: my_package.clone(),
+                action: PackageAction::Disable,
+            },
+        )
+        .await;
+    assert!(refused.is_err(), "the launcher in use can't be turned off");
+    let left = query(&mut c, &t, Query::Launchers).await.unwrap();
+    println!("{left}");
+    assert_eq!(left["current"].as_str(), Some(mine.as_str()));
+
+    if std::env::var("BC_KEEP").is_ok() {
+        return;
+    }
+    let on = Action::Package {
+        package: stock_package.clone(),
+        action: PackageAction::Enable,
+    };
+    assert_eq!(applied(&w, &mut c, &t, on).await, OperationStatus::Verified);
+    let back = Action::DefaultHome {
+        component: stock.clone(),
+    };
+    assert_eq!(
+        applied(&w, &mut c, &t, back).await,
+        OperationStatus::Verified
+    );
+    assert!(press_home(&mut c, &t).await.contains(&stock_package));
 }
 
 /// Needs walks_every_stage to have finished on this device.

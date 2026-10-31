@@ -146,7 +146,12 @@ async fn transport_loss_never_replays_the_mutation() {
 async fn active_home_cannot_be_disabled() {
     let dir = tempfile::tempdir().unwrap();
     let w = workspace(dir.path());
-    let mut d = fake(vec![ok(ENABLED), ok("org.demo/.Main")]);
+    let mut d = fake(vec![
+        ok(ENABLED),
+        ok("org.demo/.Main"),
+        ok("org.demo/.Main\n"),
+        ok("org.demo\n"),
+    ]);
     assert!(
         w.prepare(
             &mut d,

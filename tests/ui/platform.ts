@@ -272,6 +272,7 @@ async function query<T>(t: Target, q: Query): Promise<T> {
         authorized: false,
         monitor: false,
         listener: false,
+        wired: false,
         stage: "manager",
       };
       break;

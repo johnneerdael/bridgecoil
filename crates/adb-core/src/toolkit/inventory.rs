@@ -82,6 +82,7 @@ pub struct ToolkitSnapshot {
     pub authorized: bool,
     pub monitor: bool,
     pub listener: bool,
+    pub wired: bool,
     pub stage: Stage,
 }
 
@@ -208,6 +209,7 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
         authorized,
         monitor,
         listener: facts.flag("listener"),
+        wired: facts.flag("wired"),
         stage,
     })
 }

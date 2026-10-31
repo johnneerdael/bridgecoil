@@ -57,9 +57,28 @@ The signed release APK ran on an Android 16 phone emulator, connected to the TV 
 | App turned off through review, verified, and turned back on | Passed |
 | Connection service stops on disconnect | Passed |
 
+## Wired TVs and launchers
+
+Run on the same image, also on 2026-10-31. The launcher used was a small test app with a Home activity, signed with a throwaway key.
+
+**A wired TV can't turn on wireless debugging.** This image is on Ethernet. Android logged `Not connected to any wireless network. Not enabling adbwifi` and set the option back to off, three times out of three. Joining Wi-Fi as well wasn't possible here, because Android stayed on the validated Ethernet network. So pairing and start at boot can't be tested on this image, and a wired TV normally loses both. Bridgecoil now detects a TV with an Ethernet address and no Wi-Fi address, and says so during setup. That the managers can't start at boot on a wired TV follows from this, but wasn't observed separately.
+
+**Android TV's launcher outranks any other.** It has `priority=2`, and an installed app gets 0. Android compares priority first, so `cmd package set-home-activity` reports `Success` and moves the Home role, while Home keeps opening the stock launcher. Before this run, Bridgecoil had no way past that. It refused to disable the active launcher and only offered that after Home had moved. It now reports the chosen launcher, explains the block, and allows the active launcher to be disabled once a different installed launcher holds the Home role. Removing it or clearing its data stays refused.
+
+| Check | Result |
+|---|---|
+| Set the default while stock outranks it | Reported `Unknown`, role moved, Home unchanged |
+| Turn stock off through review | Passed, verified |
+| Real `KEYCODE_HOME` opens the new launcher | Passed |
+| Turning off the launcher in use | Refused |
+| Stock stays off after a reboot, and the new launcher opens at boot | Passed, by hand, with no crashes |
+| Turn stock back on and make it the default | Passed, Home returned |
+
+**A change needs a moment to stick.** Two reboots within about 8 seconds of disabling brought the stock launcher back. A third, after 45 seconds, kept it off. The likely cause is Android writing this state to disk late, so a power cut right after a change can undo it.
+
 ## Not covered
 
 - **Hold gestures on this image.** The emulator console can only tap without root. Holds were proven with a real kernel key event on the phone image.
-- **Start at boot in the manager.** It needs the owner to pair the manager with wireless debugging on the TV. The test started the server by hand after each boot.
-- **Changing the launcher.** This image has only its own launcher.
+- **Code pairing and start at boot in the manager.** Both need wireless debugging, which this wired image refuses. The test started the server by hand after each boot.
+- **A brand's own launcher.** Priorities and the number of stock launchers vary, and Google TV may have more than one. A system update may also turn one back on.
 - **A physical TV or remote.** Nothing here replaces that.

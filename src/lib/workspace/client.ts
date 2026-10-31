@@ -153,6 +153,7 @@ export type ToolkitSnapshot = {
   authorized: boolean;
   monitor: boolean;
   listener: boolean;
+  wired: boolean;
   stage: Stage;
 };
 export type InstallProgress = { stage: string; sent: number; total: number };

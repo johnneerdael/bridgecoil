@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/svelte";
-import { afterEach, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import LauncherTool from "./LauncherTool.svelte";
 import ScreenshotTool from "./ScreenshotTool.svelte";
 import type { Platform } from "./client";
@@ -136,6 +136,64 @@ it("offers going back when Home didn't open the new launcher", async () => {
       component: stock,
     }),
   );
+});
+
+describe("when the TV's own launcher comes first", () => {
+  const outranked = () => {
+    const api = platform(stock);
+    (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+      homes: [stock, fresh],
+      current: stock,
+      stock: [stock],
+      chosen: "org.fresh.launcher",
+    });
+    return api;
+  };
+
+  it("explains it and offers turning stock off through review", async () => {
+    const api = outranked();
+    const onreview = vi.fn();
+    open(api, onreview);
+    expect(await screen.findByText(/comes first/)).toBeTruthy();
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Turn off com.vendor.home" }),
+    );
+    await waitFor(() =>
+      expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+        kind: "package",
+        package: "com.vendor.home",
+        action: "disable",
+      }),
+    );
+    expect(onreview).toHaveBeenCalled();
+  });
+
+  it("lets someone keep the launcher they have", async () => {
+    const api = outranked();
+    open(api);
+    await fireEvent.click(
+      await screen.findByRole("button", { name: "Keep com.vendor.home" }),
+    );
+    await waitFor(() =>
+      expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+        kind: "defaultHome",
+        component: stock,
+      }),
+    );
+  });
+
+  it("stays quiet when nothing else was chosen", async () => {
+    const api = platform(stock);
+    (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+      homes: [stock, fresh],
+      current: stock,
+      stock: [stock],
+      chosen: "com.vendor.home",
+    });
+    open(api);
+    await screen.findByRole("button", { name: "Try org.fresh.launcher" });
+    expect(screen.queryByText(/comes first/)).toBeNull();
+  });
 });
 
 it("takes a screenshot on request and shows it", async () => {

@@ -137,6 +137,16 @@
     api.remote(targetOf(device), { kind: "key", key, longPress: false });
 </script>
 
+{#snippet wiredNote()}
+  {#if snapshot?.wired}<p class="risk-note" role="note">
+      This TV is on a network cable. Android usually allows wireless debugging
+      only on Wi-Fi, so {managerName} can't start by itself after a restart.
+      To fix that, unplug the cable and join Wi-Fi. If you stay wired, connect
+      Bridgecoil after each restart and start {managerName} again here. Your
+      mappings return once it's running.
+    </p>{/if}
+{/snippet}
+
 {#if !snapshot && !error}<p class="subtle" role="status">Checking the TV…</p>
 {:else if snapshot}
   <ol class="setup-steps">
@@ -278,6 +288,7 @@
         When a TV restarts, these background services stop. Do these three
         things so they come back without your phone.
       </p>
+      {@render wiredNote()}
       <button
         class="secondary"
         disabled={busy}
@@ -304,6 +315,7 @@
     {:else if snapshot.stage === "done"}
       <h3>Your TV is ready</h3>
       <p>Everything is in place to remap buttons.</p>
+      {@render wiredNote()}
       {#if survived}<p class="subtle">
           Proven on this TV: your button mappings came back by themselves after
           it restarted.
