@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub const MAX_CAPTURE_SECONDS: u32 = 20;
+pub(super) const KEY_EVENTS: &str = include_str!("scripts/key_events.sh");
 
 /// A physical button as the TV reports it. Nothing here is a guessed friendly name: `key` is a
 /// Linux key name or a raw number, and `scan` tells apart buttons reported under the same name.
@@ -21,7 +22,9 @@ pub fn capture_command(seconds: u32) -> Result<String, PocError> {
             "Choose a listening time up to 20 seconds.",
         ));
     }
-    Ok(format!("timeout {seconds} getevent -l 2>/dev/null; exit 0"))
+    Ok(include_str!("scripts/capture.sh")
+        .replace("@@KEY_EVENTS@@", KEY_EVENTS)
+        .replace("@@SECONDS@@", &seconds.to_string()))
 }
 
 fn is_button(code: &str) -> bool {

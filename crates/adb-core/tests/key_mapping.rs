@@ -266,6 +266,123 @@ fn run_events(set: &[Mapping], events: &[(u32, &str, &str)]) -> String {
     assert!(run.status.success(), "{run:?}");
     fs::read_to_string(calls).unwrap_or_default()
 }
+/// A stand-in Android 9 box, built from what a real Ugoos AM6 reported: 32-bit, an IR keypad, and
+/// a touch surface with no keys. `od` plays back one press of its browser button.
+#[cfg(unix)]
+struct OldTv {
+    dir: tempfile::TempDir,
+}
+#[cfg(unix)]
+impl OldTv {
+    fn new() -> Self {
+        use std::{fs, os::unix::fs::PermissionsExt};
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let bin = root.join("bin");
+        fs::create_dir(&bin).unwrap();
+        fs::create_dir(root.join("input")).unwrap();
+        for (node, name, keys) in [
+            ("event1", "aml_keypad", "ff"),
+            ("event8", "UGOOS remote touch", "0"),
+        ] {
+            fs::write(root.join("input").join(node), "").unwrap();
+            let device = root.join("sys").join(node).join("device");
+            fs::create_dir_all(device.join("capabilities")).unwrap();
+            fs::write(device.join("name"), format!("{name}\n")).unwrap();
+            fs::write(device.join("capabilities/key"), format!("{keys}\n")).unwrap();
+        }
+        let calls = root.join("calls");
+        let tool = |name: &str, body: String| {
+            let path = bin.join(name);
+            fs::write(&path, format!("#!/bin/sh\n{body}")).unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        tool("am", format!("echo \"am $*\" >> {}\n", calls.display()));
+        tool(
+            "getevent",
+            format!("echo getevent >> {}\n", calls.display()),
+        );
+        tool(
+            "getprop",
+            "case \"$1\" in\n\
+             ro.build.version.sdk) echo 28 ;;\n\
+             ro.product.cpu.abi) echo armeabi-v7a ;;\n\
+             esac\n"
+                .into(),
+        );
+        let uptime = root.join("uptime");
+        let played = root.join("played");
+        // Waits for the press rather than a set time, so a busy machine can't end a capture early.
+        tool(
+            "sleep",
+            format!(
+                "while [ ! -f {} ]; do /bin/sleep 0.02; done\n",
+                played.display()
+            ),
+        );
+        tool(
+            "od",
+            format!(
+                "for last; do :; done\n\
+                 case \"$last\" in *event8) echo \"od $last\" >> {calls}; exit 0 ;; esac\n\
+                 echo '1000.00 1.00' > {uptime}\n\
+                 echo ' 9f 15 e6 6a 7b 20 0b 00 01 00 46 00 01 00 00 00'\n\
+                 echo ' 9f 15 e6 6a 7b 20 0b 00 00 00 00 00 00 00 00 00'\n\
+                 /bin/sleep 0.2\n\
+                 echo '1000.10 1.00' > {uptime}\n\
+                 echo ' 9f 15 e6 6a 97 3b 0e 00 01 00 46 00 00 00 00 00'\n\
+                 echo ' 9f 15 e6 6a 97 3b 0e 00 00 00 00 00 00 00 00 00'\n\
+                 : > {played}\n\
+                 /bin/sleep 0.6\n",
+                calls = calls.display(),
+                uptime = uptime.display(),
+                played = played.display(),
+            ),
+        );
+        Self { dir }
+    }
+    fn run(&self, script: &str, name: &str, args: &[&str]) -> String {
+        use std::{fs, process::Command};
+        let root = self.dir.path();
+        let script = script
+            .replace("/data/local/tmp/bridgecoil", &root.display().to_string())
+            .replace("/sys/class/input", &root.join("sys").display().to_string())
+            .replace("/dev/input", &root.join("input").display().to_string())
+            .replace("/proc/uptime", &root.join("uptime").display().to_string());
+        let path = root.join(name);
+        fs::write(&path, script).unwrap();
+        let run = Command::new("sh")
+            .arg(&path)
+            .args(args)
+            .env("PATH", format!("{}:/bin:/usr/bin", root.join("bin").display()))
+            .output()
+            .unwrap();
+        assert!(run.status.success(), "{run:?}");
+        String::from_utf8_lossy(&run.stdout).into_owned()
+    }
+    fn calls(&self) -> String {
+        std::fs::read_to_string(self.dir.path().join("calls")).unwrap_or_default()
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn listen_hears_a_press_on_android_9() {
+    let tv = OldTv::new();
+    let raw = tv.run(&capture_command(8).unwrap(), "capture.sh", &[]);
+    assert_eq!(parse_capture(&raw), [key("aml_keypad", "0046", None)], "{raw}");
+    assert_eq!(tv.calls(), "");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_mapping_fires_at_once_on_android_9() {
+    let tv = OldTv::new();
+    let set = [mapping(key("aml_keypad", "0046", None), "org.demo/.Main")];
+    tv.run(&listener_script(&set).unwrap(), "listener.sh", &["--run"]);
+    assert_eq!(tv.calls(), "am start -n org.demo/.Main\n");
+}
+
 #[cfg(unix)]
 fn run_listener(set: &[Mapping], held_centiseconds: u32) -> String {
     run_events(

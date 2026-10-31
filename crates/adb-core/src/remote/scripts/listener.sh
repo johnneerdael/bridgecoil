@@ -24,8 +24,9 @@ case "$1" in
   --stop)
     # getevent goes first: ending it ends every part of the pipeline, on any Android version.
     if [ -r "$events_file" ]; then
-      read -r events < "$events_file"
-      case "$events" in ""|*[!0-9]*) ;; *) kill "$events" 2>/dev/null ;; esac
+      while read -r events; do
+        case "$events" in ""|*[!0-9]*) ;; *) kill "$events" 2>/dev/null ;; esac
+      done < "$events_file"
     fi
     running && kill "$pid"
     rm -f "$pid_file" "$events_file"
@@ -58,10 +59,16 @@ take() {
       ;;
   esac
 }
+@@KEY_EVENTS@@
 {
-  getevent -l 2>/dev/null &
-  echo $! > "$events_file"
-  wait
+  case "$(getprop ro.build.version.sdk)" in
+    [1-9]|[12][0-9]) key_events ;;
+    *)
+      getevent -l 2>/dev/null &
+      echo $! > "$events_file"
+      wait
+      ;;
+  esac
 } | while read -r line; do
   set -- $line
   case "$line" in

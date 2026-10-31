@@ -1,4 +1,4 @@
-use super::capture::KeyIdentity;
+use super::capture::{KEY_EVENTS, KeyIdentity};
 use crate::{backend::PocError, shell_quote, workspace::commands::component_arg};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -225,6 +225,7 @@ pub fn listener_script(mappings: &[Mapping]) -> Result<String, PocError> {
         })
         .collect();
     Ok(include_str!("scripts/listener.sh")
+        .replace("@@KEY_EVENTS@@", KEY_EVENTS)
         .replace("@@SOURCES@@", &source_arms.join("\n"))
         .replace("@@PATHS@@", &path_arms.join("\n"))
         .replace("@@KEYS@@", &key_arms.join("\n")))
