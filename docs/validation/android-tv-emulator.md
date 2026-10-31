@@ -80,6 +80,10 @@ Run on the same image, also on 2026-10-31. The launcher used was a small test ap
 
 The whole launcher flow also ran in the signed APK on a phone emulator, against the TV emulator: try it, default through review, the new card, turn stock off through review, a real Home press, then recovery from History and a Home press back to stock. It passed, and the walk found what jsdom couldn't: the launcher's name was squeezed out of its row, the review didn't name the launcher, the result on stock Android TV was a bare "Unknown", the finished page read like a failure, and turning an app back on carried a warning about removing it. All five are fixed.
 
+Button mapping also ran in that build: **Listen** caught a real `KEY_A`, the mapping was saved through review, and pressing the key opened Settings on the TV emulator.
+
+**Known issue.** Android's Back key closes the app instead of the open dialog, and reopening it shows Not connected. The next connection attempt failed with "The TV did not answer", and a retry worked. The phone emulator's network changed from Wi-Fi to 5G at about that time, so that failure may not be caused by Back.
+
 ## Code pairing
 
 The TV image can't do this, so it ran against the Android 16 phone image on its virtual Wi-Fi, reached through `adb forward`. It proves the protocol against a real `adbd`, not on a TV.

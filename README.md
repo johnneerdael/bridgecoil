@@ -94,6 +94,7 @@ Read [compatibility and limits](https://johnneerdael.github.io/bridgecoil/guide.
 ## Documentation
 
 - [User guide](https://johnneerdael.github.io/bridgecoil/guide.html): connection, apps, launchers, remotes, toolkit, files and recovery.
+- [Screen guide](docs/guide/README.md): screenshots of each part of the app, step by step.
 - [Website maintenance](docs/website.md): local preview, Pages deployment, brand assets and screenshot handoff.
 - [Release process](docs/release.md): signing, version tags and branded release notes.
 
