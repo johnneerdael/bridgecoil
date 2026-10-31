@@ -2,7 +2,7 @@ use adb_core::{
     backend::PocError,
     toolkit::{
         inventory::{Manager, ShizukuSlot, Stage, facts_command, inspect, parse_facts},
-        setup::{SetupStep, deploy_command, start_command},
+        setup::{SetupStep, deploy_command, plan, start_command},
     },
     workspace::{
         driver::{ShellDriver, ShellOutput},
@@ -118,6 +118,44 @@ fn notices_a_tv_on_a_network_cable() {
     assert!(!wired_fact(&format!("{lo}\n{eth}\n{wlan}")));
     assert!(!wired_fact(lo));
     assert!(!wired_fact(""));
+}
+
+/// Runs the real step against stand-in Android tools and returns what the TV was told to do.
+fn background_calls(manager: Manager) -> String {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("calls");
+    for tool in ["am", "cmd", "dumpsys"] {
+        let stub = dir.path().join(tool);
+        let script = format!("#!/bin/sh\necho \"{tool} $*\" >> '{}'\n", log.display());
+        std::fs::write(&stub, script).unwrap();
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = format!(
+        "{}:{}",
+        dir.path().display(),
+        std::env::var("PATH").unwrap()
+    );
+    let command = plan(SetupStep::AllowBackground { manager }).command;
+    let status = std::process::Command::new("sh")
+        .args(["-c", &command])
+        .env("PATH", path)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    std::fs::read_to_string(log).unwrap()
+}
+
+#[test]
+fn keeps_the_helper_app_running_as_well_as_termux() {
+    let shizuku = background_calls(Manager::ShizukuNext);
+    for package in ["moe.shizuku.privileged.api", "com.termux", "com.termux.boot"] {
+        assert!(shizuku.contains(&format!("deviceidle whitelist +{package}\n")));
+        assert!(shizuku.contains(&format!("set {package} RUN_IN_BACKGROUND allow\n")));
+    }
+    let porter = background_calls(Manager::Porter);
+    assert!(porter.contains("deviceidle whitelist +eu.darken.porter\n"));
+    assert!(!porter.contains("moe.shizuku.privileged.api"));
 }
 
 #[test]

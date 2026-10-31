@@ -125,7 +125,7 @@ async fn walks_every_stage() {
         step(&w, &mut c, &t, SetupStep::OpenTerminal).await,
         OperationStatus::Verified
     );
-    step(&w, &mut c, &t, SetupStep::AllowBackground).await;
+    step(&w, &mut c, &t, SetupStep::AllowBackground { manager }).await;
     assert_eq!(stage(&mut c, &t).await, Stage::Shell);
     assert_eq!(
         step(&w, &mut c, &t, SetupStep::DeployShell { manager }).await,

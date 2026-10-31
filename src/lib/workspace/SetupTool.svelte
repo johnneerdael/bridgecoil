@@ -292,8 +292,9 @@
       <button
         class="secondary"
         disabled={busy}
-        onclick={() => run({ kind: "allowBackground" })}
-        >1. Let Termux start with the TV</button
+        onclick={() =>
+          run({ kind: "allowBackground", manager: snapshot!.manager! })}
+        >1. Let Termux and {managerName} keep running</button
       >
       <button
         class="secondary"

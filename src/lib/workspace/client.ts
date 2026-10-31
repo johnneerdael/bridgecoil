@@ -106,7 +106,7 @@ export type ToolId =
 export type SetupStep =
   | { kind: "startServer"; manager: Manager }
   | { kind: "openTerminal" }
-  | { kind: "allowBackground" }
+  | { kind: "allowBackground"; manager: Manager }
   | { kind: "deployShell"; manager: Manager }
   | { kind: "requestAccess" }
   | { kind: "allowBootStart"; manager: Manager }

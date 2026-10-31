@@ -14,7 +14,7 @@ const BOOT_SCRIPT: &str = "/data/data/com.termux/files/home/.termux/boot/00-brid
 pub enum SetupStep {
     StartServer { manager: Manager },
     OpenTerminal,
-    AllowBackground,
+    AllowBackground { manager: Manager },
     DeployShell { manager: Manager },
     RequestAccess,
     AllowBootStart { manager: Manager },
@@ -61,7 +61,7 @@ while [ $i -lt 8 ]; do\n\
   sleep 3\n\
 done\n\
 exit 0";
-const BACKGROUND: &str = "for package in com.termux com.termux.boot; do\n\
+const BACKGROUND: &str = "for package in \"$1\" com.termux com.termux.boot; do\n\
   cmd appops set \"$package\" RUN_IN_BACKGROUND allow 2>/dev/null\n\
   cmd appops set \"$package\" RUN_ANY_IN_BACKGROUND allow 2>/dev/null\n\
   cmd appops set \"$package\" AUTO_START allow 2>/dev/null\n\
@@ -97,11 +97,14 @@ pub fn plan(step: SetupStep) -> SetupPlan {
             &[],
             TERMINAL_OPEN.to_owned(),
         ),
-        SetupStep::AllowBackground => make(
-            "Let Termux run in the background".into(),
-            "Allow Termux and Termux:Boot to start with the TV and keep running. Settings a TV doesn't have are skipped.",
+        SetupStep::AllowBackground { manager } => make(
+            format!("Let Termux and {} keep running", manager.name()),
+            &format!(
+                "Allow {}, Termux and Termux:Boot to start with the TV and keep running, without being stopped to save power. Settings a TV doesn't have are skipped.",
+                manager.name()
+            ),
             &["Background apps use a little memory, and some TVs ignore these settings."],
-            BACKGROUND.to_owned(),
+            with_args(&[manager.package()], BACKGROUND),
         ),
         SetupStep::DeployShell { manager } => make(
             format!("Connect Termux to {}", manager.name()),
@@ -157,7 +160,9 @@ pub fn plan(step: SetupStep) -> SetupPlan {
 pub fn has_readback(step: SetupStep) -> bool {
     !matches!(
         step,
-        SetupStep::AllowBackground | SetupStep::RequestAccess | SetupStep::AllowBootStart { .. }
+        SetupStep::AllowBackground { .. }
+            | SetupStep::RequestAccess
+            | SetupStep::AllowBootStart { .. }
     )
 }
 pub fn verified(step: SetupStep, facts: &Facts) -> bool {
