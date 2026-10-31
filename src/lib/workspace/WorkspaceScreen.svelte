@@ -76,7 +76,8 @@
   function result(r: Operation) {
     if (device && !sameTarget(targetOf(device), r.target)) return;
     // A verified file change shows in the list itself, and History keeps the record.
-    if (r.kind !== "file" || r.status !== "verified") outcome = r;
+    const quiet = ["file", "setup", "mapping"].includes(r.kind);
+    if (!quiet || (r.status !== "verified" && r.status !== "sent")) outcome = r;
     reload++;
   }
 </script>
@@ -119,6 +120,10 @@
           if (r.status !== "sent") outcome = r;
         }}
         onapps={() => onnavigate("apps")}
+        onbuttons={() => {
+          toolChoice = "buttons";
+          onnavigate("tools");
+        }}
       />
     {:else if page === "tools"}<ToolsPage
         {device}

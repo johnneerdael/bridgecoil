@@ -1589,3 +1589,58 @@ textarea {
   gap: 8px;
   justify-items: start;
 }
+
+.setup-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.setup-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.setup-step.current {
+  color: var(--ink);
+  font-weight: 600;
+}
+.setup-step.done svg {
+  color: var(--bc-success);
+}
+.setup-card {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.setup-choice {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.setup-remote {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.command-preview {
+  display: block;
+  padding: 10px;
+  overflow-wrap: anywhere;
+  border-radius: 8px;
+  background: var(--bc-raised);
+  font-family: var(--bc-font-mono);
+  font-size: 12px;
+}
+

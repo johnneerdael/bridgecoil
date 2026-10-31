@@ -7,7 +7,10 @@
     type Action,
     type Query,
   } from "./client";
+  import ButtonsTool from "./ButtonsTool.svelte";
+  import CommandsTool from "./CommandsTool.svelte";
   import FilesTool from "./FilesTool.svelte";
+  import SetupTool from "./SetupTool.svelte";
   import { internalStorage } from "./files";
   import Pager from "./Pager.svelte";
   import Icon from "./Icon.svelte";
@@ -30,16 +33,28 @@
   } = $props();
   const tools = [
     {
+      id: "toolkit",
+      name: "TV setup",
+      note: "Get everything your TV needs",
+      icon: "shield",
+    },
+    {
+      id: "buttons",
+      name: "Buttons",
+      note: "Make any button open any app",
+      icon: "remap",
+    },
+    {
+      id: "commands",
+      name: "Commands",
+      note: "Advanced actions, no typing",
+      icon: "terminal",
+    },
+    {
       id: "launcher",
       name: "Home app",
       note: "Inspect and choose your launcher",
       icon: "home",
-    },
-    {
-      id: "toolkit",
-      name: "TV-side setup",
-      note: "Shizuku, rish and Termux",
-      icon: "shield",
     },
     { id: "files", name: "Files", note: "Browse TV storage", icon: "device" },
     {
@@ -77,16 +92,6 @@
     homes: [],
     current: null,
   });
-  type Tool = {
-    name: string;
-    package: string;
-    installed: boolean;
-    authorized: string;
-    running: string;
-    startup: string;
-  };
-  let toolkit = $state<Tool[]>([]);
-  let setupPage = $state(0);
   type Setting = {
     namespace: string;
     key: string;
@@ -97,12 +102,13 @@
   let settings = $state<Setting[]>([]);
   let settingPage = $state(0);
   let reload = $state(0);
+  const selfLoading = ["shell", "files", "toolkit", "buttons", "commands"];
   $effect(() => {
     const target = targetOf(device),
       choice = tool,
       diagnostic = section;
     reload;
-    if (!choice || choice === "shell" || choice === "files") return;
+    if (!choice || selfLoading.includes(choice)) return;
     let cancelled = false;
     busy = true;
     error = "";
@@ -110,8 +116,6 @@
     const q: Query =
       choice === "launcher"
         ? { kind: "launchers" }
-        : choice === "toolkit"
-          ? { kind: "toolkit" }
           : choice === "diagnostics"
             ? { kind: "diagnostics", section: diagnostic }
             : choice === "settings"
@@ -122,9 +126,6 @@
         if (choice === "launcher") {
           const r = await api.query<typeof homes>(target, q);
           if (!cancelled) homes = r;
-        } else if (choice === "toolkit") {
-          const r = await api.query<Tool[]>(target, q);
-          if (!cancelled) toolkit = r;
         } else if (choice === "settings") {
           const r = await api.query<Setting[]>(target, q);
           if (!cancelled) settings = r;
@@ -220,46 +221,21 @@
           </div>{/each}
       </div>
       {#if output}<p class="subtle" role="status">{output}</p>{/if}
-    {:else if tool === "toolkit"}
-      {#if setupPage === 0}<div class="row-list">
-          {#each toolkit as item}<div class="list-row">
-              <span
-                ><strong>{item.name}</strong><small>{item.package}</small></span
-              ><span>{item.installed ? "Installed" : "Missing"}</span>
-            </div>{/each}
-        </div>
-        <p class="subtle">
-          Installation alone does not prove authorization, a running shell,
-          startup configuration or reboot persistence.
-        </p>
-        <button class="secondary" onclick={oninstall}>Choose a tool APK</button>
-      {:else if setupPage === 1}<h3>Authorize on the TV</h3>
-        <p>
-          Open Shizuku on the TV and follow its wireless debugging setup.
-          Approve its own Android prompts. In Termux, use the rish files
-          exported by that Shizuku installation and set the requested
-          application ID.
-        </p>
-        <p class="subtle">
-          Ordinary Termux and a Shizuku shell have different privileges.
-          Existing Termux add-ons must share a compatible signing source; keep
-          the TV's existing installation and data.
-        </p>
-      {:else}<h3>Startup is a separate check</h3>
-        <p>
-          Termux:Boot can start a configured shell listener after boot.
-          First-run permission, authorization, the TV's network state and the
-          listener must each be checked. A wake from standby is not a cold boot.
-        </p>
-        <p class="subtle">
-          Authorization, running state, phone independence and cold-boot
-          persistence remain unverified until their respective TV tests pass.
-        </p>{/if}<Pager
-        page={setupPage}
-        total={3}
-        size={1}
-        onpage={(n) => (setupPage = n)}
+    {:else if tool === "toolkit"}<SetupTool
+        {device}
+        {api}
+        {reload}
+        {onreview}
+        onbuttons={() => (tool = "buttons")}
       />
+    {:else if tool === "buttons"}<ButtonsTool
+        {device}
+        {api}
+        {reload}
+        {onreview}
+        onsetup={() => (tool = "toolkit")}
+      />
+    {:else if tool === "commands"}<CommandsTool {device} {api} {onreview} />
     {:else if tool === "files"}<FilesTool
         {device}
         {api}

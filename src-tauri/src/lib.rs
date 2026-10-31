@@ -3,6 +3,10 @@ mod workspace;
 use adb_core::{
     apk::{self, ApkInfo},
     backend::{Client, DeviceInfo, InstallProgress, PocError},
+    toolkit::{
+        catalog::ToolId,
+        release::{GithubReleases, fetch_tool},
+    },
     workspace::files,
 };
 use serde::Serialize;
@@ -410,6 +414,45 @@ async fn start_upload(
         )
         .await
 }
+/// Downloads the newest verified release of a tool and installs it on the connected TV.
+#[tauri::command]
+async fn install_tool(
+    app: tauri::AppHandle,
+    session_id: String,
+    tool: ToolId,
+    on_progress: Channel<InstallProgress>,
+    state: State<'_, Backend>,
+) -> Result<String> {
+    let abis = state
+        .0
+        .lock()
+        .await
+        .status()
+        .filter(|v| v.id == session_id)
+        .map(|v| v.abis)
+        .ok_or_else(|| PocError::new("staleSession", "Connect to a TV first."))?;
+    let folder = app.path().app_cache_dir().map_err(err)?;
+    let _ = on_progress.send(InstallProgress {
+        stage: "downloading".into(),
+        sent: 0,
+        total: 0,
+    });
+    let fetched = tauri::async_runtime::spawn_blocking(move || {
+        fetch_tool(&GithubReleases::default(), tool, &abis, &folder)
+    })
+    .await
+    .map_err(err)??;
+    let installed = state
+        .0
+        .lock()
+        .await
+        .install(&session_id, &fetched.path, &fetched.info, move |p| {
+            let _ = on_progress.send(p);
+        })
+        .await;
+    let _ = std::fs::remove_file(&fetched.path);
+    installed.map(|()| fetched.tag)
+}
 #[tauri::command]
 fn cancel_upload(uploads: State<'_, Uploads>) {
     uploads.cancel.store(true, Ordering::SeqCst);
@@ -488,6 +531,7 @@ pub fn run() {
             choose_upload,
             start_upload,
             cancel_upload,
+            install_tool,
             ratings_status,
             ratings_update,
             ratings_update_if_due,

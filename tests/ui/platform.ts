@@ -249,32 +249,22 @@ async function query<T>(t: Target, q: Query): Promise<T> {
       };
       break;
     case "toolkit":
-      value = [
-        {
-          name: "Shizuku",
-          package: "moe.shizuku.privileged.api",
-          installed: true,
-          authorized: "unknown",
-          running: "unknown",
-          startup: "unknown",
-        },
-        {
-          name: "Termux",
-          package: "com.termux",
-          installed: true,
-          authorized: "unknown",
-          running: "unknown",
-          startup: "unknown",
-        },
-        {
-          name: "Termux:Boot",
-          package: "com.termux.boot",
-          installed: false,
-          authorized: "unknown",
-          running: "unknown",
-          startup: "unknown",
-        },
-      ];
+      value = {
+        shizuku: "other",
+        shizukuVersion: null,
+        porter: { installed: false, official: false, version: null },
+        termux: { installed: false, official: false, version: null },
+        termuxBoot: { installed: false, official: false, version: null },
+        manager: null,
+        serverRunning: false,
+        canConfigureTerminal: false,
+        terminalReady: false,
+        shellReady: false,
+        authorized: false,
+        monitor: false,
+        listener: false,
+        stage: "manager",
+      };
       break;
     case "diagnostics":
       value = {
@@ -312,6 +302,31 @@ async function query<T>(t: Target, q: Query): Promise<T> {
           value: "128",
           error: null,
         },
+      ];
+      break;
+    case "mappings":
+      value = {
+        running: true,
+        paused: false,
+        mappings: [
+          {
+            key: { source: "Fixture Remote", key: "KEY_UNKNOWN", scan: "000c0057" },
+            component: "org.bridgecoil.fixture/.Main",
+            label: "Fixture Player",
+          },
+        ],
+        log: [],
+      };
+      break;
+    case "captureKeys":
+      value = {
+        presses: [{ source: "Fixture Remote", key: "KEY_UNKNOWN", scan: "000c0051" }],
+      };
+      break;
+    case "launchableApps":
+      value = [
+        { component: "org.bridgecoil.fixture/.Main", label: "Fixture Player" },
+        { component: "org.bridgecoil.other/.Main", label: "Fixture Browser" },
       ];
       break;
     case "files": {
@@ -358,6 +373,10 @@ export const api: Platform = {
   ratingsUpdate: async () => false,
   ratingsUpdateIfDue: async () => false,
   ratingsRemove: async () => {},
+  installTool: async (_session, _tool, onprogress) => {
+    onprogress({ stage: "uploading", sent: 1, total: 2 });
+    return "v1";
+  },
   chooseUpload: async () => ({
     id: "fixture-upload",
     name: "Fixture video.mp4",

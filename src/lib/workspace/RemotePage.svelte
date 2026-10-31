@@ -13,11 +13,13 @@
     api,
     onresult,
     onapps,
+    onbuttons,
   }: {
     device: Device;
     api: Platform;
     onresult: (r: Operation) => void;
     onapps: () => void;
+    onbuttons?: () => void;
   } = $props();
   let busy = $state(false);
   let message = $state("");
@@ -52,6 +54,9 @@
       >Type on TV</button
     ><button class="secondary" onclick={onapps}>Open an app</button>
   </div>
+  {#if onbuttons}<button class="text-action" onclick={onbuttons}
+      >Remap your remote's buttons</button
+    >{/if}
   <div class="dpad" aria-label="Directional remote">
     <button class="up" aria-label="Up" disabled={busy} onclick={() => key("up")}
       ><Icon name="arrow-up" /></button

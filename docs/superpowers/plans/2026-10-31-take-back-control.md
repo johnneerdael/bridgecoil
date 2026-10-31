@@ -43,15 +43,16 @@ The certificate is pinned, so a release signed by anyone else is refused even if
 
 ## Work
 
-- [ ] **A. Toolkit release backend.** `crates/adb-core/src/toolkit/{mod,catalog,release}.rs`: select the right asset for the TV's ABIs, fetch latest, download with a size limit, verify digest and pinned certificate, install through `Client::install`.
-- [ ] **B. Toolkit inventory.** `toolkit/inventory.rs`: distinct states for missing, wrong variant, installed, server running, Termux ready, shell authorized, boot monitor present, listener running. Recognise a stub or unknown signer.
-- [ ] **C. Guided setup steps.** `toolkit/setup.rs`: start server, launch Termux, deploy rish or porsh, request authorization, verify `uid=2000`, Tauri commands, wizard UI replacing the status list and "Choose a tool APK".
-- [ ] **D. Key learning.** `crates/adb-core/src/remote/{capture,mappings}.rs`: bounded `getevent` capture, parser keeping namespace, scan code and source name. Never invents friendly names.
-- [ ] **E. Listener and mapping.** Generate the listener from validated fields, with no `eval`. Deploy to `/data/local/tmp/bridgecoil/` through a reviewed action, detect conflicts, remove and pause, disclose that the original key action still happens.
-- [ ] **F. Startup and upkeep.** Reviewed Termux:Boot monitor written with `run-as`, bounded retry, health and logs, removal of only app-owned files, separate fields for phone-disconnected and cold-boot tests.
-- [ ] **G. Remote UI.** Learn, map, test, pause, remove, health.
-- [ ] **H. Command builder.** Task 15: a catalog of labelled commands with explained options, picked from dropdowns, previewed, reviewed and run with no typing.
-- [ ] **I. End-to-end emulator run.** Prove A to F against a real emulator for both managers, including a reboot.
+- [x] **A. Toolkit release backend.** `crates/adb-core/src/toolkit/{mod,catalog,release}.rs`: select the right asset for the TV's ABIs, fetch latest, download with a size limit, verify digest and pinned certificate, install through `Client::install`.
+- [x] **B. Toolkit inventory.** `toolkit/inventory.rs`: distinct states for missing, wrong variant, installed, server running, Termux ready, shell authorized, boot monitor present, listener running. Recognise a stub or unknown signer.
+- [x] **C. Guided setup steps.** `toolkit/setup.rs`: start server, launch Termux, deploy rish or porsh, request authorization, verify `uid=2000`, Tauri commands, wizard UI replacing the status list and "Choose a tool APK".
+- [x] **D. Key learning.** `crates/adb-core/src/remote/{capture,mappings}.rs`: bounded `getevent` capture, parser keeping namespace, scan code and source name. Never invents friendly names.
+- [x] **E. Listener and mapping.** Generate the listener from validated fields, with no `eval`. Deploy to `/data/local/tmp/bridgecoil/` through a reviewed action, detect conflicts, remove and pause, disclose that the original key action still happens.
+- [x] **F. Startup and upkeep.** Reviewed Termux:Boot monitor written with `run-as`, bounded retry, health and logs, removal of only app-owned files, separate fields for phone-disconnected and cold-boot tests.
+- [x] **G. Remote UI.** Learn, map, test, pause, remove, health.
+- [x] **H. Command builder.** Task 15: a catalog of labelled commands with explained options, picked from dropdowns, previewed, reviewed and run with no typing.
+- [x] **I. End-to-end emulator run.** Proven with `tests/toolkit_live.rs` for both managers. A real key press opened the mapped app, pause silenced it, and after a cold reboot the Termux:Boot monitor restored the listener within 60 seconds of the manager returning.
+- [ ] **J. On a real TV.** Needs the owner. Pairing, the access prompt, start at boot and a physical remote.
 
 ## Verification
 

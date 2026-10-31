@@ -87,7 +87,58 @@ export type Action =
   | { kind: "appOp"; package: string; op: string; mode: string }
   | { kind: "fileDelete"; path: string }
   | { kind: "fileMove"; from: string; to: string }
-  | { kind: "fileCreateFolder"; path: string };
+  | { kind: "fileCreateFolder"; path: string }
+  | { kind: "setup"; step: SetupStep }
+  | { kind: "mappings"; change: MappingChange };
+export type Manager = "shizukuNext" | "porter";
+export type ToolId =
+  "shizukuNext" | "porter" | "porterCompat" | "termux" | "termuxBoot";
+export type SetupStep =
+  | { kind: "startServer"; manager: Manager }
+  | { kind: "openTerminal" }
+  | { kind: "allowBackground" }
+  | { kind: "deployShell"; manager: Manager }
+  | { kind: "requestAccess" }
+  | { kind: "allowBootStart"; manager: Manager }
+  | { kind: "installMonitor" }
+  | { kind: "removeMonitor" };
+export type KeyIdentity = { source: string; key: string; scan: string | null };
+export type Mapping = { key: KeyIdentity; component: string; label: string };
+export type MappingChange =
+  | { kind: "apply"; mappings: Mapping[] }
+  | { kind: "pause"; paused: boolean }
+  | { kind: "removeAll" };
+export type MappingState = {
+  running: boolean;
+  paused: boolean;
+  mappings: Mapping[];
+  log: string[];
+};
+export type LaunchableApp = { component: string; label: string };
+export type ToolStatus = {
+  installed: boolean;
+  official: boolean;
+  version: string | null;
+};
+export type Stage =
+  "manager" | "server" | "terminal" | "shell" | "access" | "startup" | "done";
+export type ToolkitSnapshot = {
+  shizuku: "empty" | "shizukuNext" | "porterCompat" | "other";
+  shizukuVersion: string | null;
+  porter: ToolStatus;
+  termux: ToolStatus;
+  termuxBoot: ToolStatus;
+  manager: Manager | null;
+  serverRunning: boolean;
+  canConfigureTerminal: boolean;
+  terminalReady: boolean;
+  shellReady: boolean;
+  authorized: boolean;
+  monitor: boolean;
+  listener: boolean;
+  stage: Stage;
+};
+export type InstallProgress = { stage: string; sent: number; total: number };
 export type Query =
   | {
       kind:
@@ -108,7 +159,11 @@ export type Query =
   | { kind: "package"; package: string }
   | { kind: "appOps"; package: string }
   | { kind: "diagnostics"; section: string }
-  | { kind: "files"; path: string };
+  | { kind: "files"; path: string }
+  | { kind: "verifyShell" }
+  | { kind: "captureKeys"; seconds: number }
+  | { kind: "mappings" }
+  | { kind: "launchableApps" };
 export type RemoteAction =
   | { kind: "key"; key: string; longPress: boolean }
   | { kind: "text"; text: string }
@@ -172,6 +227,11 @@ export type Platform = {
   cancelBulk(id: string): Promise<void>;
   discardBulk(id: string): Promise<void>;
   query<T>(target: Target, query: Query): Promise<T>;
+  installTool(
+    sessionId: string,
+    tool: ToolId,
+    onprogress: (progress: InstallProgress) => void,
+  ): Promise<string>;
   chooseUpload(sessionId: string): Promise<UploadChoice | null>;
   upload(
     sessionId: string,
@@ -226,6 +286,11 @@ export function nativePlatform(
     cancelBulk: (reviewId) => call("cancel_bulk", { reviewId }),
     discardBulk: (reviewId) => call("discard_bulk", { reviewId }),
     query: (target, query) => call("workspace_query", { target, query }),
+    installTool: (sessionId, tool, onprogress) => {
+      const onProgress = new Channel<InstallProgress>();
+      onProgress.onmessage = onprogress;
+      return call("install_tool", { sessionId, tool, onProgress });
+    },
     chooseUpload: (sessionId) => call("choose_upload", { sessionId }),
     upload: (sessionId, uploadId, folder, name, onprogress) => {
       const onProgress = new Channel<number>();

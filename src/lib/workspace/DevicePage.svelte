@@ -105,8 +105,8 @@
       ></button
     >
     <button class="tool-tile" onclick={() => onnavigate("tools")}
-      ><Icon name="tools" /><strong>Device tools</strong><small
-        >Launcher, setup and diagnostics</small
+      ><Icon name="tools" /><strong>Take back control</strong><small
+        >Set up your TV, remap buttons, advanced tools</small
       ></button
     >
   </div>
