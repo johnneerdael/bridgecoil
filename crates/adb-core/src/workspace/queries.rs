@@ -7,7 +7,7 @@ use super::{commands::*, driver::*, engine::parse_package_state, files, types::*
 use crate::{
     backend::PocError,
     remote::{
-        capture::{capture_command, parse_capture},
+        capture::{capture_command, parse_capture, parse_started},
         mappings,
     },
     toolkit::{inventory, setup},
@@ -554,7 +554,20 @@ pub async fn query_rated(
         Query::Toolkit => Ok(json!(inventory::inspect(d, t).await?)),
         Query::CaptureKeys { seconds } => {
             let raw = d.shell(t, &capture_command(seconds)?).await?;
-            Ok(json!({"presses":parse_capture(&raw.stdout)}))
+            let started = parse_started(&raw.stdout);
+            let labels = d.labels(t, &started).await.ok().flatten().unwrap_or_default();
+            let opened: Vec<_> = started
+                .iter()
+                .map(|package| {
+                    let label = labels
+                        .iter()
+                        .find(|m| m.package == *package)
+                        .and_then(|m| m.label.clone())
+                        .unwrap_or_else(|| package.clone());
+                    json!({"package":package,"label":label})
+                })
+                .collect();
+            Ok(json!({"presses":parse_capture(&raw.stdout),"opened":opened}))
         }
         Query::Mappings => {
             let raw = checked(d, t, &mappings::state_command()).await?;

@@ -1,6 +1,6 @@
 use adb_core::{
     remote::{
-        capture::{KeyIdentity, capture_command, parse_capture},
+        capture::{KeyIdentity, capture_command, parse_capture, parse_started},
         mappings::{Mapping, apply_command, listener_script, parse_state, validate},
     },
     shell_quote,
@@ -109,6 +109,34 @@ fn a_key_from_an_unnamed_device_is_ignored() {
     assert!(
         parse_capture("/dev/input/event9: EV_KEY       KEY_A                DOWN\n").is_empty()
     );
+}
+
+#[test]
+fn notes_which_apps_a_press_opened() {
+    assert_eq!(
+        parse_started(
+            "started org.mozilla.fennec_fdroid\n\
+             started android\n\
+             started com.android.systemui\n\
+             started org.mozilla.fennec_fdroid\n\
+             started not a package\n\
+             /dev/input/event1: EV_KEY 0046 DOWN\n\
+             started com.google.android.katniss\n"
+        ),
+        ["org.mozilla.fennec_fdroid", "com.google.android.katniss"]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn listen_ignores_what_the_listener_opened_itself() {
+    let tv = OldTv::new();
+    tv.logcat(
+        "I/ActivityManager( 3607): START u0 {act=android.intent.action.MAIN flg=0x10000000 cmp=org.mozilla.fennec_fdroid/org.mozilla.fenix.HomeActivity} from uid 10033\n\
+         I/ActivityManager( 3607): START u0 {flg=0x10000000 cmp=com.android.documentsui/.LauncherActivity} from uid 2000\n",
+    );
+    let raw = tv.run(&capture_command(8).unwrap(), "capture.sh", &[]);
+    assert_eq!(parse_started(&raw), ["org.mozilla.fennec_fdroid"], "{raw}");
 }
 
 #[test]
@@ -359,6 +387,12 @@ impl OldTv {
             .unwrap();
         assert!(run.status.success(), "{run:?}");
         String::from_utf8_lossy(&run.stdout).into_owned()
+    }
+    fn logcat(&self, lines: &str) {
+        use std::{fs, os::unix::fs::PermissionsExt};
+        let path = self.dir.path().join("bin/logcat");
+        fs::write(&path, format!("#!/bin/sh\ncat <<'OUT'\n{lines}OUT\n")).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
     }
     fn calls(&self) -> String {
         std::fs::read_to_string(self.dir.path().join("calls")).unwrap_or_default()

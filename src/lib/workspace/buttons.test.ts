@@ -31,11 +31,15 @@ const state = (over: Partial<MappingState> = {}): MappingState => ({
   log: [],
   ...over,
 });
-function platform(current: MappingState, presses: KeyIdentity[] = [remote]) {
+function platform(
+  current: MappingState,
+  presses: KeyIdentity[] = [remote],
+  opened: { package: string; label: string }[] = [],
+) {
   return {
     query: vi.fn(async (_: unknown, q: Query) => {
       if (q.kind === "mappings") return current;
-      if (q.kind === "captureKeys") return { presses };
+      if (q.kind === "captureKeys") return { presses, opened };
       if (q.kind === "launchableApps")
         return [
           { component: "org.demo/.Main", label: "Player" },
@@ -48,6 +52,7 @@ function platform(current: MappingState, presses: KeyIdentity[] = [remote]) {
         listener: current.running,
         wired: false,
         noWirelessDebugging: false,
+        networkAdb: false,
         bootStart: false,
         watchdog: false,
       };
@@ -90,6 +95,62 @@ it("learns a button and reviews saving it to the chosen app", async () => {
       ],
     },
   });
+});
+
+async function mapToPlayer(onreview = vi.fn()) {
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Remap a button" }),
+  );
+  await fireEvent.click(await screen.findByRole("button", { name: "Listen" }));
+  await fireEvent.click(
+    await screen.findByRole("button", { name: /KEY_UNKNOWN/ }),
+  );
+  await fireEvent.click(await screen.findByRole("button", { name: "Player" }));
+  await waitFor(() => expect(onreview).toHaveBeenCalled());
+}
+
+it("offers to turn off what the button opened, through review", async () => {
+  const api = platform(state(), [remote], [
+    { package: "org.stock", label: "Stock app" },
+  ]);
+  const onreview = vi.fn();
+  open(api, onreview);
+  await mapToPlayer(onreview);
+  expect(
+    await screen.findByText("This button still opens Stock app"),
+  ).toBeTruthy();
+  await fireEvent.click(
+    screen.getByRole("button", { name: "Turn off Stock app" }),
+  );
+  await waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "package",
+      package: "org.stock",
+      action: "disable",
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.queryByText("This button still opens Stock app")).toBeNull(),
+  );
+});
+
+it("lets the viewer keep the app the button opened", async () => {
+  const api = platform(state(), [remote], [
+    { package: "org.stock", label: "Stock app" },
+  ]);
+  const onreview = vi.fn();
+  open(api, onreview);
+  await mapToPlayer(onreview);
+  await fireEvent.click(await screen.findByRole("button", { name: "Keep it" }));
+  expect(screen.queryByText("This button still opens Stock app")).toBeNull();
+  expect(api.prepare).toHaveBeenCalledTimes(1);
+});
+
+it("says so when a press opened no app", async () => {
+  const onreview = vi.fn();
+  open(platform(state()), onreview);
+  await mapToPlayer(onreview);
+  expect(await screen.findByText(/didn't open an app/)).toBeTruthy();
 });
 
 it("maps holding a button without touching its tap mapping", async () => {

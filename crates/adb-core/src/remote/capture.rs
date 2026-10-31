@@ -1,4 +1,4 @@
-use crate::backend::PocError;
+use crate::{backend::PocError, workspace::commands::package_arg};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -25,6 +25,22 @@ pub fn capture_command(seconds: u32) -> Result<String, PocError> {
     Ok(include_str!("scripts/capture.sh")
         .replace("@@KEY_EVENTS@@", KEY_EVENTS)
         .replace("@@SECONDS@@", &seconds.to_string()))
+}
+
+/// Apps the TV opened during a capture, which a press may have caused. Android's own chooser and
+/// system screens aren't apps anyone could turn off.
+pub fn parse_started(raw: &str) -> Vec<String> {
+    let mut started: Vec<String> = Vec::new();
+    for package in raw.lines().filter_map(|l| l.strip_prefix("started ")) {
+        let package = package.trim();
+        if package_arg(package).is_ok()
+            && !matches!(package, "android" | "com.android.systemui")
+            && !started.iter().any(|p| p == package)
+        {
+            started.push(package.to_owned());
+        }
+    }
+    started
 }
 
 fn is_button(code: &str) -> bool {
