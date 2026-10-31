@@ -1,0 +1,14 @@
+[package]
+name = "tv-agent"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+description = "Runs in Termux on the TV: finds the TV's own ADB, pairs with it and starts mappings at boot"
+
+[[bin]]
+name = "bridgecoil-agent"
+path = "src/main.rs"
+
+[dependencies]
+libadb = { version = "=0.7.0", default-features = false, features = ["tokio", "host-keys", "tls", "pairing"] }
+tokio = { version = "1", features = ["rt", "net", "time", "macros"] }

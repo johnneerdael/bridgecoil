@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/adb-core", "src-tauri"]
+members = ["crates/adb-core", "crates/tv-agent", "src-tauri"]
 resolver = "2"
 
 [profile.dev]
