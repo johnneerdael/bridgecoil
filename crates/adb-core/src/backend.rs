@@ -257,6 +257,14 @@ impl Client {
         target: &crate::workspace::types::Target,
         cmd: &str,
     ) -> Result<crate::workspace::driver::ShellOutput> {
+        self.execute_limited(target, cmd, SHELL_OUTPUT_LIMIT).await
+    }
+    async fn execute_limited(
+        &mut self,
+        target: &crate::workspace::types::Target,
+        cmd: &str,
+        limit: usize,
+    ) -> Result<crate::workspace::driver::ShellOutput> {
         crate::workspace::types::validate_target(self.current_target().as_ref(), target)?;
         if cmd.contains('\0') || cmd.len() > 65536 {
             return Err(PocError::new(
@@ -270,7 +278,7 @@ impl Client {
             .ok_or_else(|| PocError::new("staleTarget", "Device disconnected."))?;
         match timeout(
             Duration::from_secs(30),
-            command_output(&mut active.wire, cmd),
+            command_output_limited(&mut active.wire, cmd, limit),
         )
         .await
         {
@@ -580,6 +588,9 @@ impl Client {
     }
 }
 const UPLOAD_STALL: Duration = Duration::from_secs(60);
+const SHELL_OUTPUT_LIMIT: usize = 1024 * 1024;
+/// A busy 1080p screen is several megabytes as PNG, and base64 adds a third.
+const LARGE_OUTPUT_LIMIT: usize = 24 * 1024 * 1024;
 fn connection_error(e: impl std::fmt::Display) -> PocError {
     PocError::new("connection", e.to_string())
 }
@@ -599,6 +610,13 @@ async fn command_output(
     wire: &mut Wire,
     cmd: &str,
 ) -> Result<crate::workspace::driver::ShellOutput> {
+    command_output_limited(wire, cmd, SHELL_OUTPUT_LIMIT).await
+}
+async fn command_output_limited(
+    wire: &mut Wire,
+    cmd: &str,
+    limit: usize,
+) -> Result<crate::workspace::driver::ShellOutput> {
     use libadb::shell::v2::{self, Frame};
     let mut rx = vec![0u8; 65536];
     let mut shell = v2::open(wire, cmd, &mut rx)
@@ -610,19 +628,19 @@ async fn command_output(
     let exit = loop {
         match shell.read_frame().await.map_err(connection_error)? {
             Frame::Stdout(b) => {
-                if stdout.len() + stderr.len() + b.len() > 1024 * 1024 {
+                if stdout.len() + stderr.len() + b.len() > limit {
                     return Err(PocError::new(
                         "outputLimit",
-                        "Device output exceeded the 1 MiB limit.",
+                        "The TV returned more output than this command allows.",
                     ));
                 }
                 stdout.extend_from_slice(&b);
             }
             Frame::Stderr(b) => {
-                if stdout.len() + stderr.len() + b.len() > 1024 * 1024 {
+                if stdout.len() + stderr.len() + b.len() > limit {
                     return Err(PocError::new(
                         "outputLimit",
-                        "Device output exceeded the 1 MiB limit.",
+                        "The TV returned more output than this command allows.",
                     ));
                 }
                 stderr.extend_from_slice(&b);
@@ -676,5 +694,12 @@ impl crate::workspace::driver::ShellDriver for Client {
         command: &str,
     ) -> Result<crate::workspace::driver::ShellOutput> {
         self.execute_target(target, command).await
+    }
+    async fn shell_large(
+        &mut self,
+        target: &crate::workspace::types::Target,
+        command: &str,
+    ) -> Result<crate::workspace::driver::ShellOutput> {
+        self.execute_limited(target, command, LARGE_OUTPUT_LIMIT).await
     }
 }

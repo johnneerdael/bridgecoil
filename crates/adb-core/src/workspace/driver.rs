@@ -38,6 +38,14 @@ pub trait ShellDriver: Send {
         Ok(None)
     }
     async fn shell(&mut self, target: &Target, command: &str) -> Result<ShellOutput, PocError>;
+    /// For the few commands that return files, such as a screenshot.
+    async fn shell_large(
+        &mut self,
+        target: &Target,
+        command: &str,
+    ) -> Result<ShellOutput, PocError> {
+        self.shell(target, command).await
+    }
 }
 pub fn device_identity(serial: &str, manufacturer: &str, session: &str) -> String {
     use sha2::{Digest, Sha256};

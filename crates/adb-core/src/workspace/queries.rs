@@ -84,6 +84,7 @@ pub enum Query {
     },
     Mappings,
     LaunchableApps,
+    Screenshot,
     Diagnostics {
         section: String,
     },
@@ -121,6 +122,27 @@ fn paged<T>(mut items: Vec<T>, page: usize, size: usize) -> Result<Page<T>> {
         page,
         page_size: size,
     })
+}
+/// Android lists Settings as a fallback Home. It must never look like a launcher to replace.
+pub fn eligible_homes(components: Vec<String>) -> Vec<String> {
+    components
+        .into_iter()
+        .filter(|c| !c.split('/').next().unwrap_or_default().ends_with(".settings"))
+        .collect()
+}
+pub fn screenshot_command() -> &'static str {
+    "screencap -p | base64"
+}
+const PNG_BASE64_START: &str = "iVBORw0KGgo";
+pub fn parse_screenshot(raw: &str) -> Result<String> {
+    let png: String = raw.split_whitespace().collect();
+    if !png.starts_with(PNG_BASE64_START) {
+        return Err(PocError::new(
+            "captureUnavailable",
+            "This TV didn't provide a screenshot.",
+        ));
+    }
+    Ok(png)
 }
 pub async fn query(d: &mut dyn ShellDriver, t: &Target, q: Query) -> Result<Value> {
     query_rated(d, t, q, None).await
@@ -370,9 +392,20 @@ pub async fn query_rated(
         Query::Launchers => {
             let homes=checked(d,t,&format!("cmd package query-activities --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME")).await?;
             let current=checked(d,t,&format!("cmd package resolve-activity --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME")).await?;
-            Ok(
-                json!({"homes":parse_components(&homes),"current":parse_components(&current).first()}),
-            )
+            let system = parse_packages(
+                &checked(d, t, &format!("pm list packages --user {user} -s")).await?,
+            );
+            let homes = eligible_homes(parse_components(&homes));
+            let stock: Vec<_> = homes
+                .iter()
+                .filter(|c| c.split('/').next().is_some_and(|p| system.iter().any(|s| s == p)))
+                .cloned()
+                .collect();
+            Ok(json!({"homes":homes,"stock":stock,"current":parse_components(&current).first()}))
+        }
+        Query::Screenshot => {
+            let raw = d.shell_large(t, screenshot_command()).await?;
+            Ok(json!({"png":parse_screenshot(&raw.stdout)?}))
         }
         Query::Toolkit => Ok(json!(inventory::inspect(d, t).await?)),
         Query::CaptureKeys { seconds } => {

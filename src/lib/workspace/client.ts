@@ -163,7 +163,8 @@ export type Query =
   | { kind: "verifyShell" }
   | { kind: "captureKeys"; seconds: number }
   | { kind: "mappings" }
-  | { kind: "launchableApps" };
+  | { kind: "launchableApps" }
+  | { kind: "screenshot" };
 export type RemoteAction =
   | { kind: "key"; key: string; longPress: boolean }
   | { kind: "text"; text: string }

@@ -300,3 +300,39 @@ async fn a_learned_button_opens_its_app() {
     let left = c.shell(&t, "pidof getevent").await.unwrap().stdout;
     assert_eq!(left.trim(), "", "nothing is left running");
 }
+
+#[tokio::test]
+#[ignore]
+async fn a_screenshot_and_launchers_come_back_whole() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = Client::new(dir.path().join("identity"));
+    c.connect(std::env::var("BC_ENDPOINT").unwrap(), true)
+        .await
+        .unwrap();
+    let t = c.current_target().unwrap();
+    let start = std::time::Instant::now();
+    let shot = query(&mut c, &t, Query::Screenshot).await.unwrap();
+    let png = shot["png"].as_str().unwrap();
+    println!(
+        "screenshot {} base64 chars in {:?}",
+        png.len(),
+        start.elapsed()
+    );
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let bytes = STANDARD.decode(png).unwrap();
+    assert_eq!(&bytes[1..4], b"PNG");
+    assert_eq!(
+        &bytes[bytes.len() - 8..bytes.len() - 4],
+        b"IEND",
+        "the whole image arrived"
+    );
+    let big = c
+        .shell_large(&t, "head -c 6000000 /dev/urandom | base64 | tr -d '\\n'")
+        .await
+        .unwrap();
+    println!("large output {} chars", big.stdout.len());
+    assert_eq!(big.stdout.len(), 8000000);
+    assert!(c.status().is_some(), "the connection survives it");
+    let homes = query(&mut c, &t, Query::Launchers).await.unwrap();
+    println!("launchers {homes}");
+}

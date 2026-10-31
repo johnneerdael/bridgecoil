@@ -587,6 +587,7 @@ async fn protect_home(d: &mut dyn ShellDriver, t: &Target, package: &str) -> Res
         "com.android.systemui",
         "com.android.shell",
         "com.android.settings",
+        "com.android.tv.settings",
         "com.android.permissioncontroller",
         "com.google.android.permissioncontroller",
     ]

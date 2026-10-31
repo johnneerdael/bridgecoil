@@ -1644,3 +1644,9 @@ textarea {
   font-size: 12px;
 }
 
+.tv-screenshot {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+

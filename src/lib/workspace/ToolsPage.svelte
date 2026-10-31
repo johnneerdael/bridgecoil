@@ -10,6 +10,8 @@
   import ButtonsTool from "./ButtonsTool.svelte";
   import CommandsTool from "./CommandsTool.svelte";
   import FilesTool from "./FilesTool.svelte";
+  import LauncherTool from "./LauncherTool.svelte";
+  import ScreenshotTool from "./ScreenshotTool.svelte";
   import SetupTool from "./SetupTool.svelte";
   import { internalStorage } from "./files";
   import Pager from "./Pager.svelte";
@@ -53,8 +55,14 @@
     {
       id: "launcher",
       name: "Home app",
-      note: "Inspect and choose your launcher",
+      note: "Replace the launcher your TV came with",
       icon: "home",
+    },
+    {
+      id: "capture",
+      name: "Screenshot",
+      note: "See what's on the TV",
+      icon: "device",
     },
     { id: "files", name: "Files", note: "Browse TV storage", icon: "device" },
     {
@@ -88,10 +96,6 @@
   let output = $state("");
   let section = $state("logs");
   let command = $state("");
-  let homes = $state<{ homes: string[]; current: string | null }>({
-    homes: [],
-    current: null,
-  });
   type Setting = {
     namespace: string;
     key: string;
@@ -102,7 +106,15 @@
   let settings = $state<Setting[]>([]);
   let settingPage = $state(0);
   let reload = $state(0);
-  const selfLoading = ["shell", "files", "toolkit", "buttons", "commands"];
+  const selfLoading = [
+    "shell",
+    "files",
+    "toolkit",
+    "buttons",
+    "commands",
+    "launcher",
+    "capture",
+  ];
   $effect(() => {
     const target = targetOf(device),
       choice = tool,
@@ -123,10 +135,7 @@
               : { kind: "network" };
     void (async () => {
       try {
-        if (choice === "launcher") {
-          const r = await api.query<typeof homes>(target, q);
-          if (!cancelled) homes = r;
-        } else if (choice === "settings") {
+        if (choice === "settings") {
           const r = await api.query<Setting[]>(target, q);
           if (!cancelled) settings = r;
         } else {
@@ -159,23 +168,6 @@
       busy = false;
     }
   }
-  async function launch(component: string) {
-    busy = true;
-    error = "";
-    try {
-      const r = await api.remote(targetOf(device), {
-        kind: "launch",
-        component,
-      });
-      output =
-        r.error ??
-        `Launch ${r.status}. Check the TV before changing its default Home.`;
-    } catch (e) {
-      error = errorMessage(e);
-    } finally {
-      busy = false;
-    }
-  }
 </script>
 
 <section class="feature-page">
@@ -202,25 +194,8 @@
     {#if busy}<p class="subtle" role="status">
         Inspecting TV…
       </p>{/if}{#if error}<p class="error-text" role="alert">{error}</p>{/if}
-    {#if tool === "launcher"}<p class="subtle">
-        Current Home: {homes.current ?? "Not reported"}. Test a replacement on
-        the TV before requesting its default. Stock Home is kept enabled.
-      </p>
-      <div class="row-list">
-        {#each homes.homes.slice(0, 4) as component}<div class="launcher-row">
-            <span class="truncate">{component}</span><button
-              class="secondary"
-              disabled={busy}
-              onclick={() => launch(component)}>Test</button
-            ><button
-              class="secondary"
-              disabled={busy}
-              onclick={() => plan({ kind: "defaultHome", component })}
-              >Set Home</button
-            >
-          </div>{/each}
-      </div>
-      {#if output}<p class="subtle" role="status">{output}</p>{/if}
+    {#if tool === "launcher"}<LauncherTool {device} {api} {reload} {onreview} />
+    {:else if tool === "capture"}<ScreenshotTool {device} {api} />
     {:else if tool === "toolkit"}<SetupTool
         {device}
         {api}

@@ -245,6 +245,7 @@ async function query<T>(t: Target, q: Query): Promise<T> {
           "org.bridgecoil.fixture.home/.MainActivity",
           "org.bridgecoil.fixture.extra/.Home",
         ],
+        stock: ["org.bridgecoil.fixture.home/.MainActivity"],
         current: "org.bridgecoil.fixture.home/.MainActivity",
       };
       break;
@@ -322,6 +323,9 @@ async function query<T>(t: Target, q: Query): Promise<T> {
       value = {
         presses: [{ source: "Fixture Remote", key: "KEY_UNKNOWN", scan: "000c0051" }],
       };
+      break;
+    case "screenshot":
+      value = { png: "iVBORw0KGgo=" };
       break;
     case "launchableApps":
       value = [
