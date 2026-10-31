@@ -100,5 +100,6 @@ Turning on wireless debugging first shows **Allow wireless debugging on this net
 
 - **Hold gestures on this image.** The emulator console can only tap without root. Holds were proven with a real kernel key event on the phone image.
 - **Pairing on a TV, and start at boot in the manager.** Both need wireless debugging, which this wired image refuses. The test started the server by hand after each boot.
+- **Android 9 launcher handover.** Android 9 has no role service, so the phone remembers the choice. This is covered by tests only, and a real Android 9 box is the next check.
 - **A brand's own launcher.** Priorities and the number of stock launchers vary, and Google TV may have more than one. A system update may also turn one back on.
 - **A physical TV or remote.** Nothing here replaces that.

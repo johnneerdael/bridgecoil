@@ -4,7 +4,10 @@ import LauncherTool from "./LauncherTool.svelte";
 import ScreenshotTool from "./ScreenshotTool.svelte";
 import type { Platform } from "./client";
 import type { Device } from "../model";
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 const device: Device = {
   id: "session",
   deviceId: "device",
@@ -185,6 +188,36 @@ describe("when the TV's own launcher comes first", () => {
         component: stock,
       }),
     );
+  });
+
+  it("remembers the choice on a TV that can't report it", async () => {
+    const api = platform(stock);
+    (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+      homes: [stock, fresh],
+      current: stock,
+      stock: [stock],
+      chosen: null,
+      roles: false,
+    });
+    const first = open(api);
+    await fireEvent.click(
+      await screen.findByRole("button", { name: "Try org.fresh.launcher" }),
+    );
+    await fireEvent.click(
+      await screen.findByRole("button", { name: "Yes, it works" }),
+    );
+    await waitFor(() => expect(api.prepare).toHaveBeenCalled());
+    first.unmount();
+    const again = open(api);
+    expect(await screen.findByText(/comes first/)).toBeTruthy();
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Keep com.vendor.home" }),
+    );
+    await waitFor(() => expect(api.prepare).toHaveBeenCalledTimes(2));
+    again.unmount();
+    open(api);
+    await screen.findByRole("button", { name: "Try org.fresh.launcher" });
+    expect(screen.queryByText(/comes first/)).toBeNull();
   });
 
   it("stays quiet when nothing else was chosen", async () => {

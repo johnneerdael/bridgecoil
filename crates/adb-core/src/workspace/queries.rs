@@ -230,13 +230,8 @@ fn homes_command(user: u32) -> String {
         "cmd package query-activities --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME"
     )
 }
-/// The launcher holding the Home role. Android ignores this choice when another launcher has a
-/// higher priority, so it can differ from what the Home button opens.
-async fn chosen_home(
-    d: &mut dyn ShellDriver,
-    t: &Target,
-    homes: &[String],
-) -> Result<Option<String>> {
+/// What holds the Home role, or None on a TV with no role service, such as Android 9.
+async fn home_role(d: &mut dyn ShellDriver, t: &Target) -> Result<Option<String>> {
     let roles = d
         .shell(
             t,
@@ -246,17 +241,22 @@ async fn chosen_home(
             ),
         )
         .await?;
-    if !roles.success() {
-        return Ok(None);
-    }
-    Ok(roles
-        .stdout
+    let missing = [&roles.stdout, &roles.stderr]
+        .iter()
+        .any(|text| text.contains("Can't find service"));
+    Ok((roles.success() && !missing).then_some(roles.stdout))
+}
+/// The launcher chosen in `roles`. Android ignores this choice when another launcher has a
+/// higher priority, so it can differ from what the Home button opens.
+fn chosen_home(roles: &str, homes: &[String]) -> Option<String> {
+    roles
         .lines()
         .map(str::trim)
         .find(|package| homes.iter().any(|h| h.split('/').next() == Some(*package)))
-        .map(str::to_owned))
+        .map(str::to_owned)
 }
-/// True when a different, installed launcher has been chosen to take over from `package`.
+/// True when a different, installed launcher can take over from `package`. Without a role
+/// service nothing records the choice, so any other launcher counts.
 pub async fn has_replacement_home(
     d: &mut dyn ShellDriver,
     t: &Target,
@@ -267,9 +267,10 @@ pub async fn has_replacement_home(
         return Ok(false);
     }
     let homes = eligible_homes(parse_components(&homes.stdout));
-    Ok(chosen_home(d, t, &homes)
-        .await?
-        .is_some_and(|chosen| chosen != package))
+    Ok(match home_role(d, t).await? {
+        Some(roles) => chosen_home(&roles, &homes).is_some_and(|chosen| chosen != package),
+        None => homes.iter().any(|h| h.split('/').next() != Some(package)),
+    })
 }
 pub fn screenshot_command() -> &'static str {
     "screencap -p | base64"
@@ -537,13 +538,14 @@ pub async fn query_rated(
                 &checked(d, t, &format!("pm list packages --user {user} -s")).await?,
             );
             let homes = eligible_homes(parse_components(&homes));
-            let chosen = chosen_home(d, t, &homes).await?;
+            let roles = home_role(d, t).await?;
+            let chosen = roles.as_deref().and_then(|r| chosen_home(r, &homes));
             let stock: Vec<_> = homes
                 .iter()
                 .filter(|c| c.split('/').next().is_some_and(|p| system.iter().any(|s| s == p)))
                 .cloned()
                 .collect();
-            Ok(json!({"homes":homes,"stock":stock,"chosen":chosen,"current":parse_components(&current).first()}))
+            Ok(json!({"homes":homes,"stock":stock,"chosen":chosen,"roles":roles.is_some(),"current":parse_components(&current).first()}))
         }
         Query::Screenshot => {
             let raw = d.shell_large(t, screenshot_command()).await?;

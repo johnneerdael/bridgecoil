@@ -102,11 +102,32 @@ async fn the_launcher_in_use_stays_protected_without_a_real_replacement() {
         tv("com.android.tv.settings"),
         Tv {
             role: Err(()),
-            ..tv("")
+            homes: "com.vendor.home/.Main\ncom.android.tv.settings/.FallbackHome\n",
         },
     ] {
         let e = w
             .prepare(&mut device, &target(), stock(PackageAction::Disable))
+            .await
+            .unwrap_err();
+        assert_eq!(e.kind, "protected");
+    }
+}
+
+/// Android 9 has no role service, so nothing says which launcher was chosen.
+#[tokio::test]
+async fn without_roles_any_other_launcher_counts_as_a_replacement() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    let mut older = Tv {
+        role: Err(()),
+        ..tv("")
+    };
+    w.prepare(&mut older, &target(), stock(PackageAction::Disable))
+        .await
+        .unwrap();
+    for action in [PackageAction::Remove, PackageAction::ClearData] {
+        let e = w
+            .prepare(&mut older, &target(), stock(action))
             .await
             .unwrap_err();
         assert_eq!(e.kind, "protected");
@@ -168,6 +189,7 @@ async fn launchers_report_which_one_was_chosen() {
         .await
         .unwrap();
     assert_eq!(r["chosen"], json!("org.fresh"));
+    assert_eq!(r["roles"], json!(true));
     assert_eq!(r["current"], json!("com.vendor.home/.Main"));
 
     let older = Tv {
@@ -178,4 +200,5 @@ async fn launchers_report_which_one_was_chosen() {
         .await
         .unwrap();
     assert_eq!(r["chosen"], json!(null));
+    assert_eq!(r["roles"], json!(false));
 }

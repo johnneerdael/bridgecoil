@@ -17,6 +17,7 @@
     current: string | null;
     stock: string[];
     chosen?: string | null;
+    roles?: boolean;
   };
   let homes = $state<Homes | null>(null);
   let busy = $state(false);
@@ -25,9 +26,31 @@
   let result = $state<"proven" | "wrong" | null>(null);
   const packageOf = (component: string) => component.split("/")[0];
   const onStock = $derived(!!homes && homes.stock.includes(homes.current ?? ""));
+  // A TV with no role service can't say what was chosen, so it's kept on the phone.
+  const pickKey = $derived(`bridgecoil.home.${device.deviceId}`);
+  function readPick() {
+    try {
+      return localStorage.getItem(pickKey);
+    } catch {
+      return null;
+    }
+  }
+  function keepPick(component: string) {
+    try {
+      if (homes?.stock.includes(component)) localStorage.removeItem(pickKey);
+      else localStorage.setItem(pickKey, packageOf(component));
+    } catch {
+      // Without storage, this TV falls back to the list of launchers.
+    }
+  }
+  const chosen = $derived(
+    homes?.roles === false
+      ? homes.homes.map(packageOf).find((p) => p === readPick())
+      : homes?.chosen,
+  );
   // Android ignores the choice when the TV's own launcher has a higher priority.
   const outranked = $derived(
-    onStock && !!homes?.chosen && homes.chosen !== packageOf(homes.current ?? ""),
+    onStock && !!chosen && chosen !== packageOf(homes?.current ?? ""),
   );
   const others = $derived(homes?.homes.filter((h) => h !== homes!.current) ?? []);
   const stockLeft = $derived(homes?.stock.filter((h) => h !== homes!.current) ?? []);
@@ -69,6 +92,7 @@
     });
   const makeDefault = (component: string) =>
     attempt(async () => {
+      keepPick(component);
       onreview(
         await api.prepare(targetOf(device), {
           kind: "defaultHome",
@@ -125,7 +149,7 @@
   <div class="setup-card">
     <h3>Your TV's own launcher comes first</h3>
     <p>
-      You chose {homes.chosen}, but this TV gives {packageOf(inUse)} priority,
+      You chose {chosen}, but this TV gives {packageOf(inUse)} priority,
       so the Home button keeps opening it. Turning it off hands Home over. Some
       TV features can depend on it. You can undo this from History or Apps.
     </p>

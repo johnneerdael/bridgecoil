@@ -6,7 +6,7 @@ On a TV with a different app holding the Shizuku name, use Porter. Shizuku-Next 
 
 ## Connect
 
-1. On the phone, uninstall the old Bridgecoil. The package ID changed, so it can't update in place.
+1. If an old Bridgecoil is on the phone, you can leave it or uninstall it. It has a different package ID, so the two install side by side, and the new one needs the TV paired again.
 2. Install the APK from the Android release workflow's latest run, or from a release.
 3. On the TV, unlock Developer options and turn on **Wireless debugging**. If it asks, allow it on this network. If it turns itself off, the TV is probably on a network cable. Android only allowed it on Wi-Fi in testing, so note this, unplug the cable and join Wi-Fi.
 4. Pair with the code the TV shows, then connect.
