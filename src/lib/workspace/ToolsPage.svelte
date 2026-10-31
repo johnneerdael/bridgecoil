@@ -3,6 +3,7 @@
   import {
     targetOf,
     type Platform,
+    type ButtonFollowUp,
     type Review,
     type Action,
     type BulkReview,
@@ -28,11 +29,13 @@
     onbulk,
     oninstall,
     tool = $bindable(""),
+    buttonFollowUp = $bindable(null),
     filePath = $bindable(internalStorage),
   }: {
     device: Device;
     api: Platform;
     onreview: (r: Review) => void;
+    buttonFollowUp?: ButtonFollowUp | null;
     onbulk: (r: BulkReview) => void;
     oninstall: () => void;
     tool?: string;
@@ -229,6 +232,8 @@
         {reload}
         {onreview}
         onsetup={() => (tool = "toolkit")}
+        followUp={buttonFollowUp}
+        onfollowup={(next) => (buttonFollowUp = next)}
       />
     {:else if tool === "cleanup"}<CleanupTool
         {device}

@@ -2,6 +2,7 @@
   import { errorMessage, type Device } from "../model";
   import {
     targetOf,
+    type ButtonFollowUp,
     type KeyIdentity,
     type LaunchableApp,
     type Mapping,
@@ -19,12 +20,16 @@
     reload,
     onreview,
     onsetup,
+    followUp = null,
+    onfollowup = () => {},
   }: {
     device: Device;
     api: Platform;
     reload: number;
     onreview: (r: Review) => void;
     onsetup: () => void;
+    followUp?: ButtonFollowUp | null;
+    onfollowup?: (next: ButtonFollowUp | null) => void;
   } = $props();
   const listenSeconds = 8;
   let tv = $state<MappingState | null>(null);
@@ -38,8 +43,6 @@
   let presses = $state<KeyIdentity[]>([]);
   // What the press opened, which keeps opening alongside a mapping until it's turned off.
   let opened = $state<{ package: string; label: string }[]>([]);
-  let offered = $state<{ package: string; label: string }[]>([]);
-  let nothingOpened = $state(false);
   let chosen = $state<KeyIdentity | null>(null);
   let hold = $state(false);
   let doing = $state<"app" | "button">("app");
@@ -56,6 +59,17 @@
       ? tv.mappings.find((m) => sameGesture(m, chosen!, hold))
       : undefined,
   );
+  // A cancelled review saved nothing, so there's nothing to follow up.
+  const pending = $derived(
+    followUp && tv?.mappings.some((m) => sameKey(m.key, followUp!.key))
+      ? followUp
+      : null,
+  );
+  const settle = (app: { package: string }) => {
+    if (!followUp) return;
+    const apps = followUp.apps.filter((a) => a.package !== app.package);
+    onfollowup(apps.length ? { ...followUp, apps } : null);
+  };
   const describeKey = (key: KeyIdentity) =>
     [key.key, key.scan && `code ${key.scan}`, key.source]
       .filter(Boolean)
@@ -117,6 +131,7 @@
   const listen = () =>
     attempt(async () => {
       listened = false;
+      onfollowup(null);
       const r = await api.query<{
         presses: KeyIdentity[];
         opened?: { package: string; label: string }[];
@@ -145,8 +160,7 @@
     const held = hold;
     const kept = tv.mappings.filter((m) => !sameGesture(m, key, held));
     view = "list";
-    offered = held ? [] : opened;
-    nothingOpened = !held && !opened.length;
+    onfollowup(held ? null : { key, apps: opened });
     return change({
       kind: "apply",
       mappings: [...kept, { key, hold: held, ...action }],
@@ -154,14 +168,13 @@
   }
   const turnOff = (app: { package: string; label: string }) =>
     attempt(async () => {
-      onreview(
-        await api.prepare(targetOf(device), {
-          kind: "package",
-          package: app.package,
-          action: "disable",
-        }),
-      );
-      offered = offered.filter((a) => a.package !== app.package);
+      const review = await api.prepare(targetOf(device), {
+        kind: "package",
+        package: app.package,
+        action: "disable",
+      });
+      settle(app);
+      onreview(review);
     });
   function remove(mapping: Mapping) {
     if (!tv) return;
@@ -295,7 +308,7 @@
     <button class="secondary" onclick={() => (view = "list")}>Done</button>
   </div>
 {:else}
-  {#each offered as app (app.package)}<div class="setup-choice">
+  {#each pending?.apps ?? [] as app (app.package)}<div class="setup-choice">
       <strong>This button still opens {app.label}</strong>
       <p class="subtle">
         Turn {app.label} off so the button only does what you mapped. You can
@@ -305,17 +318,13 @@
         <button class="primary" disabled={busy} onclick={() => turnOff(app)}
           >Turn off {app.label}</button
         >
-        <button
-          class="secondary"
-          onclick={() =>
-            (offered = offered.filter((a) => a.package !== app.package))}
-          >Keep it</button
-        >
+        <button class="secondary" onclick={() => settle(app)}>Keep it</button>
       </div>
     </div>{/each}
-  {#if nothingOpened}<p class="subtle">
-      That press didn't open an app, so the button's normal action stays. If it
-      usually opens one, press it from the TV's Home screen while listening.
+  {#if pending && !pending.apps.length}<p class="subtle">
+      That press didn't open an app, so there's nothing to turn off. If the
+      button also does something else, press it from the TV's Home screen while
+      listening.
     </p>{/if}
   {#if tv.mappings.length}<p class="subtle" role="status">{status}</p>
     {#if tv.mappings.length && !tv.running && !tv.paused}<button

@@ -1,7 +1,14 @@
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/svelte";
 import { afterEach, it, expect, vi } from "vitest";
 import ButtonsTool from "./ButtonsTool.svelte";
-import type { KeyIdentity, Mapping, MappingState, Platform, Query } from "./client";
+import type {
+  ButtonFollowUp,
+  KeyIdentity,
+  Mapping,
+  MappingState,
+  Platform,
+  Query,
+} from "./client";
 import type { Device } from "../model";
 afterEach(cleanup);
 const device: Device = {
@@ -97,7 +104,24 @@ it("learns a button and reviews saving it to the chosen app", async () => {
   });
 });
 
-async function mapToPlayer(onreview = vi.fn()) {
+const mappedTv = state({
+  running: true,
+  mappings: [
+    { key: remote, hold: false, component: "org.demo/.Main", label: "Player" },
+  ],
+});
+/** Maps the button, then rebuilds the screen with the saved mapping, as the app does. */
+async function mapToPlayer(apps: { package: string; label: string }[]) {
+  const onreview = vi.fn();
+  let kept: ButtonFollowUp | null = null;
+  const first = render(ButtonsTool, {
+    device,
+    api: platform(state(), [remote], apps),
+    reload: 0,
+    onreview,
+    onsetup: vi.fn(),
+    onfollowup: (next: ButtonFollowUp | null) => (kept = next),
+  });
   await fireEvent.click(
     await screen.findByRole("button", { name: "Remap a button" }),
   );
@@ -107,50 +131,63 @@ async function mapToPlayer(onreview = vi.fn()) {
   );
   await fireEvent.click(await screen.findByRole("button", { name: "Player" }));
   await waitFor(() => expect(onreview).toHaveBeenCalled());
+  first.unmount();
+  return { followUp: kept as ButtonFollowUp | null };
 }
-
-it("offers to turn off what the button opened, through review", async () => {
-  const api = platform(state(), [remote], [
-    { package: "org.stock", label: "Stock app" },
-  ]);
+function reopen(current: MappingState, followUp: ButtonFollowUp | null) {
+  const api = platform(current);
   const onreview = vi.fn();
-  open(api, onreview);
-  await mapToPlayer(onreview);
+  const onfollowup = vi.fn();
+  render(ButtonsTool, {
+    device,
+    api,
+    reload: 1,
+    onreview,
+    onsetup: vi.fn(),
+    followUp,
+    onfollowup,
+  });
+  return { api, onreview, onfollowup };
+}
+const stock = { package: "org.stock", label: "Stock app" };
+
+it("offers to turn off what the button opened, after the screen rebuilds", async () => {
+  const { followUp } = await mapToPlayer([stock]);
+  const { api, onreview, onfollowup } = reopen(mappedTv, followUp);
   expect(
     await screen.findByText("This button still opens Stock app"),
   ).toBeTruthy();
   await fireEvent.click(
     screen.getByRole("button", { name: "Turn off Stock app" }),
   );
-  await waitFor(() =>
-    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
-      kind: "package",
-      package: "org.stock",
-      action: "disable",
-    }),
-  );
-  await waitFor(() =>
-    expect(screen.queryByText("This button still opens Stock app")).toBeNull(),
-  );
+  await waitFor(() => expect(onreview).toHaveBeenCalled());
+  expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+    kind: "package",
+    package: "org.stock",
+    action: "disable",
+  });
+  expect(onfollowup).toHaveBeenCalledWith(null);
 });
 
 it("lets the viewer keep the app the button opened", async () => {
-  const api = platform(state(), [remote], [
-    { package: "org.stock", label: "Stock app" },
-  ]);
-  const onreview = vi.fn();
-  open(api, onreview);
-  await mapToPlayer(onreview);
+  const { followUp } = await mapToPlayer([stock]);
+  const { api, onfollowup } = reopen(mappedTv, followUp);
   await fireEvent.click(await screen.findByRole("button", { name: "Keep it" }));
-  expect(screen.queryByText("This button still opens Stock app")).toBeNull();
-  expect(api.prepare).toHaveBeenCalledTimes(1);
+  expect(onfollowup).toHaveBeenCalledWith(null);
+  expect(api.prepare).not.toHaveBeenCalled();
 });
 
 it("says so when a press opened no app", async () => {
-  const onreview = vi.fn();
-  open(platform(state()), onreview);
-  await mapToPlayer(onreview);
+  const { followUp } = await mapToPlayer([]);
+  reopen(mappedTv, followUp);
   expect(await screen.findByText(/didn't open an app/)).toBeTruthy();
+});
+
+it("offers nothing when the review was cancelled", async () => {
+  const { followUp } = await mapToPlayer([stock]);
+  reopen(state(), followUp);
+  await screen.findByRole("button", { name: "Remap a button" });
+  expect(screen.queryByText("This button still opens Stock app")).toBeNull();
 });
 
 it("maps holding a button without touching its tap mapping", async () => {

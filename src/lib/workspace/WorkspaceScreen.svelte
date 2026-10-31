@@ -7,6 +7,7 @@
     type BulkReview,
     type Destination,
     type Operation,
+    type ButtonFollowUp,
     type Review,
   } from "./client";
   import DevicePage from "./DevicePage.svelte";
@@ -40,6 +41,7 @@
     appSearch = $state(""),
     appSubmitted = $state(""),
     toolChoice = $state(""),
+    buttonFollowUp = $state<ButtonFollowUp | null>(null),
     toolFilePath = $state(internalStorage);
   let originalSession = $state("");
   $effect(() => {
@@ -50,6 +52,7 @@
       appSearch = "";
       appSubmitted = "";
       toolChoice = "";
+      buttonFollowUp = null;
       toolFilePath = internalStorage;
       if (review) void api.discard(review.id).catch(() => {});
       review = null;
@@ -130,6 +133,7 @@
         {device}
         {api}
         bind:tool={toolChoice}
+        bind:buttonFollowUp
         bind:filePath={toolFilePath}
         onreview={acceptReview}
         onbulk={acceptBulk}

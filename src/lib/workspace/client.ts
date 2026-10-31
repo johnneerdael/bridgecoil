@@ -103,6 +103,11 @@ export type Action =
 export type Manager = "shizukuNext" | "porter";
 export type ToolId =
   "shizukuNext" | "porter" | "porterCompat" | "termux" | "termuxBoot";
+/** What a mapped button's press opened, kept above the pages because they rebuild after a change. */
+export type ButtonFollowUp = {
+  key: KeyIdentity;
+  apps: { package: string; label: string }[];
+};
 export type SetupStep =
   | { kind: "startServer"; manager: Manager }
   | { kind: "openTerminal" }
