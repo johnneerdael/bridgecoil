@@ -11,6 +11,7 @@
     type Review,
     type ToolkitSnapshot,
   } from "./client";
+  import { logTarget, resultText, sendable } from "./buttons";
   import Icon from "./Icon.svelte";
   let {
     device,
@@ -36,21 +37,27 @@
   let listened = $state(false);
   let presses = $state<KeyIdentity[]>([]);
   let chosen = $state<KeyIdentity | null>(null);
+  let hold = $state(false);
+  let doing = $state<"app" | "button">("app");
   let apps = $state<LaunchableApp[]>([]);
   let testResult = $state("");
   let testFrom = 0;
   let testLast: string | undefined;
   const sameKey = (a: KeyIdentity, b: KeyIdentity) =>
     a.source === b.source && a.key === b.key && a.scan === b.scan;
+  const sameGesture = (m: Mapping, key: KeyIdentity, held: boolean) =>
+    sameKey(m.key, key) && !!m.hold === held;
   const existing = $derived(
     chosen && tv
-      ? tv.mappings.find((m) => sameKey(m.key, chosen!))
+      ? tv.mappings.find((m) => sameGesture(m, chosen!, hold))
       : undefined,
   );
   const describeKey = (key: KeyIdentity) =>
     [key.key, key.scan && `code ${key.scan}`, key.source]
       .filter(Boolean)
       .join(" · ");
+  const describeMapping = (m: Mapping) =>
+    `${m.hold ? "Hold · " : ""}${describeKey(m.key)}`;
   const status = $derived(
     !tv
       ? ""
@@ -114,20 +121,23 @@
   const pick = (key: KeyIdentity) =>
     attempt(async () => {
       chosen = key;
+      hold = false;
+      doing = "app";
       if (!apps.length)
         apps = await api.query<LaunchableApp[]>(targetOf(device), {
           kind: "launchableApps",
         });
       view = "choose";
     });
-  function save(app: LaunchableApp) {
+  function save(action: { component: string; send?: string; label: string }) {
     if (!chosen || !tv) return;
     const key = chosen;
-    const kept = tv.mappings.filter((m) => !sameKey(m.key, key));
+    const held = hold;
+    const kept = tv.mappings.filter((m) => !sameGesture(m, key, held));
     view = "list";
     return change({
       kind: "apply",
-      mappings: [...kept, { key, component: app.component, label: app.label }],
+      mappings: [...kept, { key, hold: held, ...action }],
     });
   }
   function remove(mapping: Mapping) {
@@ -162,14 +172,14 @@
         .reverse()
         .map((line) => ({
           failed: line.includes(" failed "),
-          mapping: fresh.mappings.find((m) => line.endsWith(` ${m.component}`)),
+          mapping: fresh.mappings.find((m) =>
+            line.endsWith(` ${logTarget(m)}`),
+          ),
         }))
         .find((entry) => entry.mapping);
-      testResult = !newest
-        ? "The TV didn't see a press of a mapped button."
-        : newest.failed
-          ? `The TV saw the press but couldn't open ${newest.mapping!.label}.`
-          : `It worked: ${newest.mapping!.label} opened.`;
+      testResult = newest
+        ? resultText(newest.mapping!, newest.failed)
+        : "The TV didn't see a press of a mapped button.";
     });
 </script>
 
@@ -205,19 +215,51 @@
       ><Icon name="arrow-left" />Back</button
     >
   </div>
-  <p>Which app should this button open?</p>
+  <p>What should this button do?</p>
+  <div class="mapping-choice">
+    <label for="mapping-gesture">When you</label>
+    <select
+      id="mapping-gesture"
+      value={hold ? "hold" : "tap"}
+      onchange={(e) => (hold = e.currentTarget.value === "hold")}
+    >
+      <option value="tap">Press it</option>
+      <option value="hold">Hold it down</option>
+    </select>
+    <label for="mapping-action">It should</label>
+    <select id="mapping-action" bind:value={doing}>
+      <option value="app">Open an app</option>
+      <option value="button">Act as a different button</option>
+    </select>
+  </div>
+  {#if hold}<p class="subtle">
+      A press stays as it is. Holding for over half a second does this instead.
+    </p>{/if}
   {#if existing}<p class="subtle">
-      This button currently opens {existing.label}.
+      Right now this {existing.send ? "sends" : "opens"}
+      {existing.label}.
     </p>{/if}
   <div class="row-list app-list">
-    {#each apps as app (app.component)}<button
-        class="list-row"
-        disabled={busy}
-        onclick={() => save(app)}
-        ><span class="truncate">{app.label}</span><Icon
-          name="chevron-right"
-        /></button
-      >{/each}
+    {#if doing === "app"}
+      {#each apps as app (app.component)}<button
+          class="list-row"
+          disabled={busy}
+          onclick={() => save({ component: app.component, label: app.label })}
+          ><span class="truncate">{app.label}</span><Icon
+            name="chevron-right"
+          /></button
+        >{/each}
+    {:else}
+      {#each sendable as button (button.id)}<button
+          class="list-row"
+          disabled={busy}
+          onclick={() =>
+            save({ component: "", send: button.id, label: button.label })}
+          ><span class="truncate">{button.label}</span><Icon
+            name="chevron-right"
+          /></button
+        >{/each}
+    {/if}
   </div>
 {:else if view === "test"}
   <div class="setup-card">
@@ -237,13 +279,13 @@
         >Start it again</button
       >{/if}
     <div class="row-list app-list">
-      {#each tv.mappings as mapping (describeKey(mapping.key))}<div
+      {#each tv.mappings as mapping (describeMapping(mapping))}<div
           class="file-row"
         >
           <div class="list-row entry-static">
             <span class="truncate"
               ><span class="entry-name">{mapping.label}</span><small
-                >{describeKey(mapping.key)}</small
+                >{describeMapping(mapping)}</small
               ></span
             >
           </div>
@@ -258,7 +300,8 @@
   {:else}<section class="center-tv">
       <h2>No buttons remapped yet</h2>
       <p class="subtle">
-        Make any button on your remote open the app you choose.
+        Make any button on your remote open an app or act as a different
+        button.
       </p>
     </section>{/if}
   {#if toolkit && toolkit.stage !== "done"}<p class="subtle">

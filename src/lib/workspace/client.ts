@@ -103,7 +103,13 @@ export type SetupStep =
   | { kind: "installMonitor" }
   | { kind: "removeMonitor" };
 export type KeyIdentity = { source: string; key: string; scan: string | null };
-export type Mapping = { key: KeyIdentity; component: string; label: string };
+export type Mapping = {
+  key: KeyIdentity;
+  hold?: boolean;
+  component: string;
+  send?: string;
+  label: string;
+};
 export type MappingChange =
   | { kind: "apply"; mappings: Mapping[] }
   | { kind: "pause"; paused: boolean }

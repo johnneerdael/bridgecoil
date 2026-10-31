@@ -40,8 +40,23 @@ fn key(source: &str, key: &str, scan: Option<&str>) -> KeyIdentity {
 fn mapping(identity: KeyIdentity, component: &str) -> Mapping {
     Mapping {
         key: identity,
+        hold: false,
         component: component.into(),
+        send: None,
         label: "Player".into(),
+    }
+}
+fn holding(identity: KeyIdentity, component: &str) -> Mapping {
+    Mapping {
+        hold: true,
+        ..mapping(identity, component)
+    }
+}
+fn sending(identity: KeyIdentity, send: &str) -> Mapping {
+    Mapping {
+        component: String::new(),
+        send: Some(send.into()),
+        ..mapping(identity, "")
     }
 }
 fn remote(scan: &str) -> KeyIdentity {
@@ -148,6 +163,145 @@ fn one_button_can_only_do_one_thing() {
     ])
     .unwrap_err();
     assert_eq!(e.kind, "mappingConflict");
+}
+
+#[test]
+fn a_tap_and_a_hold_of_one_button_can_differ() {
+    let set = [
+        mapping(remote("000c0057"), "org.demo/.Main"),
+        holding(remote("000c0057"), "org.other/.Main"),
+    ];
+    validate(&set).unwrap();
+    let script = listener_script(&set).unwrap();
+    assert!(
+        script.find("hold:1:000c0057").unwrap() < script.find("*:1:000c0057").unwrap(),
+        "the tap arm also matches holds, so it has to come second"
+    );
+}
+
+#[test]
+fn only_known_buttons_can_be_sent() {
+    validate(&[sending(remote("000c0057"), "HOME")]).unwrap();
+    for bad in [
+        sending(remote("000c0057"), "HOME; reboot"),
+        sending(remote("000c0057"), "POWER"),
+        Mapping {
+            component: "org.demo/.Main".into(),
+            ..sending(remote("000c0057"), "HOME")
+        },
+        mapping(remote("000c0057"), ""),
+    ] {
+        assert!(validate(std::slice::from_ref(&bad)).is_err(), "{bad:?}");
+    }
+}
+
+#[test]
+fn mappings_saved_by_an_earlier_version_still_load() {
+    let raw = r#"running=1
+paused=
+---mappings
+[{"key":{"source":"A","key":"KEY_A","scan":null},"component":"org.demo/.Main","label":"Player"}]
+---log
+"#;
+    let state = parse_state(raw);
+    assert_eq!(state.mappings.len(), 1);
+    assert!(!state.mappings[0].hold);
+    assert_eq!(state.mappings[0].send, None);
+}
+
+/// Runs the generated listener for real against stand-ins for the TV's tools.
+#[cfg(unix)]
+fn run_listener(set: &[Mapping], held_centiseconds: u32) -> String {
+    use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let bin = root.join("bin");
+    fs::create_dir(&bin).unwrap();
+    let calls = root.join("calls");
+    let uptime = root.join("uptime");
+    let tool = |name: &str, body: String| {
+        let path = bin.join(name);
+        fs::write(&path, format!("#!/bin/sh\n{body}")).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    tool("am", format!("echo \"am $*\" >> {}\n", calls.display()));
+    tool("input", format!("echo \"input $*\" >> {}\n", calls.display()));
+    let released = 1000_00 + held_centiseconds;
+    tool(
+        "getevent",
+        format!(
+            "printf 'add device 1: /dev/input/event4\\n  name:     \"Vendor Remote 01\"\\n'\n\
+             echo '1000.00 1.00' > {up}\n\
+             echo '/dev/input/event4: EV_MSC MSC_SCAN 000c0057'\n\
+             echo '/dev/input/event4: EV_KEY KEY_UNKNOWN DOWN'\n\
+             sleep 0.2\n\
+             echo '{}.{:02} 1.00' > {up}\n\
+             echo '/dev/input/event4: EV_MSC MSC_SCAN 000c0057'\n\
+             echo '/dev/input/event4: EV_KEY KEY_UNKNOWN UP'\n\
+             sleep 0.6\n",
+            released / 100,
+            released % 100,
+            up = uptime.display(),
+        ),
+    );
+    let script = listener_script(set)
+        .unwrap()
+        .replace("/data/local/tmp/bridgecoil", &root.display().to_string())
+        .replace("/proc/uptime", &uptime.display().to_string());
+    let path = root.join("listener.sh");
+    fs::write(&path, script).unwrap();
+    let run = Command::new("sh")
+        .arg(&path)
+        .arg("--run")
+        .env(
+            "PATH",
+            format!("{}:/bin:/usr/bin", bin.display()),
+        )
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{run:?}");
+    fs::read_to_string(calls).unwrap_or_default()
+}
+
+#[cfg(unix)]
+#[test]
+fn a_quick_press_runs_the_tap_mapping() {
+    let set = [
+        mapping(remote("000c0057"), "org.demo/.Main"),
+        holding(remote("000c0057"), "org.other/.Main"),
+    ];
+    assert_eq!(run_listener(&set, 10), "am start -n org.demo/.Main\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_long_press_runs_the_hold_mapping() {
+    let set = [
+        mapping(remote("000c0057"), "org.demo/.Main"),
+        holding(remote("000c0057"), "org.other/.Main"),
+    ];
+    assert_eq!(run_listener(&set, 80), "am start -n org.other/.Main\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_slow_press_still_counts_when_only_a_tap_is_mapped() {
+    let set = [mapping(remote("000c0057"), "org.demo/.Main")];
+    assert_eq!(run_listener(&set, 80), "am start -n org.demo/.Main\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_tap_does_nothing_when_only_a_hold_is_mapped() {
+    let set = [holding(remote("000c0057"), "org.other/.Main")];
+    assert_eq!(run_listener(&set, 10), "");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_mapping_can_press_a_different_button() {
+    let set = [sending(remote("000c0057"), "HOME")];
+    assert_eq!(run_listener(&set, 10), "input keyevent KEYCODE_HOME\n");
 }
 
 #[test]

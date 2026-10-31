@@ -432,7 +432,14 @@ it("shows the TV's current setting in its selector", async () => {
       },
     ]),
   } as unknown as Platform;
-  render(ToolsPage, { device, api, onreview: () => {}, oninstall: () => {} });
+  render(ToolsPage, {
+    device,
+    api,
+    onreview: () => {},
+    onbulk: () => {},
+    oninstall: () => {},
+  });
+  await fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await fireEvent.click(await screen.findByRole("button", { name: /^Settings/ }));
   const select = (await screen.findByLabelText(

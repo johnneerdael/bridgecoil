@@ -73,7 +73,9 @@ fn mapping() -> Mapping {
             key: "KEY_UNKNOWN".into(),
             scan: Some("000c0057".into()),
         },
+        hold: false,
         component: "org.demo/.Main".into(),
+        send: None,
         label: "Player".into(),
     }
 }

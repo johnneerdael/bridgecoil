@@ -131,6 +131,7 @@
         bind:tool={toolChoice}
         bind:filePath={toolFilePath}
         onreview={acceptReview}
+        onbulk={acceptBulk}
         oninstall={() => onnavigate("install")}
       />{/if}
   {/key}{/if}

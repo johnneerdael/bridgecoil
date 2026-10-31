@@ -46,6 +46,7 @@ paths=" "
 path=
 scan=
 scan_device=
+pressed=
 {
   getevent -l 2>/dev/null &
   echo $! > "$events_file"
@@ -74,25 +75,43 @@ scan_device=
       fi
       ;;
     EV_KEY)
+      read -r now _ < /proc/uptime
+      now=${now%.*}${now#*.}
+      if [ "$4" = DOWN ]; then
+        pressed=$now
+        continue
+      fi
       [ "$4" = UP ] || continue
+      gesture=tap
+      [ -n "$pressed" ] && [ $((now - pressed)) -ge 60 ] && gesture=hold
+      pressed=
       [ "$device" = "$scan_device" ] || scan=
       source=
       case "$paths" in
 @@PATHS@@
       esac
       target=
-      case "$source:$scan:$3" in
+      send=
+      case "$gesture:$source:$scan:$3" in
 @@KEYS@@
       esac
       scan=
-      if [ -n "$target" ] && [ ! -f "$dir/paused" ]; then
+      if [ -n "$target$send" ] && [ ! -f "$dir/paused" ]; then
         [ "$(wc -c < "$log" 2>/dev/null || echo 0)" -gt 100000 ] && : > "$log"
         (
           sleep 0.2
-          case "$(am start -n "$target" 2>&1)" in
-            *Error*|*Exception*) echo "$(date +%s) failed $target" ;;
-            *) echo "$(date +%s) opened $target" ;;
-          esac
+          if [ -n "$send" ]; then
+            if input keyevent "$send" 2>/dev/null; then
+              echo "$(date +%s) sent $send"
+            else
+              echo "$(date +%s) failed $send"
+            fi
+          else
+            case "$(am start -n "$target" 2>&1)" in
+              *Error*|*Exception*) echo "$(date +%s) failed $target" ;;
+              *) echo "$(date +%s) opened $target" ;;
+            esac
+          fi
         ) &
       fi
       ;;

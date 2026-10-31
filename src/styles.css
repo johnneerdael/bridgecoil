@@ -1613,6 +1613,13 @@ textarea {
 .setup-step.done svg {
   color: var(--bc-success);
 }
+.mapping-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+}
+
 .setup-card {
   display: grid;
   flex: 1;

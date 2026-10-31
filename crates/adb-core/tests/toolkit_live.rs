@@ -149,9 +149,17 @@ async fn walks_every_stage() {
 
 /// A real kernel key event. The emulator has no remote, so this presses its power button.
 fn press() {
+    key_down_up("");
+}
+fn hold() {
+    key_down_up("sleep 1;");
+}
+fn key_down_up(between: &str) {
     let device = std::env::var("BC_DEVICE").unwrap();
-    let keys = "sendevent /dev/input/event0 1 116 1; sendevent /dev/input/event0 0 0 0; \
-                sendevent /dev/input/event0 1 116 0; sendevent /dev/input/event0 0 0 0";
+    let keys = format!(
+        "sendevent /dev/input/event0 1 116 1; sendevent /dev/input/event0 0 0 0; {between} \
+         sendevent /dev/input/event0 1 116 0; sendevent /dev/input/event0 0 0 0"
+    );
     let done = std::process::Command::new("adb")
         .args(["-s", &device, "shell", "su", "0", "sh", "-c"])
         .arg(format!("'{keys}'"))
@@ -222,10 +230,13 @@ async fn a_learned_button_opens_its_app() {
         })
         .unwrap();
     let mapping = Mapping {
-        key,
+        key: key.clone(),
+        hold: false,
         component: settings["component"].as_str().unwrap().into(),
+        send: None,
         label: settings["label"].as_str().unwrap().into(),
     };
+    let tap = mapping.clone();
     let action = Action::Mappings {
         change: MappingChange::Apply {
             mappings: vec![mapping],
@@ -281,6 +292,42 @@ async fn a_learned_button_opens_its_app() {
     };
     let review = w.prepare(&mut c, &t, resume).await.unwrap();
     w.apply(&mut c, &review.id).await.unwrap();
+
+    let both = Action::Mappings {
+        change: MappingChange::Apply {
+            mappings: vec![
+                tap,
+                Mapping {
+                    key,
+                    hold: true,
+                    component: String::new(),
+                    send: Some("MEDIA_STOP".into()),
+                    label: "Stop".into(),
+                },
+            ],
+        },
+    };
+    let review = w.prepare(&mut c, &t, both).await.unwrap();
+    assert_eq!(
+        w.apply(&mut c, &review.id).await.unwrap().status,
+        OperationStatus::Verified
+    );
+    hold();
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    wake(&mut c, &t).await;
+    let held = mapping_state(&mut c, &t).await;
+    println!("hold log {}", held["log"]);
+    assert!(
+        held["log"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .ends_with("sent KEYCODE_MEDIA_STOP"),
+        "a real long press runs the hold mapping"
+    );
 
     let snap = inspect(&mut c, &t).await.unwrap();
     println!("listener {} monitor {}", snap.listener, snap.monitor);

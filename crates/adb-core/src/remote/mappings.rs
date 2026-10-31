@@ -11,9 +11,40 @@ const END: &str = "BRIDGECOIL_END_OF_FILE";
 #[serde(rename_all = "camelCase")]
 pub struct Mapping {
     pub key: KeyIdentity,
+    /// Holding the button rather than tapping it. A tap mapping also fires on a hold when
+    /// nothing is mapped to holding, so a slow press never just does nothing.
+    #[serde(default)]
+    pub hold: bool,
+    /// The app to open. Empty when the mapping sends a button instead.
+    #[serde(default)]
     pub component: String,
+    /// The button to send, from `SENDABLE`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub send: Option<String>,
     pub label: String,
 }
+/// Buttons a mapping can press. A fixed list, because these go straight to `input keyevent`.
+pub const SENDABLE: &[&str] = &[
+    "HOME",
+    "BACK",
+    "MENU",
+    "VOLUME_UP",
+    "VOLUME_DOWN",
+    "VOLUME_MUTE",
+    "MEDIA_PLAY_PAUSE",
+    "MEDIA_NEXT",
+    "MEDIA_PREVIOUS",
+    "MEDIA_STOP",
+    "MEDIA_REWIND",
+    "MEDIA_FAST_FORWARD",
+    "CHANNEL_UP",
+    "CHANNEL_DOWN",
+    "TV_INPUT",
+    "CAPTIONS",
+    "SETTINGS",
+    "SEARCH",
+    "SLEEP",
+];
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MappingState {
@@ -65,7 +96,7 @@ pub fn plan(change: &MappingChange) -> Result<MappingPlan, PocError> {
                 n => format!("Run a small listener on the TV for {n} buttons."),
             },
             losses: vec![
-                "Each button still does its normal action first, then your app opens. To stop a button opening its original app, disable that app separately.".into(),
+                "Each button still does its normal action first, then yours follows. To stop a button opening its original app, disable that app separately.".into(),
             ],
             command: apply_command(mappings)?,
         },
@@ -77,7 +108,7 @@ pub fn plan(change: &MappingChange) -> Result<MappingPlan, PocError> {
         },
         MappingChange::Pause { paused: false } => MappingPlan {
             title: "Resume button mappings".into(),
-            effect: "Your mapped buttons open their apps again.".into(),
+            effect: "Your mapped buttons work again.".into(),
             losses: Vec::new(),
             command: pause_command(false),
         },
@@ -126,11 +157,17 @@ pub fn validate(mappings: &[Mapping]) -> Result<(), PocError> {
     }
     let mut seen = HashSet::new();
     for mapping in mappings {
-        component_arg(&mapping.component).map_err(|_| invalid())?;
+        match (&mapping.send, mapping.component.is_empty()) {
+            (None, false) => {
+                component_arg(&mapping.component).map_err(|_| invalid())?;
+            }
+            (Some(send), true) if SENDABLE.contains(&send.as_str()) => {}
+            _ => return Err(invalid()),
+        }
         if !valid_key(&mapping.key) {
             return Err(invalid());
         }
-        if !seen.insert(&mapping.key) {
+        if !seen.insert((&mapping.key, mapping.hold)) {
             return Err(PocError::new(
                 "mappingConflict",
                 "That button already has a mapping. Change it instead of adding another.",
@@ -164,15 +201,24 @@ pub fn listener_script(mappings: &[Mapping]) -> Result<String, PocError> {
     let path_arms: Vec<_> = (1..=sources.len())
         .map(|i| format!("        *\" $device:{i} \"*) source={i} ;;"))
         .collect();
-    let key_arms: Vec<_> = mappings
+    // The first matching arm wins, so hold mappings go ahead of the taps that also match holds.
+    let ordered = mappings
         .iter()
+        .filter(|m| m.hold)
+        .chain(mappings.iter().filter(|m| !m.hold));
+    let key_arms: Vec<_> = ordered
         .map(|m| {
             let source = index(&m.key.source);
+            let gesture = if m.hold { "hold" } else { "*" };
             let pattern = match &m.key.scan {
-                Some(scan) => format!("{source}:{scan}:*"),
-                None => format!("{source}:*:{}", m.key.key),
+                Some(scan) => format!("{gesture}:{source}:{scan}:*"),
+                None => format!("{gesture}:{source}:*:{}", m.key.key),
             };
-            format!("        {pattern}) target={} ;;", shell_quote(&m.component))
+            let action = match &m.send {
+                Some(send) => format!("send=KEYCODE_{send}"),
+                None => format!("target={}", shell_quote(&m.component)),
+            };
+            format!("        {pattern}) {action} ;;")
         })
         .collect();
     Ok(include_str!("scripts/listener.sh")

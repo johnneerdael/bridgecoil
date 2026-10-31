@@ -81,9 +81,66 @@ it("learns a button and reviews saving it to the chosen app", async () => {
     kind: "mappings",
     change: {
       kind: "apply",
-      mappings: [{ key: remote, component: "org.other/.Main", label: "Browser" }],
+      mappings: [
+        { key: remote, hold: false, component: "org.other/.Main", label: "Browser" },
+      ],
     },
   });
+});
+
+it("maps holding a button without touching its tap mapping", async () => {
+  const api = platform(state({ running: true, mappings: [saved] }));
+  open(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Remap a button" }),
+  );
+  await fireEvent.click(await screen.findByRole("button", { name: "Listen" }));
+  await fireEvent.click(
+    await screen.findByRole("button", { name: /KEY_UNKNOWN/ }),
+  );
+  await fireEvent.change(await screen.findByLabelText("When you"), {
+    target: { value: "hold" },
+  });
+  await fireEvent.click(await screen.findByRole("button", { name: "Browser" }));
+  await waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "mappings",
+      change: {
+        kind: "apply",
+        mappings: [
+          saved,
+          { key: remote, hold: true, component: "org.other/.Main", label: "Browser" },
+        ],
+      },
+    }),
+  );
+});
+
+it("can make a button act as a different one", async () => {
+  const api = platform(state());
+  open(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Remap a button" }),
+  );
+  await fireEvent.click(await screen.findByRole("button", { name: "Listen" }));
+  await fireEvent.click(
+    await screen.findByRole("button", { name: /KEY_UNKNOWN/ }),
+  );
+  await fireEvent.change(await screen.findByLabelText("It should"), {
+    target: { value: "button" },
+  });
+  await fireEvent.click(await screen.findByRole("button", { name: "Mute" }));
+  await waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "mappings",
+      change: {
+        kind: "apply",
+        mappings: [
+          { key: remote, hold: false, component: "", send: "VOLUME_MUTE", label: "Mute" },
+        ],
+      },
+    }),
+  );
 });
 
 it("warns that listening can trigger the button's normal action", async () => {
@@ -114,7 +171,7 @@ it("adds to existing mappings and replaces a button's old target", async () => {
   await fireEvent.click(
     await screen.findByRole("button", { name: /KEY_UNKNOWN/ }),
   );
-  expect(await screen.findByText(/currently opens Player/)).toBeTruthy();
+  expect(await screen.findByText(/Right now this opens\s+Player/)).toBeTruthy();
   await fireEvent.click(await screen.findByRole("button", { name: "Browser" }));
   await waitFor(() => expect(api.prepare).toHaveBeenCalled());
   const [, action] = (api.prepare as ReturnType<typeof vi.fn>).mock.calls[0];

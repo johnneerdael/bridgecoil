@@ -5,9 +5,11 @@
     type Platform,
     type Review,
     type Action,
+    type BulkReview,
     type Query,
   } from "./client";
   import ButtonsTool from "./ButtonsTool.svelte";
+  import CleanupTool from "./CleanupTool.svelte";
   import CommandsTool from "./CommandsTool.svelte";
   import FilesTool from "./FilesTool.svelte";
   import LauncherTool from "./LauncherTool.svelte";
@@ -22,6 +24,7 @@
     device,
     api,
     onreview,
+    onbulk,
     oninstall,
     tool = $bindable(""),
     filePath = $bindable(internalStorage),
@@ -29,6 +32,7 @@
     device: Device;
     api: Platform;
     onreview: (r: Review) => void;
+    onbulk: (r: BulkReview) => void;
     oninstall: () => void;
     tool?: string;
     filePath?: string;
@@ -43,8 +47,14 @@
     {
       id: "buttons",
       name: "Buttons",
-      note: "Make any button open any app",
+      note: "Change what any button does",
       icon: "remap",
+    },
+    {
+      id: "cleanup",
+      name: "Clean up",
+      note: "Turn off the apps you don't need",
+      icon: "check",
     },
     {
       id: "commands",
@@ -111,6 +121,7 @@
     "files",
     "toolkit",
     "buttons",
+    "cleanup",
     "commands",
     "launcher",
     "capture",
@@ -209,6 +220,12 @@
         {reload}
         {onreview}
         onsetup={() => (tool = "toolkit")}
+      />
+    {:else if tool === "cleanup"}<CleanupTool
+        {device}
+        {api}
+        {reload}
+        {onbulk}
       />
     {:else if tool === "commands"}<CommandsTool {device} {api} {onreview} />
     {:else if tool === "files"}<FilesTool
