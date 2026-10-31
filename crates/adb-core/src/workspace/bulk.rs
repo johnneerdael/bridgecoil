@@ -211,7 +211,10 @@ impl Bulk {
         let mut row = OperationRecord {
             id: uuid::Uuid::new_v4().to_string(),
             target: review.target.clone(),
-            title: format!("Bulk app changes · {} apps", review.items.len()),
+            title: match review.items.len() {
+                1 => "App changes · 1 app".into(),
+                n => format!("App changes · {n} apps"),
+            },
             device_label: d.target_label(),
             kind: "bulkPackages".into(),
             status: OperationStatus::Running,

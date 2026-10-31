@@ -18,6 +18,7 @@
   import BulkActionReview from "./BulkReview.svelte";
   import Modal from "../Modal.svelte";
   import Output from "./Output.svelte";
+  import { resultText } from "./output";
   import { internalStorage } from "./files";
   let {
     page,
@@ -163,7 +164,7 @@
     <p class={`outcome ${outcome.status}`}>{outcome.status}</p>
     <Output
       text={outcome.error ||
-        outcome.output ||
+        resultText(outcome.kind, outcome.output) ||
         (outcome.status === "sent"
           ? "Sent to the TV. Check its response."
           : "No output returned.")}

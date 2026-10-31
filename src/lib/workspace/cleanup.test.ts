@@ -32,9 +32,10 @@ const app = (name: string, group: AppMetadata["group"]): AppMetadata => ({
   },
 });
 type Pages = Record<string, AppMetadata[]>;
-function platform(pages: Pages, stored = true) {
+function platform(pages: Pages, stored = true, launchers: unknown = []) {
   return {
-    query: vi.fn(async (_t, q: { filter: string; page: number; pageSize: number }) => {
+    query: vi.fn(async (_t, q: { kind: string; filter: string; page: number; pageSize: number }) => {
+      if (q.kind === "launchableApps") return launchers;
       const all = pages[q.filter] ?? [];
       return {
         items: all.slice(q.page * q.pageSize, (q.page + 1) * q.pageSize),
@@ -70,6 +71,49 @@ it("offers only recommended apps that are still on, all ticked", async () => {
   expect(screen.queryByRole("checkbox", { name: "Turn off offer" })).toBeNull();
   expect(screen.queryByText(/core/)).toBeNull();
   expect(screen.getByText("ads does things")).toBeTruthy();
+});
+
+it("never ticks an app you can open from the TV for you", async () => {
+  const api = platform(
+    { system: [app("youtube", "recommended"), app("ads", "recommended")], disabled: [] },
+    true,
+    [{ component: "com.vendor.youtube/.Main", label: "YouTube" }],
+  );
+  const onbulk = vi.fn();
+  open(api, onbulk);
+  const watch = await screen.findByRole("checkbox", { name: "Turn off youtube" });
+  expect((watch as HTMLInputElement).checked).toBe(false);
+  await fireEvent.click(screen.getByRole("button", { name: "Review 1 app" }));
+  await waitFor(() => expect(onbulk).toHaveBeenCalled());
+  expect(api.prepareBulk).toHaveBeenCalledWith(
+    expect.anything(),
+    ["com.vendor.ads"],
+    "disable",
+  );
+});
+
+it("still lets you choose an app you can open", async () => {
+  const api = platform(
+    { system: [app("youtube", "recommended")], disabled: [] },
+    true,
+    [{ component: "com.vendor.youtube/.Main", label: "YouTube" }],
+  );
+  open(api);
+  await fireEvent.click(await screen.findByRole("checkbox", { name: "Turn off youtube" }));
+  expect(screen.getByRole("button", { name: "Review 1 app" })).toBeTruthy();
+});
+
+it("ticks nothing when it can't tell what opens on the TV", async () => {
+  const api = platform({ system: [app("ads", "recommended")], disabled: [] });
+  const query = api.query as unknown as ReturnType<typeof vi.fn<(t: unknown, q: { kind: string }) => unknown>>;
+  const answer = query.getMockImplementation()!;
+  query.mockImplementation(async (t, q) => {
+    if (q.kind === "launchableApps") throw new Error("no");
+    return answer(t, q);
+  });
+  open(api);
+  const ads = await screen.findByRole("checkbox", { name: "Turn off ads" });
+  expect((ads as HTMLInputElement).checked).toBe(false);
 });
 
 it("disables through a review of what stayed ticked", async () => {

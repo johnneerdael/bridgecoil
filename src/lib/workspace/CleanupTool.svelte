@@ -1,6 +1,6 @@
 <script lang="ts" module>
-  // Applying a review remounts this screen, and a choice to keep an app has to survive that.
-  const keptByDevice = new Map<string, string[]>();
+  // Applying a review remounts this screen, and a person's choices have to survive that.
+  const choicesByDevice = new Map<string, Record<string, boolean>>();
 </script>
 
 <script lang="ts">
@@ -9,6 +9,7 @@
     targetOf,
     type AppMetadata,
     type BulkReview,
+    type LaunchableApp,
     type PackageAction,
     type Page,
     type Platform,
@@ -31,21 +32,21 @@
   let offer = $state<AppMetadata[]>([]);
   let turnedOff = $state<AppMetadata[]>([]);
   // svelte-ignore state_referenced_locally
-  let skipped = $state<string[]>(keptByDevice.get(device.deviceId) ?? []);
+  let choices = $state(choicesByDevice.get(device.deviceId) ?? {});
+  let opensOnTv = $state<Set<string> | null>(null);
   let loaded = $state(false);
   let busy = $state(false);
   let error = $state("");
   let refresh = $state(0);
-  const chosen = $derived(
-    offer
-      .filter((app) => !skipped.includes(app.package))
-      .map((app) => app.package)
-      .slice(0, reviewLimit),
-  );
-  const leftOver = $derived(
-    offer.filter((app) => !skipped.includes(app.package)).length -
-      chosen.length,
-  );
+  // "Safe to remove" can still mean something people watch, such as YouTube. Anything with an
+  // icon on the TV stays off unless asked for, and so does everything if that can't be checked.
+  const opens = (app: AppMetadata) => opensOnTv?.has(app.package) ?? true;
+  const ticked = (app: AppMetadata) => choices[app.package] ?? !opens(app);
+  const background = $derived(offer.filter((app) => !opens(app)));
+  const openable = $derived(offer.filter(opens));
+  const wanted = $derived(offer.filter(ticked).map((app) => app.package));
+  const chosen = $derived(wanted.slice(0, reviewLimit));
+  const leftOver = $derived(wanted.length - chosen.length);
   const plural = (n: number) => (n === 1 ? "app" : "apps");
   const restoring = $derived(Math.min(turnedOff.length, reviewLimit));
   async function readAll(
@@ -84,7 +85,13 @@
           "system",
           (app) => app.group === "recommended",
         );
+        const launchable = await api
+          .query<LaunchableApp[]>(targetOf(device), { kind: "launchableApps" })
+          .catch(() => null);
         if (cancelled) return;
+        opensOnTv =
+          launchable &&
+          new Set(launchable.map((app) => app.component.split("/")[0]));
         const disabled = new Set(off.map((app) => app.package));
         offer = candidates.filter((app) => !disabled.has(app.package));
         // Only what this tool would turn off. Some TVs ship with other apps disabled on purpose.
@@ -118,13 +125,26 @@
       await api.ratingsUpdate();
       refresh++;
     });
-  function toggle(id: string) {
-    skipped = skipped.includes(id)
-      ? skipped.filter((p) => p !== id)
-      : [...skipped, id];
-    keptByDevice.set(device.deviceId, skipped);
+  function toggle(app: AppMetadata) {
+    choices = { ...choices, [app.package]: !ticked(app) };
+    choicesByDevice.set(device.deviceId, choices);
   }
 </script>
+
+{#snippet choice(app: AppMetadata)}
+  <label class="checkbox list-row bulk-choice cleanup-choice"
+    ><input
+      type="checkbox"
+      checked={ticked(app)}
+      disabled={busy}
+      aria-label={`Turn off ${app.label || app.package}`}
+      onchange={() => toggle(app)}
+    /><span class="truncate"
+      ><span class="entry-name">{app.label || app.package}</span>{#if app.rating
+        ?.description}<small>{app.rating.description}</small>{/if}</span
+    ></label
+  >
+{/snippet}
 
 {#if error}<p class="error-text" role="alert">{error}</p>{/if}
 {#if hasRatings === false}
@@ -148,20 +168,10 @@
       Nothing is deleted, and you can turn them back on here.
     </p>
     <div class="row-list app-list">
-      {#each offer as app (app.package)}<label
-          class="checkbox list-row bulk-choice cleanup-choice"
-          ><input
-            type="checkbox"
-            checked={!skipped.includes(app.package)}
-            disabled={busy}
-            aria-label={`Turn off ${app.label || app.package}`}
-            onchange={() => toggle(app.package)}
-          /><span class="truncate"
-            ><span class="entry-name">{app.label || app.package}</span>{#if app
-              .rating?.description}<small>{app.rating.description}</small
-              >{/if}</span
-          ></label
-        >{/each}
+      {#each background as app (app.package)}{@render choice(app)}{/each}
+      {#if openable.length}<h3 class="app-group"><span>Apps you can open</span></h3>
+        <p class="subtle">Tick these only if you don't use them.</p>
+        {#each openable as app (app.package)}{@render choice(app)}{/each}{/if}
     </div>
     {#if leftOver > 0}<p class="subtle">
         {leftOver} more can follow once these are done.

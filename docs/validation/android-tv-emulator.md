@@ -35,6 +35,28 @@ Run on 2026-10-31 against the `android-36/android-tv/arm64-v8a` system image (`s
 
 Porter installs without it. Bridgecoil warns before the install and explains the failure. It doesn't touch the verifier setting, because that is the owner's decision.
 
+**Android closes a background app's connections.** On a phone running Android 15 or later, the socket closed about 6 seconds after the app left the screen. A file picker counts, so saving, uploading or choosing an APK could drop the TV while the app still said Connected. A foreground service now holds the connection.
+
+**UAD's "safe to remove" includes YouTube.** Everything was ticked at first. Clean up now leaves any app with an icon on the TV unticked.
+
+## The signed app against the TV
+
+The signed release APK ran on an Android 16 phone emulator, connected to the TV emulator over the network.
+
+| Check | Result |
+|---|---|
+| Certificate matches the release key | Passed |
+| Update keeps the saved TV | Passed |
+| Connect, approve on the TV | Passed |
+| Screenshot of the TV, shown in the app | Passed |
+| Native save dialog writes a valid 1920×1080 PNG | Passed |
+| Connection survives 15 seconds behind the save dialog | Passed, was dropping after 6 |
+| Recording continues after leaving the screen, and Stop is still there | Passed |
+| Saved recording matches the TV's copy by SHA-256 and is removed from the TV | Passed |
+| Real ratings downloaded, real preinstalled apps listed | Passed |
+| App turned off through review, verified, and turned back on | Passed |
+| Connection service stops on disconnect | Passed |
+
 ## Not covered
 
 - **Hold gestures on this image.** The emulator console can only tap without root. Holds were proven with a real kernel key event on the phone image.

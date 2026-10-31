@@ -23,8 +23,15 @@
   let recording = $state(false);
   let finished = $state<RecordingState | null>(null);
   let saving = $state<number | null>(null);
-  const stamp = () =>
-    new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
+  // Local time, because this is what people see in their file list.
+  const stamp = () => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 19)
+      .replace(/[-:]/g, "")
+      .replace("T", "-");
+  };
   async function attempt(work: () => Promise<void>) {
     busy = true;
     error = "";
