@@ -146,3 +146,136 @@ async fn walks_every_stage() {
         serde_json::to_string(&inspect(&mut c, &t).await.unwrap()).unwrap()
     );
 }
+
+/// A real kernel key event. The emulator has no remote, so this presses its power button.
+fn press() {
+    let device = std::env::var("BC_DEVICE").unwrap();
+    let keys = "sendevent /dev/input/event0 1 116 1; sendevent /dev/input/event0 0 0 0; \
+                sendevent /dev/input/event0 1 116 0; sendevent /dev/input/event0 0 0 0";
+    let done = std::process::Command::new("adb")
+        .args(["-s", &device, "shell", "su", "0", "sh", "-c"])
+        .arg(format!("'{keys}'"))
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(done.status.success());
+}
+async fn wake(c: &mut Client, t: &Target) {
+    c.shell(t, "input keyevent KEYCODE_WAKEUP").await.unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
+}
+async fn top(c: &mut Client, t: &Target) -> String {
+    c.shell(
+        t,
+        "dumpsys activity activities | grep -m1 topResumedActivity",
+    )
+    .await
+    .unwrap()
+    .stdout
+}
+async fn mapping_state(c: &mut Client, t: &Target) -> serde_json::Value {
+    query(c, t, Query::Mappings).await.unwrap()
+}
+
+/// Needs walks_every_stage to have finished on this device.
+#[tokio::test]
+#[ignore]
+async fn a_learned_button_opens_its_app() {
+    use adb_core::remote::{
+        capture::KeyIdentity,
+        mappings::{Mapping, MappingChange},
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = Client::new(dir.path().join("identity"));
+    c.connect(std::env::var("BC_ENDPOINT").unwrap(), true)
+        .await
+        .unwrap();
+    let t = c.current_target().unwrap();
+    let w = Workspace::new(History::open(&dir.path().join("ops.db")).unwrap());
+    c.shell(&t, "input keyevent KEYCODE_HOME").await.unwrap();
+
+    let presser = std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_secs(2));
+        press();
+    });
+    let result = query(&mut c, &t, Query::CaptureKeys { seconds: 5 })
+        .await
+        .unwrap();
+    presser.join().unwrap();
+    println!("captured {}", result["presses"]);
+    let key: KeyIdentity = serde_json::from_value(result["presses"][0].clone()).unwrap();
+    assert_eq!(key.key, "KEY_POWER");
+    wake(&mut c, &t).await;
+    c.shell(&t, "input keyevent KEYCODE_HOME").await.unwrap();
+
+    let apps = query(&mut c, &t, Query::LaunchableApps).await.unwrap();
+    println!("apps {}", apps.as_array().unwrap().len());
+    let settings = apps
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| {
+            a["component"]
+                .as_str()
+                .unwrap()
+                .starts_with("com.android.settings/")
+        })
+        .unwrap();
+    let mapping = Mapping {
+        key,
+        component: settings["component"].as_str().unwrap().into(),
+        label: settings["label"].as_str().unwrap().into(),
+    };
+    let action = Action::Mappings {
+        change: MappingChange::Apply {
+            mappings: vec![mapping],
+        },
+    };
+    let review = w.prepare(&mut c, &t, action).await.unwrap();
+    println!("{} | {} | {:?}", review.title, review.effect, review.losses);
+    let done = w.apply(&mut c, &review.id).await.unwrap();
+    println!(
+        "apply {:?} {}",
+        done.status,
+        done.error.as_deref().unwrap_or("")
+    );
+    assert_eq!(done.status, OperationStatus::Verified);
+
+    press();
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    wake(&mut c, &t).await;
+    let state = mapping_state(&mut c, &t).await;
+    println!("log {}", state["log"]);
+    let fired = state["log"].as_array().unwrap().len();
+    let shown = top(&mut c, &t).await;
+    println!("top {}", shown.trim());
+    assert!(shown.contains("com.android.settings"));
+
+    let pause = Action::Mappings {
+        change: MappingChange::Pause { paused: true },
+    };
+    let review = w.prepare(&mut c, &t, pause).await.unwrap();
+    assert_eq!(
+        w.apply(&mut c, &review.id).await.unwrap().status,
+        OperationStatus::Verified
+    );
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    press();
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    wake(&mut c, &t).await;
+    let quiet = mapping_state(&mut c, &t).await;
+    assert_eq!(
+        quiet["log"].as_array().unwrap().len(),
+        fired,
+        "a paused button stays quiet"
+    );
+    let resume = Action::Mappings {
+        change: MappingChange::Pause { paused: false },
+    };
+    let review = w.prepare(&mut c, &t, resume).await.unwrap();
+    w.apply(&mut c, &review.id).await.unwrap();
+
+    let snap = inspect(&mut c, &t).await.unwrap();
+    println!("listener {} monitor {}", snap.listener, snap.monitor);
+    assert!(snap.listener);
+}

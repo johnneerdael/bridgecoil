@@ -9,6 +9,7 @@ use super::{
 use crate::{
     backend::PocError,
     ratings::{Level, store::Ratings},
+    remote::mappings::{self, MappingChange, MappingSnapshot},
     shell_quote,
     toolkit::{
         inventory::{facts_command, parse_facts},
@@ -79,6 +80,9 @@ pub enum Action {
     },
     Setup {
         step: SetupStep,
+    },
+    Mappings {
+        change: MappingChange,
     },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -261,6 +265,21 @@ impl Workspace {
                 // Removed application data is never represented as recoverable by reinstalling.
                 _ => {}
             }
+        }
+        if let Action::Mappings {
+            change: MappingChange::Apply { .. },
+        } = &action
+        {
+            let prior: MappingSnapshot = serde_json::from_str(&before).map_err(internal)?;
+            recovery = Some(Action::Mappings {
+                change: if prior.mappings.is_empty() {
+                    MappingChange::RemoveAll
+                } else {
+                    MappingChange::Apply {
+                        mappings: prior.mappings,
+                    }
+                },
+            });
         }
         if let Action::Setting { namespace, key, .. } = &action {
             recovery = Some(Action::Setting {
@@ -515,6 +534,13 @@ fn state_label(action: &Action, before: &str) -> String {
             "Arbitrary shell commands have no general readback or automatic undo.".into()
         }
         Action::Setup { .. } => "Checked on the TV just now.".into(),
+        Action::Mappings { .. } => serde_json::from_str::<MappingSnapshot>(before)
+            .map(|s| match (s.mappings.len(), s.paused) {
+                (0, _) => "No button mappings on this TV yet.".to_owned(),
+                (n, true) => format!("{n} saved, paused."),
+                (n, false) => format!("{n} saved."),
+            })
+            .unwrap_or_else(|_| "Current state unavailable.".into()),
         Action::Permission { .. } => format!("Current permission: {before}"),
         Action::FileDelete { .. } | Action::FileMove { .. } | Action::FileCreateFolder { .. } => {
             serde_json::from_str::<Vec<files::PathState>>(before)
@@ -540,6 +566,7 @@ fn kind(a: &Action) -> &str {
             "file"
         }
         Action::Setup { .. } => "setup",
+        Action::Mappings { .. } => "mapping",
     }
 }
 fn file_paths(a: &Action) -> Vec<&str> {
@@ -652,6 +679,7 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
         }
         Action::DefaultHome { .. } => home_query(t.profile_id),
         Action::Setup { .. } => facts_command().to_owned(),
+        Action::Mappings { .. } => mappings::state_command(),
         Action::Shell { .. } => return Ok(String::new()),
         Action::Permission { .. }
         | Action::FileDelete { .. }
@@ -674,6 +702,10 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
                 .map_err(internal)
         }
         Action::Setup { .. } => Ok(parse_facts(&output.stdout).summary()),
+        Action::Mappings { .. } => serde_json::to_string(&MappingSnapshot::from(
+            mappings::parse_state(&output.stdout),
+        ))
+        .map_err(internal),
         Action::DefaultHome { .. } => Ok(output
             .stdout
             .lines()
@@ -715,6 +747,8 @@ fn verified(a: &Action, after: &str) -> bool {
                 .is_some_and(|state| state.exists == exists)
         }
         Action::Setup { step } => setup::verified(*step, &parse_facts(after)),
+        Action::Mappings { change } => serde_json::from_str::<MappingSnapshot>(after)
+            .is_ok_and(|state| mappings::verified(change, &state)),
         Action::FileMove { from, to } => serde_json::from_str::<Vec<files::PathState>>(after)
             .ok()
             .as_deref()
@@ -912,6 +946,11 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
         }
         Action::Setup { step } => {
             let plan = setup::plan(*step);
+            losses.extend(plan.losses);
+            (plan.title, plan.effect, plan.command)
+        }
+        Action::Mappings { change } => {
+            let plan = mappings::plan(change)?;
             losses.extend(plan.losses);
             (plan.title, plan.effect, plan.command)
         }

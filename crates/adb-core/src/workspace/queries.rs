@@ -6,6 +6,10 @@ use crate::ratings::{
 use super::{commands::*, driver::*, engine::parse_package_state, files, types::*};
 use crate::{
     backend::PocError,
+    remote::{
+        capture::{capture_command, parse_capture},
+        mappings,
+    },
     toolkit::{inventory, setup},
 };
 use serde::{Deserialize, Serialize};
@@ -75,6 +79,11 @@ pub enum Query {
     Launchers,
     Toolkit,
     VerifyShell,
+    CaptureKeys {
+        seconds: u32,
+    },
+    Mappings,
+    LaunchableApps,
     Diagnostics {
         section: String,
     },
@@ -366,6 +375,47 @@ pub async fn query_rated(
             )
         }
         Query::Toolkit => Ok(json!(inventory::inspect(d, t).await?)),
+        Query::CaptureKeys { seconds } => {
+            let raw = d.shell(t, &capture_command(seconds)?).await?;
+            Ok(json!({"presses":parse_capture(&raw.stdout)}))
+        }
+        Query::Mappings => {
+            let raw = checked(d, t, &mappings::state_command()).await?;
+            Ok(json!(mappings::parse_state(&raw)))
+        }
+        Query::LaunchableApps => {
+            let mut components = BTreeSet::new();
+            for category in ["LEANBACK_LAUNCHER", "LAUNCHER"] {
+                let raw = d
+                    .shell(t, &format!(
+                        "cmd package query-activities --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.{category}"
+                    ))
+                    .await?;
+                components.extend(parse_components(&raw.stdout));
+            }
+            let packages: Vec<_> = components
+                .iter()
+                .filter_map(|c| c.split('/').next())
+                .map(str::to_owned)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            let labels = d.labels(t, &packages).await.ok().flatten().unwrap_or_default();
+            let label = |package: &str| {
+                labels
+                    .iter()
+                    .find(|m| m.package == package)
+                    .and_then(|m| m.label.clone())
+                    .unwrap_or_else(|| package.to_owned())
+            };
+            let mut seen = BTreeSet::new();
+            let apps: Vec<_> = components
+                .iter()
+                .filter(|c| seen.insert(c.split('/').next().unwrap_or_default().to_owned()))
+                .map(|c| json!({"component":c,"label":label(c.split('/').next().unwrap_or_default())}))
+                .collect();
+            Ok(json!(apps))
+        }
         Query::VerifyShell => {
             let raw = checked(d, t, setup::verify_shell_command()).await?;
             let route = raw.lines().find_map(|l| l.trim().strip_prefix("route="));

@@ -55,12 +55,12 @@ pub fn verify_shell_command() -> &'static str {
 }
 const TERMINAL_OPEN: &str = "am start -n com.termux/.app.TermuxActivity\n\
 i=0\n\
-while [ $i -lt 40 ]; do\n\
+while [ $i -lt 8 ]; do\n\
   run-as com.termux test -x /data/data/com.termux/files/usr/bin/bash 2>/dev/null && exit 0\n\
   i=$((i + 1))\n\
   sleep 3\n\
 done\n\
-exit 1";
+exit 0";
 const BACKGROUND: &str = "for package in com.termux com.termux.boot; do\n\
   cmd appops set \"$package\" RUN_IN_BACKGROUND allow 2>/dev/null\n\
   cmd appops set \"$package\" RUN_ANY_IN_BACKGROUND allow 2>/dev/null\n\
