@@ -150,6 +150,23 @@ async fn expert_packages_are_not_blocked() {
 }
 
 #[tokio::test]
+async fn turning_an_app_back_on_carries_no_warning() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = rated(dir.path());
+    for undo in [
+        PackageAction::Enable,
+        PackageAction::ResetEnabled,
+        PackageAction::Restore,
+    ] {
+        let review = w
+            .prepare(&mut fake(), &target(), action("com.hard", undo))
+            .await
+            .unwrap();
+        assert_eq!(review.rating, None);
+    }
+}
+
+#[tokio::test]
 async fn unlisted_packages_have_no_rating_or_block() {
     let dir = tempfile::tempdir().unwrap();
     let review = rated(dir.path())

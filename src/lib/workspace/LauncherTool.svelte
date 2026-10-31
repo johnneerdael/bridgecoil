@@ -95,9 +95,8 @@
       onclick={() => makeDefault(component)}
       >Use {packageOf(component)} instead</button
     >{:else}<p class="subtle">
-      No other launcher is available. If you turned off the one your TV came
-      with, undo that in History or turn it back on in Apps, under Disabled
-      apps.
+      To go back, undo turning off the launcher your TV came with in History,
+      or turn it back on in Apps, under Disabled apps.
     </p>{/each}
 {/snippet}
 
@@ -177,7 +176,7 @@
     {@render wayBack()}
   </div>
 {:else}
-  <p class="subtle">In use: {homes.current ?? "the TV didn't say"}</p>
+  <p class="subtle">In use: {homes.current ? packageOf(homes.current) : "the TV didn't say"}</p>
   {#if !others.length}<p>
       This is the only launcher on the TV. Install another from Apps, and it
       will appear here.

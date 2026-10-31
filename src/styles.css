@@ -956,6 +956,11 @@ textarea {
 }
 .list-row > .truncate {
   flex: 1;
+  min-width: 0;
+}
+.list-row > .truncate + button {
+  flex: none;
+  width: auto;
 }
 .truncate {
   overflow: hidden;

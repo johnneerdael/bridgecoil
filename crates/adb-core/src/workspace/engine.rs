@@ -164,6 +164,11 @@ impl Workspace {
     }
     fn rating_of(&self, action: &Action) -> Option<Level> {
         match action {
+            // A warning about losing an app would only put someone off getting it back.
+            Action::Package {
+                action: PackageAction::Enable | PackageAction::ResetEnabled | PackageAction::Restore,
+                ..
+            } => None,
             Action::Package { package, .. } => self.package_rating(package),
             _ => None,
         }
@@ -443,7 +448,13 @@ impl Workspace {
                                 OperationStatus::Unknown
                             };
                             if row.status == OperationStatus::Unknown {
-                                row.error=Some("The command returned, but its expected effect was not verified. Inspect the TV before retrying.".into());
+                                row.error = Some(match &p.action {
+                                    Action::DefaultHome { .. } if !after.is_empty() => format!(
+                                        "Android accepted this choice, but Home still opens {}.",
+                                        after.split('/').next().unwrap_or_default()
+                                    ),
+                                    _ => "The command returned, but its expected effect was not verified. Inspect the TV before retrying.".into(),
+                                });
                             } else {
                                 row.recovery = p
                                     .recovery
@@ -969,7 +980,7 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
         }
         Action::DefaultHome { component } => {
             let c = component_arg(component)?;
-            ("Set default Home app".into(),"Request this Home activity for the profile. OEM firmware may reject it, show a TV chooser or keep its own launcher first. Test the physical Home button afterwards.".into(),format!("cmd package set-home-activity --user {user} {c}"))
+            (format!("Set default Home app · {}", component.split('/').next().unwrap_or_default()),"Request this Home activity for the profile. OEM firmware may reject it, show a TV chooser or keep its own launcher first. Test the physical Home button afterwards.".into(),format!("cmd package set-home-activity --user {user} {c}"))
         }
     };
     Ok((result.0, result.1, losses, result.2))

@@ -143,6 +143,26 @@ async fn the_replacement_is_checked_again_when_applying() {
 }
 
 #[tokio::test]
+async fn a_choice_android_ignores_says_what_happened() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    let review = w
+        .prepare(
+            &mut tv(STOCK),
+            &target(),
+            Action::DefaultHome {
+                component: "org.fresh/.Home".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(review.title.contains("org.fresh"), "{}", review.title);
+    let done = w.apply(&mut tv("org.fresh"), &review.id).await.unwrap();
+    let error = done.error.unwrap();
+    assert!(error.contains("Home still opens com.vendor.home"), "{error}");
+}
+
+#[tokio::test]
 async fn launchers_report_which_one_was_chosen() {
     let r = query(&mut tv("org.fresh"), &target(), Query::Launchers)
         .await

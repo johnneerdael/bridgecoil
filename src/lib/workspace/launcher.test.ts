@@ -138,6 +138,11 @@ it("offers going back when Home didn't open the new launcher", async () => {
   );
 });
 
+it("names the launcher in use the way the rest of the page does", async () => {
+  open(platform(stock));
+  expect(await screen.findByText("In use: com.vendor.home")).toBeTruthy();
+});
+
 describe("when the TV's own launcher comes first", () => {
   const outranked = () => {
     const api = platform(stock);
@@ -234,5 +239,5 @@ it("says where to go when stock is off and nothing else is left", async () => {
   await fireEvent.click(
     await screen.findByRole("button", { name: "Home opened something else" }),
   );
-  expect(await screen.findByText(/undo that in History/)).toBeTruthy();
+  expect(await screen.findByText(/undo turning off the launcher/)).toBeTruthy();
 });

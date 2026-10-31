@@ -76,6 +76,10 @@ Run on the same image, also on 2026-10-31. The launcher used was a small test ap
 
 **A change needs a moment to stick.** Two reboots within about 8 seconds of disabling brought the stock launcher back. A third, after 45 seconds, kept it off. The likely cause is Android writing this state to disk late, so a power cut right after a change can undo it.
 
+## The signed app, on screen
+
+The whole launcher flow also ran in the signed APK on a phone emulator, against the TV emulator: try it, default through review, the new card, turn stock off through review, a real Home press, then recovery from History and a Home press back to stock. It passed, and the walk found what jsdom couldn't: the launcher's name was squeezed out of its row, the review didn't name the launcher, the result on stock Android TV was a bare "Unknown", the finished page read like a failure, and turning an app back on carried a warning about removing it. All five are fixed.
+
 ## Code pairing
 
 The TV image can't do this, so it ran against the Android 16 phone image on its virtual Wi-Fi, reached through `adb forward`. It proves the protocol against a real `adbd`, not on a TV.
