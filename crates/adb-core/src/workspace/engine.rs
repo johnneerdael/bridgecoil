@@ -144,15 +144,18 @@ impl Workspace {
         self.ratings = Some(ratings);
         self
     }
-    fn rating_of(&self, action: &Action) -> Option<Level> {
-        let Action::Package { package, .. } = action else {
-            return None;
-        };
+    pub fn package_rating(&self, package: &str) -> Option<Level> {
         self.ratings
             .as_ref()?
             .current()?
             .get(package)
             .and_then(|r| r.level)
+    }
+    fn rating_of(&self, action: &Action) -> Option<Level> {
+        match action {
+            Action::Package { package, .. } => self.package_rating(package),
+            _ => None,
+        }
     }
     pub async fn prepare(
         &self,

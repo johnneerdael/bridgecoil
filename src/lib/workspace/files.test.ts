@@ -9,6 +9,7 @@ import {
   entryNote,
   folderSummary,
   formatSize,
+  nameProblem,
   parentPath,
 } from "./files";
 import { settingChoices, settingLabel } from "./settings";
@@ -330,6 +331,78 @@ it("keeps a cancelled upload quiet", async () => {
     expect(screen.queryByLabelText("Name on the TV")).toBeNull(),
   );
   expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("flags names shared storage refuses, only on shared storage", () => {
+  for (const name of ['a"b', "a*b", "a:b", "a<b", "a>b", "a?b", "a\\b", "a|b"]) {
+    expect(nameProblem("/sdcard/Movies", name), name).toContain(
+      "can't contain",
+    );
+    expect(nameProblem("/storage/emulated/0", name), name).toBeTruthy();
+    expect(nameProblem("/data/local/tmp", name), name).toBeNull();
+  }
+  expect(nameProblem("/sdcard", "it's a tést $(id) 漢字 #1.txt")).toBeNull();
+  expect(nameProblem("/sdcardish", "a:b")).toBeNull();
+});
+
+it("explains a reserved character before review", async () => {
+  const api = platform({ "/sdcard": folderWithFile() });
+  tool(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: /New folder/ }),
+  );
+  await fireEvent.input(await screen.findByLabelText("Name"), {
+    target: { value: "a:b" },
+  });
+  const go = screen.getByRole("button", {
+    name: "Continue",
+  }) as HTMLButtonElement;
+  expect(go.disabled).toBe(true);
+  expect(screen.getByText(/can't contain/)).toBeTruthy();
+});
+
+it("blocks an upload with a reserved character", async () => {
+  const api = platform({ "/sdcard": folderWithFile() });
+  tool(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: /Upload file/ }),
+  );
+  await fireEvent.input(await screen.findByLabelText("Name on the TV"), {
+    target: { value: "Film: One.mkv" },
+  });
+  expect(
+    (screen.getByRole("button", { name: "Upload" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(screen.getByText(/can't contain/)).toBeTruthy();
+});
+
+it("uses the TV's path after opening a typed one", async () => {
+  const api = platform({
+    "/sdcard": folderWithFile(),
+    "/sdcard//Download": listing("/sdcard/Download", []),
+    "/sdcard/Download": listing("/sdcard/Download", []),
+  });
+  tool(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Go to a path" }),
+  );
+  await fireEvent.input(screen.getByLabelText("Device path"), {
+    target: { value: "/sdcard//Download" },
+  });
+  await fireEvent.click(screen.getByRole("button", { name: "Open" }));
+  await screen.findByText("This folder is empty");
+  await fireEvent.click(screen.getByRole("button", { name: /New folder/ }));
+  await fireEvent.input(await screen.findByLabelText("Name"), {
+    target: { value: "New" },
+  });
+  await fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await vi.waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "fileCreateFolder",
+      path: "/sdcard/Download/New",
+    }),
+  );
 });
 
 it("matches Android's 1.0 to the 1 option and labels unset values", () => {

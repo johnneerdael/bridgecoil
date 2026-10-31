@@ -50,7 +50,7 @@
             text: i.reason,
             losses: [],
             excluded: true,
-            rating: null,
+            rating: i.rating ?? null,
           })),
         ]
       : [],

@@ -216,6 +216,7 @@ async fn bulk_moves_blocked_packages_to_excluded_with_the_reason() {
     assert_eq!(review.excluded.len(), 1);
     assert_eq!(review.excluded[0].package, "com.risky");
     assert!(review.excluded[0].reason.contains("Unsafe"));
+    assert_eq!(review.excluded[0].rating, Some(Level::Unsafe));
 }
 
 #[tokio::test]

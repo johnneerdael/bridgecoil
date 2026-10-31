@@ -317,3 +317,22 @@ it("shows the rating in bulk reviews", () => {
   });
   expect(document.body.textContent).toContain(levelInfo.expert.explanation);
 });
+
+it("shows the rating on apps excluded from a bulk review", () => {
+  render(BulkReview, {
+    review: {
+      id: "b",
+      target: review(null).target,
+      items: [],
+      excluded: [
+        { package: "org.demo.core", reason: "Blocked.", rating: "unsafe" },
+      ],
+      expiresMs: Date.now() + 10000,
+    },
+    api: {} as Platform,
+    deviceName: "Smart TV Pro",
+    onclose: vi.fn(),
+    onresult: vi.fn(),
+  });
+  expect(document.body.textContent).toContain(levelInfo.unsafe.explanation);
+});

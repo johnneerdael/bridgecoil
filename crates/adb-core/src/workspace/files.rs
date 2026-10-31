@@ -1,13 +1,18 @@
 use super::commands::remote_path;
 use crate::{backend::PocError, shell_quote};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicBool, Ordering},
+    time::{Duration, Instant},
+};
 
 /// Largest folder returned in one listing; the rest is reported as truncated.
 pub const MAX_ENTRIES: usize = 5000;
 const FLAGS: usize = 6;
 const META: &str = ":meta";
 const MAX_NAME_BYTES: usize = 255;
+const CANCEL_POLL: Duration = Duration::from_millis(100);
 /// Removing or replacing these would take shared storage or app data with them.
 const PROTECTED: [&str; 9] = [
     "/",
@@ -257,6 +262,51 @@ pub fn picked_name(uri: &str) -> String {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Interrupted {
+    Cancelled,
+    Stalled,
+}
+
+/// Waits for `work`, noticing a cancel request even while the TV has stopped responding.
+pub async fn interruptible<T>(
+    work: impl Future<Output = T>,
+    cancel: &AtomicBool,
+    stall: Duration,
+) -> Result<T, Interrupted> {
+    let deadline = Instant::now() + stall;
+    tokio::pin!(work);
+    loop {
+        if cancel.load(Ordering::SeqCst) {
+            return Err(Interrupted::Cancelled);
+        }
+        if Instant::now() >= deadline {
+            return Err(Interrupted::Stalled);
+        }
+        if let Ok(output) = tokio::time::timeout(CANCEL_POLL, &mut work).await {
+            return Ok(output);
+        }
+    }
+}
+
+pub fn after_disconnect(error: PocError) -> PocError {
+    PocError::new(
+        &error.kind,
+        format!(
+            "{} The TV was disconnected, so reconnect to continue.",
+            error.message
+        ),
+    )
+}
+
+/// Android's sync service reports a refused name or location with this text.
+pub fn upload_failure(error: PocError) -> PocError {
+    if error.message.contains("couldn't create file") {
+        return PocError::new("permission", "The TV refused this file name or location.");
+    }
+    error
+}
+
 fn protect(state: &PathState) -> Result<(), PocError> {
     if PROTECTED.contains(&state.path.as_str()) || PROTECTED.contains(&state.canonical.as_str()) {
         return Err(PocError::new(
@@ -322,16 +372,19 @@ pub fn state_of<'a>(states: &'a [PathState], path: &str) -> Result<&'a PathState
 fn is_folder(state: &PathState) -> bool {
     state.kind == "directory"
 }
+fn item_count(items: u64) -> String {
+    match items {
+        1 => "1 item".to_owned(),
+        n => format!("{n} items"),
+    }
+}
 pub fn delete_loss(state: &PathState) -> String {
     if state.kind == "symbolic link" {
         "Only the link is removed. The item it points to stays.".into()
     } else if is_folder(state) {
         format!(
             "This folder and {} inside it will be permanently deleted. The TV has no trash.",
-            match state.items {
-                1 => "1 item".to_owned(),
-                n => format!("{n} items"),
-            }
+            item_count(state.items)
         )
     } else {
         "This file will be permanently deleted. The TV has no trash.".into()
@@ -339,7 +392,7 @@ pub fn delete_loss(state: &PathState) -> String {
 }
 pub fn state_summary(states: &[PathState]) -> String {
     match states.iter().find(|s| s.exists) {
-        Some(s) if is_folder(s) => format!("Folder with {} items.", s.items),
+        Some(s) if is_folder(s) => format!("Folder with {}.", item_count(s.items)),
         Some(s) if s.kind == "symbolic link" => "Link.".into(),
         Some(s) => format!("File of {} bytes.", s.size),
         None => "Nothing exists at this path yet.".into(),

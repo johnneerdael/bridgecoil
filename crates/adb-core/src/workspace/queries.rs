@@ -219,7 +219,11 @@ pub async fn query_rated(
             let user_installed: HashSet<String> = match ratings {
                 None => HashSet::new(),
                 Some(_) if filter == "user" => packages.iter().cloned().collect(),
-                Some(_) => match checked(d, t, &format!("pm list packages --user {user} -3")).await
+                Some(_) => match checked(d, t, &format!(
+                    "pm list packages --user {user} -3{}",
+                    if filter == "removed" { " -u" } else { "" }
+                ))
+                .await
                 {
                     Ok(raw) => parse_packages(&raw).into_iter().collect(),
                     Err(e) => {

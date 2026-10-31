@@ -3,13 +3,20 @@ use adb_core::{
     workspace::{
         driver::{ShellDriver, ShellOutput},
         engine::{Action, Workspace},
-        files::{child_path, parse_states, picked_name, valid_name},
+        files::{
+            Interrupted, after_disconnect, child_path, interruptible, parse_states, picked_name,
+            upload_failure, valid_name,
+        },
         history::History,
         types::*,
     },
 };
 use async_trait::async_trait;
-use std::collections::VecDeque;
+use std::{
+    collections::VecDeque,
+    sync::atomic::{AtomicBool, Ordering},
+    time::{Duration, Instant},
+};
 struct Fake {
     target: Target,
     answers: VecDeque<String>,
@@ -288,4 +295,80 @@ fn picked_names_come_from_the_end_of_the_address() {
     );
     assert_eq!(picked_name("content://media/document/msf%3A1234"), "1234");
     assert_eq!(picked_name("content://x/"), "upload");
+}
+
+#[tokio::test]
+async fn a_folder_with_one_item_reads_correctly() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = "/sdcard/Old";
+    let mut d = fake(vec![folder(path, 1)]);
+    let review = workspace(dir.path())
+        .prepare(&mut d, &target(), delete(path))
+        .await
+        .unwrap();
+    assert_eq!(review.current_state, "Folder with 1 item.");
+}
+
+#[test]
+fn a_refused_upload_is_not_called_a_connection_problem() {
+    let device = PocError::new(
+        "connection",
+        "sync: device error: couldn't create file: Operation not permitted",
+    );
+    let refused = upload_failure(device);
+    assert_eq!(refused.kind, "permission");
+    assert!(refused.message.contains("name or location"));
+    assert!(!refused.message.contains("sync:"));
+}
+
+#[test]
+fn a_real_connection_failure_keeps_its_details() {
+    let failure = upload_failure(PocError::new("connection", "connection reset by peer"));
+    assert_eq!(failure.kind, "connection");
+    assert!(failure.message.contains("reset"));
+}
+
+#[tokio::test]
+async fn cancelling_interrupts_a_stalled_send_quickly() {
+    let cancel = AtomicBool::new(false);
+    let start = Instant::now();
+    let flip = async {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        cancel.store(true, Ordering::SeqCst);
+    };
+    let wait = interruptible(
+        std::future::pending::<()>(),
+        &cancel,
+        Duration::from_secs(60),
+    );
+    let (result, ()) = tokio::join!(wait, flip);
+    assert_eq!(result, Err(Interrupted::Cancelled));
+    assert!(start.elapsed() < Duration::from_secs(2));
+}
+
+#[tokio::test]
+async fn a_stalled_send_still_times_out() {
+    let cancel = AtomicBool::new(false);
+    let result = interruptible(
+        std::future::pending::<()>(),
+        &cancel,
+        Duration::from_millis(50),
+    )
+    .await;
+    assert_eq!(result, Err(Interrupted::Stalled));
+}
+
+#[tokio::test]
+async fn a_finished_send_returns_its_result() {
+    let cancel = AtomicBool::new(false);
+    let result = interruptible(async { 7 }, &cancel, Duration::from_secs(1)).await;
+    assert_eq!(result, Ok(7));
+}
+
+#[test]
+fn a_lost_connection_says_so() {
+    let failure = after_disconnect(PocError::new("timeout", "The upload stalled."));
+    assert_eq!(failure.kind, "timeout");
+    assert!(failure.message.starts_with("The upload stalled."));
+    assert!(failure.message.contains("disconnected"));
 }

@@ -25,6 +25,18 @@ export const validName = (name: string) =>
   name !== ".." &&
   !name.includes("/");
 
+const reservedCharacters = /["*:<>?\\|]/;
+
+/** Shared storage applies FAT naming rules, so these fail on the TV. Other folders allow them. */
+export function nameProblem(folder: string, name: string) {
+  const shared = storagePrefixes.some(
+    (p) => folder === p || folder.startsWith(`${p}/`),
+  );
+  return shared && reservedCharacters.test(name)
+    ? 'Names in TV storage can\'t contain " * : < > ? \\ or |'
+    : null;
+}
+
 export function breadcrumbs(path: string) {
   const prefix = storagePrefixes.find(
     (p) => path === p || path.startsWith(`${p}/`),

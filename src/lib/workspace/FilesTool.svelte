@@ -20,6 +20,7 @@
     formatSize,
     internalStorage,
     joinPath,
+    nameProblem,
     parentPath,
     storageRoots,
     validName,
@@ -85,7 +86,11 @@
           kind: "files",
           path: currentPath,
         });
-        if (!cancelled) listing = r;
+        if (!cancelled) {
+          listing = r;
+          // Later actions must use the TV's path, not what was typed.
+          if (r.path !== currentPath) path = r.path;
+        }
       } catch (e) {
         if (!cancelled) error = errorMessage(e);
       } finally {
@@ -123,7 +128,12 @@
     }
   }
   function submitName() {
-    if (!naming || !validName(naming.value)) return;
+    if (
+      !naming ||
+      !validName(naming.value) ||
+      nameProblem(path, naming.value)
+    )
+      return;
     const { entry, value } = naming;
     void plan(
       entry
@@ -353,10 +363,14 @@
       {#if nameTaken(naming.value, naming.entry)}<p class="error-text">
           An item with this name already exists here.
         </p>{/if}
+      {#if nameProblem(path, naming.value)}<p class="error-text">
+          {nameProblem(path, naming.value)}
+        </p>{/if}
       <button
         class="primary"
         type="submit"
         disabled={!validName(naming.value) ||
+          !!nameProblem(path, naming.value) ||
           naming.value === naming.entry?.name ||
           nameTaken(naming.value, naming.entry)}>Continue</button
       >
@@ -388,9 +402,14 @@
       {#if nameTaken(upload.name)}<p class="error-text">
           An item with this name already exists here.
         </p>{/if}
+      {#if nameProblem(path, upload.name)}<p class="error-text">
+          {nameProblem(path, upload.name)}
+        </p>{/if}
       {#if sent === null}<button
           class="primary"
-          disabled={!validName(upload.name) || nameTaken(upload.name)}
+          disabled={!validName(upload.name) ||
+            !!nameProblem(path, upload.name) ||
+            nameTaken(upload.name)}
           onclick={startUpload}>Upload</button
         >
       {:else}<progress

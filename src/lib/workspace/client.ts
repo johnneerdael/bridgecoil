@@ -59,7 +59,7 @@ export type BulkReview = {
   id: string;
   target: Target;
   items: { package: string; review: Review }[];
-  excluded: { package: string; reason: string }[];
+  excluded: { package: string; reason: string; rating?: Level | null }[];
   expiresMs: number;
 };
 export function sameTarget(a: Target, b: Target) {

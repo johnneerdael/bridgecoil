@@ -1,6 +1,7 @@
 use crate::{
     apk::{self, ApkInfo},
     identity, install_succeeded, shell_quote, validate_endpoint, validate_pairing_code,
+    workspace::files,
 };
 use libadb::{
     Connection, Feature, TokioTcp,
@@ -498,7 +499,7 @@ impl Client {
                 ));
             }
             Ok(_) => {}
-            Err(e) => return Err(e),
+            Err(e) => return Err(files::after_disconnect(e)),
         }
         let transfer: Result<bool> = async {
             let mut buffer = vec![0u8; 66000];
@@ -520,10 +521,16 @@ impl Client {
                 if n == 0 {
                     break;
                 }
-                timeout(UPLOAD_STALL, sync.send_data(&chunk[..n]))
-                    .await
-                    .map_err(|_| PocError::new("timeout", "The upload stalled."))?
-                    .map_err(connection_error)?;
+                match files::interruptible(sync.send_data(&chunk[..n]), cancel, UPLOAD_STALL).await
+                {
+                    Ok(sent) => sent.map_err(connection_error)?,
+                    Err(files::Interrupted::Cancelled) => {
+                        return Err(PocError::new("cancelled", "Upload cancelled."));
+                    }
+                    Err(files::Interrupted::Stalled) => {
+                        return Err(PocError::new("timeout", "The upload stalled."));
+                    }
+                }
                 sent += n as u64;
                 progress(sent);
             }
@@ -557,17 +564,19 @@ impl Client {
             command(&mut active.wire, &format!("rm -f {staged}")),
         )
         .await;
-        if matches!(cleaned, Ok(Ok(_))) {
-            self.active = Some(active);
-        }
-        match transfer {
-            Err(e) => Err(e),
-            Ok(false) => Err(PocError::new("cancelled", "Upload cancelled.")),
-            Ok(true) => Err(PocError::new(
+        let failure = match transfer {
+            Err(e) => files::upload_failure(e),
+            Ok(false) => PocError::new("cancelled", "Upload cancelled."),
+            Ok(true) => PocError::new(
                 "unknownUpload",
                 "The upload finished, but the file could not be verified on the TV.",
-            )),
+            ),
+        };
+        if matches!(cleaned, Ok(Ok(_))) {
+            self.active = Some(active);
+            return Err(failure);
         }
+        Err(files::after_disconnect(failure))
     }
 }
 const UPLOAD_STALL: Duration = Duration::from_secs(60);

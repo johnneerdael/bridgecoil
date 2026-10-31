@@ -19,6 +19,7 @@ struct Fake {
     all: Vec<&'static str>,
     user: Vec<&'static str>,
     labels: Vec<(&'static str, &'static str)>,
+    removed: Vec<&'static str>,
     fail_user: bool,
     commands: Vec<String>,
 }
@@ -52,9 +53,19 @@ impl ShellDriver for Fake {
     }
     async fn shell(&mut self, _: &Target, c: &str) -> Result<ShellOutput, PocError> {
         self.commands.push(c.into());
-        let fail = self.fail_user && c.ends_with("-3");
-        let stdout = if c.ends_with("-3") {
+        let user_lookup = c.contains(" -3");
+        let fail = self.fail_user && user_lookup;
+        let with_removed = |names: &[&str]| {
+            let mut all = names.to_vec();
+            all.extend(&self.removed);
+            packages(&all)
+        };
+        let stdout = if user_lookup && c.ends_with("-u") {
+            with_removed(&self.user)
+        } else if user_lookup {
             packages(&self.user)
+        } else if c.ends_with("-u") {
+            with_removed(&self.all)
         } else if c.starts_with("pm list packages") {
             packages(&self.all)
         } else if c.starts_with("dumpsys package") {
@@ -107,6 +118,7 @@ fn fake() -> Fake {
         ],
         user: vec!["com.mine", "com.mine.rated"],
         labels: vec![("com.good", "Zebra"), ("com.good.two", "apple")],
+        removed: vec![],
         fail_user: false,
         commands: vec![],
     }
@@ -352,4 +364,22 @@ async fn an_unlisted_package_has_no_rating() {
     .await
     .unwrap();
     assert_eq!(detail["rating"], Value::Null);
+}
+
+#[tokio::test]
+async fn removed_user_apps_stay_in_the_installed_group() {
+    let list = ratings();
+    let mut d = fake();
+    d.user = vec![];
+    d.removed = vec!["com.gone"];
+    let page = query_rated(
+        &mut d,
+        &target(),
+        packages_query("removed", "", 0, 32),
+        Some(&list),
+    )
+    .await
+    .unwrap();
+    assert_eq!(ids(&page), ["com.gone"]);
+    assert_eq!(page["items"][0]["group"], "installed");
 }

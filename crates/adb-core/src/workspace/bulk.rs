@@ -5,6 +5,7 @@ use super::{
     types::*,
 };
 use crate::backend::PocError;
+use crate::ratings::Level;
 use serde::Serialize;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -24,6 +25,7 @@ pub struct Item {
 pub struct Exclusion {
     pub package: String,
     pub reason: String,
+    pub rating: Option<Level>,
 }
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -115,6 +117,7 @@ impl Bulk {
                         return Err(e);
                     }
                     excluded.push(Exclusion {
+                        rating: w.package_rating(&package),
                         package,
                         reason: e.message,
                     });
