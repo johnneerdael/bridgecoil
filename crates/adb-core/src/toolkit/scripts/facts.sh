@@ -23,8 +23,14 @@ case "$(getprop service.adb.tcp.port)$(getprop persist.adb.tcp.port)" in
   ""|0|-1|00) ;;
   *) echo networkAdb=1 ;;
 esac
+# Any Shizuku-type app answers this, whoever built it.
+helper=$(cmd package query-activities --brief -a rikka.shizuku.intent.action.REQUEST_BINDER 2>/dev/null |
+  sed -n 's/^ *\([A-Za-z0-9_.]*\)\/.*/\1/p' | head -n 1)
+[ -n "$helper" ] && echo "helper=$helper"
+[ -f /data/local/tmp/bridgecoil-use-helper ] && echo useHelper=1
 # A manager only enables this receiver while its start on boot is on.
-for manager in moe.shizuku.privileged.api:shizukuBoot eu.darken.porter:porterBoot; do
+for manager in moe.shizuku.privileged.api:shizukuBoot eu.darken.porter:porterBoot "$helper:helperBoot"; do
+  [ -n "${manager%:*}" ] || continue
   case "$(dumpsys package "${manager%:*}" 2>/dev/null | sed -n '/enabledComponents:/,/disabledComponents:/p')" in
     *BootCompleteReceiver*) echo "${manager#*:}=1" ;;
   esac

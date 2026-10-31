@@ -100,7 +100,7 @@ export type Action =
   | { kind: "fileCreateFolder"; path: string }
   | { kind: "setup"; step: SetupStep }
   | { kind: "mappings"; change: MappingChange };
-export type Manager = "shizukuNext" | "porter";
+export type Manager = "shizukuNext" | "porter" | "existing";
 export type ToolId =
   "shizukuNext" | "porter" | "porterCompat" | "termux" | "termuxBoot";
 /** What a mapped button's press opened, kept above the pages because they rebuild after a change. */
@@ -116,6 +116,8 @@ export type SetupStep =
   | { kind: "requestAccess" }
   | { kind: "allowBootStart"; manager: Manager }
   | { kind: "installMonitor" }
+  | { kind: "useHelper" }
+  | { kind: "stopUsingHelper" }
   | { kind: "removeMonitor" };
 export type KeyIdentity = { source: string; key: string; scan: string | null };
 export type Mapping = {
@@ -151,6 +153,7 @@ export type ToolkitSnapshot = {
   termux: ToolStatus;
   termuxBoot: ToolStatus;
   manager: Manager | null;
+  helper: { package: string; label: string } | null;
   serverRunning: boolean;
   canConfigureTerminal: boolean;
   terminalReady: boolean;

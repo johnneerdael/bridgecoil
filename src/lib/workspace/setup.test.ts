@@ -37,6 +37,7 @@ const snapshot = (over: Partial<ToolkitSnapshot>): ToolkitSnapshot => ({
   wired: false,
   noWirelessDebugging: false,
   networkAdb: false,
+  helper: null,
   bootStart: false,
   watchdog: false,
   stage: "manager",
@@ -376,6 +377,51 @@ it("reads the TV again after the viewer turns start on boot on", async () => {
   );
   await fireEvent.click(screen.getByRole("button", { name: "Check start on boot" }));
   expect(await screen.findByText("Your TV is ready")).toBeTruthy();
+});
+
+it("offers a helper already on the TV, and says it isn't verified", async () => {
+  const api = platform(
+    snapshot({
+      shizuku: "other",
+      helper: { package: "org.fork.helper", label: "Fork" },
+    }),
+  );
+  const onreview = vi.fn();
+  render(SetupTool, { device, api, reload: 0, onreview, onbuttons: vi.fn() });
+  expect(await screen.findByText("Fork is already on this TV")).toBeTruthy();
+  expect(screen.getByText(/hasn't verified this build/)).toBeTruthy();
+  await fireEvent.click(screen.getByRole("button", { name: "Use Fork" }));
+  await waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "setup",
+      step: { kind: "useHelper" },
+    }),
+  );
+});
+
+it("names an existing helper through setup and lets the viewer stop using it", async () => {
+  const api = platform(
+    snapshot({
+      manager: "existing",
+      helper: { package: "org.fork.helper", label: "Fork" },
+      terminalReady: true,
+      shellReady: true,
+      authorized: true,
+      serverRunning: true,
+      stage: "startup",
+    }),
+  );
+  open(api);
+  expect(
+    await screen.findByRole("button", { name: /Open Fork on the TV/ }),
+  ).toBeTruthy();
+  await fireEvent.click(screen.getByRole("button", { name: "Stop using Fork" }));
+  await waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "setup",
+      step: { kind: "stopUsingHelper" },
+    }),
+  );
 });
 
 it("stops and explains when a TV blocks setting up Termux", async () => {

@@ -60,6 +60,7 @@ function platform(
         wired: false,
         noWirelessDebugging: false,
         networkAdb: false,
+        helper: null,
         bootStart: false,
         watchdog: false,
       };

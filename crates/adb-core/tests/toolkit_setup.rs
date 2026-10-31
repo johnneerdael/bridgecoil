@@ -267,6 +267,106 @@ async fn an_unreadable_certificate_is_neither_trusted_nor_blamed_on_another_app(
 }
 
 #[tokio::test]
+async fn a_helper_already_on_the_tv_is_offered_and_only_used_when_chosen() {
+    const FORK: &str = "org.fork.helper";
+    let tools = || {
+        vec![
+            (SHIZUKU, "a".repeat(64).leak() as &'static str),
+            ("com.termux", TERMUX),
+            ("com.termux.boot", TERMUX),
+        ]
+    };
+    let offered = inspect(
+        &mut device(tools(), &format!("helper={FORK}\nshizukuServer=9\n")),
+        &target(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(offered.manager, None);
+    assert_eq!(offered.stage, Stage::Manager);
+    assert_eq!(offered.helper.as_ref().unwrap().package, FORK);
+
+    let chosen = inspect(
+        &mut device(
+            tools(),
+            &format!("helper={FORK}\nuseHelper=1\nshizukuServer=9\n"),
+        ),
+        &target(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(chosen.manager, Some(Manager::Existing));
+    assert!(chosen.server_running);
+    assert_eq!(chosen.stage, Stage::Terminal);
+
+    let ready = "shizukuServer=9\nrunAs=1\nterminal=1\nshell=1\nauthorized=1\nmonitor=1\n";
+    let waiting = inspect(
+        &mut device(
+            tools(),
+            &format!("helper={FORK}\nuseHelper=1\n{ready}"),
+        ),
+        &target(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(waiting.stage, Stage::Startup, "start on boot isn't proven");
+    let done = inspect(
+        &mut device(
+            tools(),
+            &format!("helper={FORK}\nuseHelper=1\nhelperBoot=1\n{ready}"),
+        ),
+        &target(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(done.stage, Stage::Done, "there's no watchdog to ask this one for");
+}
+
+#[tokio::test]
+async fn a_helper_bridgecoil_can_vouch_for_is_never_offered_as_unverified() {
+    let snap = inspect(
+        &mut device(vec![(SHIZUKU, NEXT)], &format!("helper={SHIZUKU}\nuseHelper=1\n")),
+        &target(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(snap.manager, Some(Manager::ShizukuNext));
+    assert_eq!(snap.helper, None);
+}
+
+#[tokio::test]
+async fn a_bad_package_name_from_the_tv_is_ignored() {
+    let snap = inspect(
+        &mut device(vec![], "helper=not a package; rm -rf /\nuseHelper=1\n"),
+        &target(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(snap.manager, None);
+    assert_eq!(snap.helper, None);
+}
+
+#[test]
+fn commands_for_an_existing_helper_find_it_on_the_tv() {
+    let deploy = deploy_command(Manager::Existing);
+    assert!(deploy.contains("rikka.shizuku.intent.action.REQUEST_BINDER"));
+    assert!(deploy.contains("set -- \"$helper\" 'assets/rish' 'assets/rish_shizuku.dex'"));
+    assert!(start_command(Manager::Existing).contains("set -- \"$helper\" 'libshizuku.so' 'shizuku'"));
+    let open = plan(SetupStep::AllowBootStart {
+        manager: Manager::Existing,
+    })
+    .command;
+    assert!(open.contains("pm grant \"$1\""));
+    assert!(open.contains("set -- \"$helper\""));
+}
+
+#[test]
+fn choosing_an_existing_helper_warns_that_it_is_not_verified() {
+    let step = plan(SetupStep::UseHelper);
+    assert!(step.losses.iter().any(|l| l.contains("hasn't verified")));
+}
+
+#[tokio::test]
 async fn stages_follow_what_is_actually_proven() {
     let tools = || {
         vec![

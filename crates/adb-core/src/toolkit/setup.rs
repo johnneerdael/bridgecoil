@@ -4,6 +4,12 @@ use serde::{Deserialize, Serialize};
 
 const TERMUX_SHELL: &str = "/data/data/com.termux/files/home/.bridgecoil/shell";
 const BOOT_SCRIPT: &str = "/data/data/com.termux/files/home/.termux/boot/00-bridgecoil";
+const USE_HELPER: &str = "/data/local/tmp/bridgecoil-use-helper";
+/// Finds an existing helper on the TV, so nothing has to name it in advance.
+const FIND_HELPER: &str = "helper=$(cmd package query-activities --brief \
+-a rikka.shizuku.intent.action.REQUEST_BINDER 2>/dev/null | \
+sed -n 's/^ *\\([A-Za-z0-9_.]*\\)\\/.*/\\1/p' | head -n 1)\n\
+[ -n \"$helper\" ] || { echo \"The helper app wasn't found.\" >&2; exit 1; }\n";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
@@ -20,33 +26,47 @@ pub enum SetupStep {
     AllowBootStart { manager: Manager },
     InstallMonitor,
     RemoveMonitor,
+    UseHelper,
+    StopUsingHelper,
 }
 
 fn with_args(args: &[&str], script: &str) -> String {
     let quoted: Vec<_> = args.iter().map(|a| shell_quote(a)).collect();
     format!("set -- {}\n{script}", quoted.join(" "))
 }
+/// Sets "$1" to the manager's package and the rest to `args`, then runs `script`.
+fn for_manager(manager: Manager, args: &[&str], script: &str) -> String {
+    match manager.package() {
+        Some(package) => with_args(&[&[package], args].concat(), script),
+        None => {
+            let quoted: Vec<_> = args.iter().map(|a| shell_quote(a)).collect();
+            format!("{FIND_HELPER}set -- \"$helper\" {}\n{script}", quoted.join(" "))
+        }
+    }
+}
 pub fn start_command(manager: Manager) -> String {
     let (library, process) = match manager {
-        Manager::ShizukuNext => ("libshizuku.so", "shizuku"),
+        Manager::ShizukuNext | Manager::Existing => ("libshizuku.so", "shizuku"),
         Manager::Porter => ("libporter.so", "porter"),
     };
-    with_args(
-        &[manager.package(), library, process],
+    for_manager(
+        manager,
+        &[library, process],
         include_str!("scripts/start_server.sh"),
     )
 }
 pub fn deploy_command(manager: Manager) -> String {
     let (script, dex, id) = match manager {
-        Manager::ShizukuNext => (
+        Manager::ShizukuNext | Manager::Existing => (
             "assets/rish",
             "assets/rish_shizuku.dex",
             "RISH_APPLICATION_ID",
         ),
         Manager::Porter => ("assets/porsh", "assets/porsh.dex", "PORSH_APPLICATION_ID"),
     };
-    with_args(
-        &[manager.package(), script, dex, id],
+    for_manager(
+        manager,
+        &[script, dex, id],
         include_str!("scripts/deploy_shell.sh"),
     )
 }
@@ -98,15 +118,17 @@ pub fn plan(step: SetupStep) -> SetupPlan {
             TERMINAL_OPEN.to_owned(),
         ),
         SetupStep::AllowBackground { manager } => {
-            let package = manager.package();
             let (watchdog, command) = match manager {
-                Manager::ShizukuNext => (
-                    " It also turns on Shizuku-Next's watchdog, which restarts its service if it stops.",
-                    format!(
-                        "am broadcast -n {package}/moe.shizuku.manager.receiver.WatchdogToggleReceiver -a {package}.WATCHDOG_ON >/dev/null 2>&1\n"
-                    ),
-                ),
-                Manager::Porter => ("", String::new()),
+                Manager::ShizukuNext => {
+                    let package = manager.package().unwrap_or_default();
+                    (
+                        " It also turns on Shizuku-Next's watchdog, which restarts its service if it stops.",
+                        format!(
+                            "am broadcast -n {package}/moe.shizuku.manager.receiver.WatchdogToggleReceiver -a {package}.WATCHDOG_ON >/dev/null 2>&1\n"
+                        ),
+                    )
+                }
+                Manager::Porter | Manager::Existing => ("", String::new()),
             };
             make(
                 format!("Let Termux and {} keep running", manager.name()),
@@ -115,7 +137,7 @@ pub fn plan(step: SetupStep) -> SetupPlan {
                     manager.name()
                 ),
                 &["Background apps use a little memory, and some TVs ignore these settings."],
-                format!("{command}{}", with_args(&[package], BACKGROUND)),
+                format!("{command}{}", for_manager(manager, &[], BACKGROUND)),
             )
         }
         SetupStep::DeployShell { manager } => make(
@@ -139,14 +161,26 @@ pub fn plan(step: SetupStep) -> SetupPlan {
             format!("Let {} start with the TV", manager.name()),
             "Give the manager the permission it needs to start with the TV, then open it on the TV so you can turn on Start on boot.",
             &["This permission lets the manager change secure system settings."],
-            format!(
-                "pm grant {} android.permission.WRITE_SECURE_SETTINGS || exit 1\n{}",
-                shell_quote(manager.package()),
-                with_args(
-                    &[manager.package()],
+            for_manager(
+                manager,
+                &[],
+                concat!(
+                    "pm grant \"$1\" android.permission.WRITE_SECURE_SETTINGS || exit 1\n",
                     include_str!("scripts/open_manager.sh")
-                )
+                ),
             ),
+        ),
+        SetupStep::UseHelper => make(
+            "Use the helper already on this TV".into(),
+            "Bridgecoil will use the Shizuku-type app already on this TV instead of installing one. Termux gets that app's shell tool.",
+            &["Bridgecoil hasn't verified this build. Your button mappings will run through it, so only continue if you trust where it came from."],
+            format!("touch {USE_HELPER}"),
+        ),
+        SetupStep::StopUsingHelper => make(
+            "Stop using this helper".into(),
+            "Bridgecoil stops using the helper that was already on this TV. The app itself stays installed.",
+            &["Mappings won't come back after a restart until setup is finished with another helper."],
+            format!("rm -f {USE_HELPER}"),
         ),
         SetupStep::InstallMonitor => make(
             "Keep mappings running".into(),
@@ -180,7 +214,7 @@ pub fn has_readback(step: SetupStep) -> bool {
 pub fn verified(step: SetupStep, facts: &Facts) -> bool {
     match step {
         SetupStep::StartServer {
-            manager: Manager::ShizukuNext,
+            manager: Manager::ShizukuNext | Manager::Existing,
         } => facts.flag("shizukuServer"),
         SetupStep::StartServer {
             manager: Manager::Porter,
@@ -189,6 +223,8 @@ pub fn verified(step: SetupStep, facts: &Facts) -> bool {
         SetupStep::DeployShell { .. } => facts.flag("shell"),
         SetupStep::InstallMonitor => facts.flag("monitor"),
         SetupStep::RemoveMonitor => !facts.flag("monitor"),
+        SetupStep::UseHelper => facts.flag("useHelper"),
+        SetupStep::StopUsingHelper => !facts.flag("useHelper"),
         _ => false,
     }
 }

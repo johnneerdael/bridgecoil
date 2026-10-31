@@ -2,6 +2,7 @@ use super::catalog::{SHIZUKU_PACKAGE, ToolId, spec};
 use crate::{
     backend::PocError,
     workspace::{
+        commands::package_arg,
         driver::ShellDriver,
         queries::parse_packages,
         types::{Target, validate_target},
@@ -15,23 +16,28 @@ use std::collections::HashMap;
 pub enum Manager {
     ShizukuNext,
     Porter,
+    /// A Shizuku-type app that was already on the TV, which the owner chose to use. Bridgecoil
+    /// finds its package on the TV each time, because no certificate vouches for it.
+    Existing,
 }
 impl Manager {
-    pub fn tool(self) -> ToolId {
+    /// What Bridgecoil installs for this manager. It never installs an existing one.
+    pub fn tool(self) -> Option<ToolId> {
         match self {
-            Self::ShizukuNext => ToolId::ShizukuNext,
-            Self::Porter => ToolId::Porter,
+            Self::ShizukuNext => Some(ToolId::ShizukuNext),
+            Self::Porter => Some(ToolId::Porter),
+            Self::Existing => None,
         }
     }
     pub fn name(self) -> &'static str {
-        spec(self.tool()).name
+        self.tool().map_or("your helper app", |tool| spec(tool).name)
     }
-    pub fn package(self) -> &'static str {
-        spec(self.tool()).package
+    pub fn package(self) -> Option<&'static str> {
+        self.tool().map(|tool| spec(tool).package)
     }
     fn server_fact(self) -> &'static str {
         match self {
-            Self::ShizukuNext => "shizukuServer",
+            Self::ShizukuNext | Self::Existing => "shizukuServer",
             Self::Porter => "porterServer",
         }
     }
@@ -39,8 +45,17 @@ impl Manager {
         match self {
             Self::ShizukuNext => "shizukuBoot",
             Self::Porter => "porterBoot",
+            Self::Existing => "helperBoot",
         }
     }
+}
+
+/// A Shizuku-type app found on the TV that Bridgecoil didn't install and can't vouch for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HelperApp {
+    pub package: String,
+    pub label: String,
 }
 
 /// What occupies the Shizuku package name, which several unrelated apps can claim.
@@ -81,6 +96,7 @@ pub struct ToolkitSnapshot {
     pub termux: ToolStatus,
     pub termux_boot: ToolStatus,
     pub manager: Option<Manager>,
+    pub helper: Option<HelperApp>,
     pub server_running: bool,
     pub can_configure_terminal: bool,
     pub terminal_ready: bool,
@@ -101,6 +117,9 @@ pub struct Facts(HashMap<String, String>);
 impl Facts {
     pub fn flag(&self, key: &str) -> bool {
         self.0.get(key).is_some_and(|v| !v.is_empty())
+    }
+    pub fn value(&self, key: &str) -> Option<&str> {
+        self.0.get(key).map(String::as_str).filter(|v| !v.is_empty())
     }
     /// Whether each fact holds, without values such as process IDs that change between probes.
     pub fn summary(&self) -> String {
@@ -178,11 +197,35 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
     };
     let output = d.shell(t, facts_command()).await?;
     let facts = parse_facts(&output.stdout);
-    let manager = match (shizuku, porter.official) {
+    let found = facts.value("helper").filter(|p| package_arg(p).is_ok());
+    let installed_manager = match (shizuku, porter.official) {
         (ShizukuSlot::ShizukuNext, true) if facts.flag("porterServer") => Some(Manager::Porter),
         (ShizukuSlot::ShizukuNext, _) => Some(Manager::ShizukuNext),
         (_, true) => Some(Manager::Porter),
         _ => None,
+    };
+    // A helper Bridgecoil can vouch for is simply that helper, so this is only for the others.
+    let unverified = found.filter(|_| {
+        !matches!(shizuku, ShizukuSlot::ShizukuNext | ShizukuSlot::PorterCompat)
+            && installed_manager.is_none()
+    });
+    let manager = match unverified {
+        Some(_) if facts.flag("useHelper") => Some(Manager::Existing),
+        _ => installed_manager,
+    };
+    let helper = match unverified {
+        Some(package) => {
+            let wanted = [package.to_owned()];
+            let label = match d.metadata(t, &wanted).await {
+                Ok(Some(rows)) => rows.into_iter().find_map(|m| m.label),
+                _ => None,
+            };
+            Some(HelperApp {
+                package: package.to_owned(),
+                label: label.unwrap_or_else(|| package.to_owned()),
+            })
+        }
+        None => None,
     };
     let server_running = manager.is_some_and(|m| facts.flag(m.server_fact()));
     let terminal_ready =
@@ -216,6 +259,7 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
         termux,
         termux_boot,
         manager,
+        helper,
         server_running,
         can_configure_terminal: facts.flag("runAs"),
         terminal_ready,

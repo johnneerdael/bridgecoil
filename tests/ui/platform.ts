@@ -275,6 +275,7 @@ async function query<T>(t: Target, q: Query): Promise<T> {
         wired: false,
         noWirelessDebugging: false,
         networkAdb: false,
+        helper: null,
         bootStart: false,
         watchdog: false,
         stage: "manager",

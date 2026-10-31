@@ -112,7 +112,7 @@ async fn walks_every_stage() {
     let t = c.current_target().unwrap();
     let w = Workspace::new(History::open(&dir.path().join("ops.db")).unwrap());
     assert_eq!(stage(&mut c, &t).await, Stage::Manager);
-    install(&mut c, manager.tool(), dir.path()).await;
+    install(&mut c, manager.tool().unwrap(), dir.path()).await;
     assert_eq!(stage(&mut c, &t).await, Stage::Server);
     assert_eq!(
         step(&w, &mut c, &t, SetupStep::StartServer { manager }).await,

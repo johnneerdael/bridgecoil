@@ -34,7 +34,7 @@
     { id: "access", title: "Allow access" },
     { id: "startup", title: "Survive restarts" },
   ];
-  const managers: { id: Manager; name: string; note: string }[] = [
+  const managers: { id: Exclude<Manager, "existing">; name: string; note: string }[] = [
     {
       id: "shizukuNext",
       name: "Shizuku-Next",
@@ -62,7 +62,9 @@
   const current = $derived(steps.findIndex((s) => s.id === snapshot?.stage));
   const finished = $derived(snapshot?.stage === "done");
   const managerName = $derived(
-    managers.find((m) => m.id === snapshot?.manager)?.name ?? "",
+    snapshot?.manager === "existing"
+      ? (snapshot.helper?.label ?? "your helper app")
+      : (managers.find((m) => m.id === snapshot?.manager)?.name ?? ""),
   );
   const allowLabel = $derived(
     snapshot?.manager === "porter" ? "Allow all the time" : "Always allow",
@@ -139,6 +141,15 @@
     api.remote(targetOf(device), { kind: "key", key, longPress: false });
 </script>
 
+{#snippet stopUsingHelper()}
+  {#if snapshot?.manager === "existing"}<button
+      class="secondary"
+      disabled={busy}
+      onclick={() => run({ kind: "stopUsingHelper" })}
+      >Stop using {managerName}</button
+    >{/if}
+{/snippet}
+
 {#snippet startNote()}
   {#if !snapshot?.bootStart && !snapshot?.networkAdb && (snapshot?.noWirelessDebugging || snapshot?.wired)}<p
       class="risk-note"
@@ -175,6 +186,19 @@
         These helper apps give your TV the access it needs. Pick one and
         Bridgecoil gets the latest version for you.
       </p>
+      {#if snapshot.helper}<div class="setup-choice">
+          <strong>{snapshot.helper.label} is already on this TV</strong>
+          <p class="subtle">
+            You can use it instead. Bridgecoil hasn't verified this build, so
+            only do this if you trust where it came from.
+          </p>
+          <button
+            class="secondary"
+            disabled={busy}
+            onclick={() => run({ kind: "useHelper" })}
+            >Use {snapshot.helper.label}</button
+          >
+        </div>{/if}
       {#if snapshot.shizuku === "other"}<p class="subtle">
           A different app is using the Shizuku name on this TV, so Shizuku-Next
           can't be installed. Porter can sit alongside it.
@@ -354,6 +378,7 @@
       {#if snapshot.monitor}<button class="secondary" onclick={onbuttons}
           >Remap buttons</button
         >{/if}
+      {@render stopUsingHelper()}
     {:else if snapshot.stage === "done"}
       <h3>Your TV is ready</h3>
       <p>Everything is in place to remap buttons.</p>
@@ -372,6 +397,7 @@
         onclick={() => run({ kind: "removeMonitor" })}
         >Remove the startup script</button
       >
+      {@render stopUsingHelper()}
     {/if}
   </div>
 {:else}<p class="error-text" role="alert">{error}</p>{/if}

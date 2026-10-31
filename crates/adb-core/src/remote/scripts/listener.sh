@@ -42,6 +42,8 @@ if ! mkdir "$dir/run.lock" 2>/dev/null; then
 fi
 echo $$ > "$pid_file"
 echo "$(date +%s) started"
+# A listener that was stopped hard leaves its pipes behind.
+rm -f "$dir"/events.[0-9]*
 set -f
 paths=" "
 path=
