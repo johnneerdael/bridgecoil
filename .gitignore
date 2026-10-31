@@ -17,6 +17,7 @@ src-tauri/gen/schemas/
 
 dist-ui/
 dist-site/
+__pycache__/
 
 src-tauri/gen/android/keystore.properties
 *.jks

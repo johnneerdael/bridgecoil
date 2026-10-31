@@ -12,6 +12,8 @@ To test the build without publishing, run **Android release** from the Actions t
 
 ## Release presentation
 
+For iOS, use the separate owner-triggered [iOS beta / TestFlight workflow](ios-beta.md). It supports unsigned validation without secrets and verified signed export/upload from `main`. Apple credentials and physical-device acceptance are tracked separately from Android releases.
+
 The release workflow calls `scripts/release-notes.mjs` after GitHub generates the change notes. Every new release has:
 
 - The original dark 1600 × 480 brand-kit README banner, pinned to the released source commit.

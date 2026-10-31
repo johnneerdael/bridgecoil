@@ -1,0 +1,150 @@
+name: iOS beta
+
+# Owner-triggered only. Signing credentials must never be exposed to PR builds.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Validate an unsigned device archive, or sign and upload to TestFlight
+        type: choice
+        options: [validate, testflight]
+        default: validate
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-beta
+  cancel-in-progress: false
+
+jobs:
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      IOS_MODE: ${{ inputs.mode }}
+      IOS_BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Restrict signing to main and check Xcode
+        run: |
+          if [[ "$IOS_MODE" == testflight && "$GITHUB_REF" != refs/heads/main ]]; then
+            echo "::error::TestFlight signing is restricted to main. Use validate on a feature branch."
+            exit 1
+          fi
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          python3 - <<'PY'
+          import subprocess
+          sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-version"], text=True)
+          if int(sdk.split(".")[0]) < 26:
+              raise SystemExit("App Store Connect requires iOS SDK 26 or later")
+          PY
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-ios
+
+      - run: brew install xcodegen cocoapods
+      - run: npm ci
+
+      - name: Test and prepare the build number
+        run: |
+          npm run check
+          npm test
+          node scripts/cargo.mjs test -p adb-core
+          python3 -m unittest discover -s scripts -p 'test_ios_beta.py'
+          python3 scripts/ios_beta.py config --build-number "$IOS_BUILD_NUMBER" --output "$RUNNER_TEMP/ios-beta.json"
+          version=$(node -p "require('./package.json').version")
+          echo "IOS_APP_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Prepare an isolated signing keychain
+        if: inputs.mode == 'testflight'
+        env:
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          umask 077
+          python3 scripts/ios_beta.py signing-files
+          keychain="$RUNNER_TEMP/bridgecoil-ios.keychain-db"
+          password=$(openssl rand -hex 32)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/bridgecoil-signing/distribution.p12" \
+            -P "$IOS_CERTIFICATE_PASSWORD" -k "$keychain" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          security find-identity -v -p codesigning "$keychain"
+
+      - name: Build an unsigned device archive
+        if: inputs.mode == 'validate'
+        run: npm run ios -- build --target aarch64 --no-sign --archive-only --ci --config "$RUNNER_TEMP/ios-beta.json"
+
+      - name: Build and export an App Store Connect IPA
+        if: inputs.mode == 'testflight'
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: npm run ios -- build --target aarch64 --ci --export-method app-store-connect --config "$RUNNER_TEMP/ios-beta.json"
+
+      - name: Verify the archive and package build artifacts
+        run: |
+          archive=src-tauri/gen/apple/build/adb-studio-app_iOS.xcarchive
+          python3 scripts/ios_beta.py check-archive "$archive" --version "$IOS_APP_VERSION" --build-number "$IOS_BUILD_NUMBER"
+          mkdir -p artifacts/ios
+          ditto -c -k --sequesterRsrc --keepParent "$archive" "artifacts/ios/Bridgecoil-$IOS_APP_VERSION-$IOS_BUILD_NUMBER-$IOS_MODE.xcarchive.zip"
+          if [[ "$IOS_MODE" == testflight ]]; then
+            python3 - <<'PY'
+          import os, pathlib, shutil
+          files = list(pathlib.Path("src-tauri/gen/apple/build").rglob("*.ipa"))
+          if len(files) != 1:
+              raise SystemExit(f"Expected one exported IPA; found {len(files)}")
+          target = pathlib.Path("artifacts/ios") / f"Bridgecoil-{os.environ['IOS_APP_VERSION']}-{os.environ['IOS_BUILD_NUMBER']}.ipa"
+          shutil.copy2(files[0], target)
+          PY
+            python3 scripts/ios_beta.py check-ipa "artifacts/ios/Bridgecoil-$IOS_APP_VERSION-$IOS_BUILD_NUMBER.ipa" \
+              --version "$IOS_APP_VERSION" --build-number "$IOS_BUILD_NUMBER"
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bridgecoil-ios-${{ inputs.mode }}-${{ env.IOS_BUILD_NUMBER }}
+          path: artifacts/ios/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload the verified IPA to TestFlight
+        if: inputs.mode == 'testflight'
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          xcrun altool --validate-app --type ios --file "artifacts/ios/Bridgecoil-$IOS_APP_VERSION-$IOS_BUILD_NUMBER.ipa" \
+            --apiKey "$APPLE_API_KEY" --apiIssuer "$APPLE_API_ISSUER"
+          xcrun altool --upload-app --type ios --file "artifacts/ios/Bridgecoil-$IOS_APP_VERSION-$IOS_BUILD_NUMBER.ipa" \
+            --apiKey "$APPLE_API_KEY" --apiIssuer "$APPLE_API_ISSUER"
+          echo "Upload accepted. App Store Connect processing and tester installation still need verification." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          keychain="$RUNNER_TEMP/bridgecoil-ios.keychain-db"
+          if [[ -f "$keychain" ]]; then
+            security delete-keychain "$keychain"
+          fi
+          rm -rf "$RUNNER_TEMP/bridgecoil-signing"
