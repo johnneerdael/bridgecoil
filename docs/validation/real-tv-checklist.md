@@ -76,13 +76,24 @@ This run found what no emulator could:
 
 A button keeps its normal action until the app it opens is off. A button Android has no key code for, shown as `keyCode=0`, has no normal action, so a mapping is already a full replacement.
 
-**TCL Smart TV Pro, Android 14, 32-bit, on Wi-Fi. 2026-10-31.** This TV already runs the owner's own remote script and Shevery, so only pairing was tried.
+**TCL Smart TV Pro, Android 14, 32-bit, on Wi-Fi. 2026-10-31.** This TV already runs the owner's own remote script, Termux and Shevery, a Shizuku-type helper Bridgecoil can't verify.
 
 | Step | Result |
 |---|---|
-| Pair with a code, then connect | Passed. The device page showed Wireless ADB · TLS |
+| Pair with a code, then connect | Passed. The device page showed Wireless ADB · TLS, and it reconnected after an app update |
+| Find the helper already on the TV | Passed, Shevery was offered with the warning, and no Porter was needed |
+| Termux gets the helper's shell tool | Passed, `MANAGER_APPLICATION_ID=com.hamondev.shevery` |
+| Access prompt | Passed once Shevery was open, `uid=2000(shell)` |
+| Listen, then a mapped button opens its app | Passed, a real press opened Videoland, next to the owner's own listener |
+| **Stop** on a listener that restarts itself | Passed, it stayed down, then started again |
 
-Not proven on any TV yet: a full remap with **Turn off** on a button that opens an app, start at boot through wireless debugging, Clean up and the launcher handover.
+This run found:
+
+- TCL's firmware drops the helper's request while its app is closed (`TclAppBoot: Skipping delivery`), so **Ask the TV** seemed to do nothing. It now opens the helper first.
+- `getevent` ends when any input device goes away, which stopped the owner's listener for good. Bridgecoil's listener now restarts its own event stream.
+- A pressed button that needed **Check access** to continue was unclear, so setup now watches for the answer itself.
+
+Not proven on any TV yet: a full remap with **Turn off** on a button that opens an app, the listener restarting after a real device dropout, start at boot through wireless debugging, Clean up and the launcher handover.
 
 ## Afterwards
 
