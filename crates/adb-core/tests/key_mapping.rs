@@ -277,7 +277,7 @@ fn run_events(set: &[Mapping], events: &[(u32, &str, &str)]) -> String {
         )
         .unwrap();
     }
-    stream.push_str("sleep 0.6\n");
+    stream.push_str(&format!("sleep 0.6\n: > {}/stop\n", root.display()));
     tool("getevent", stream);
     let script = listener_script(set)
         .unwrap()
@@ -361,10 +361,12 @@ impl OldTv {
                  echo ' 9f 15 e6 6a 97 3b 0e 00 01 00 46 00 00 00 00 00'\n\
                  echo ' 9f 15 e6 6a 97 3b 0e 00 00 00 00 00 00 00 00 00'\n\
                  : > {played}\n\
+                 : > {stop}\n\
                  /bin/sleep 0.6\n",
                 calls = calls.display(),
                 uptime = uptime.display(),
                 played = played.display(),
+                stop = root.join("stop").display(),
             ),
         );
         Self { dir }
@@ -415,6 +417,55 @@ fn a_mapping_fires_at_once_on_android_9() {
     let set = [mapping(key("aml_keypad", "0046", None), "org.demo/.Main")];
     tv.run(&listener_script(&set).unwrap(), "listener.sh", &["--run"]);
     assert_eq!(tv.calls(), "am start -n org.demo/.Main\n");
+}
+
+/// A TCL's listener ended when an input device went away, and nothing brought it back.
+#[cfg(unix)]
+#[test]
+fn the_listener_survives_an_input_device_going_away() {
+    use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let bin = root.join("bin");
+    fs::create_dir(&bin).unwrap();
+    let calls = root.join("calls");
+    let tool = |name: &str, body: String| {
+        let path = bin.join(name);
+        fs::write(&path, format!("#!/bin/sh\n{body}")).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    tool("am", format!("echo \"am $*\" >> {}\n", calls.display()));
+    let press = "echo '/dev/input/event4: EV_KEY KEY_F1 DOWN'\n\
+                 echo '/dev/input/event4: EV_KEY KEY_F1 UP'\n\
+                 sleep 0.4\n";
+    tool(
+        "getevent",
+        format!(
+            "printf 'add device 1: /dev/input/event4\\n  name:     \"Vendor Remote 01\"\\n'\n\
+             n=$(cat {root}/runs 2>/dev/null || echo 0)\n\
+             echo $((n + 1)) > {root}/runs\n\
+             {press}\
+             if [ \"$n\" -gt 0 ]; then : > {root}/stop; else echo 'could not get event' >&2; exit 1; fi\n",
+            root = root.display(),
+        ),
+    );
+    let set = [mapping(f_key("KEY_F1"), "org.demo/.Main")];
+    let script = listener_script(&set)
+        .unwrap()
+        .replace("/data/local/tmp/bridgecoil", &root.display().to_string());
+    let path = root.join("listener.sh");
+    fs::write(&path, script).unwrap();
+    let run = Command::new("sh")
+        .arg(&path)
+        .arg("--run")
+        .env("PATH", format!("{}:/bin:/usr/bin", bin.display()))
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{run:?}");
+    assert_eq!(
+        fs::read_to_string(calls).unwrap(),
+        "am start -n org.demo/.Main\nam start -n org.demo/.Main\n"
+    );
 }
 
 #[cfg(unix)]

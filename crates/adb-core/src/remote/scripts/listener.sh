@@ -23,6 +23,7 @@ case "$1" in
     ;;
   --stop)
     # getevent goes first: ending it ends every part of the pipeline, on any Android version.
+    : > "$dir/stop"
     if [ -r "$events_file" ]; then
       while read -r events; do
         case "$events" in ""|*[!0-9]*) ;; *) kill "$events" 2>/dev/null ;; esac
@@ -43,7 +44,7 @@ fi
 echo $$ > "$pid_file"
 echo "$(date +%s) started"
 # A listener that was stopped hard leaves its pipes behind.
-rm -f "$dir"/events.[0-9]*
+rm -f "$dir"/events.[0-9]* "$dir/stop"
 set -f
 paths=" "
 path=
@@ -63,14 +64,18 @@ take() {
 }
 @@KEY_EVENTS@@
 {
-  case "$(getprop ro.build.version.sdk)" in
-    [1-9]|[12][0-9]) key_events ;;
-    *)
-      getevent -l 2>/dev/null &
-      echo $! > "$events_file"
-      wait
-      ;;
-  esac
+  # The stream ends when any input device goes away, so only --stop ends the listener.
+  until [ -f "$dir/stop" ]; do
+    case "$(getprop ro.build.version.sdk)" in
+      [1-9]|[12][0-9]) key_events ;;
+      *)
+        getevent -l 2>/dev/null &
+        echo $! > "$events_file"
+        wait
+        ;;
+    esac
+    [ -f "$dir/stop" ] || sleep 1
+  done
 } | while read -r line; do
   set -- $line
   case "$line" in
