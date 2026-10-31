@@ -1,9 +1,14 @@
 """Behavior checks for build-specific TestFlight notes; no Apple credentials needed."""
 import copy
+import base64
+import json
 import io
 from pathlib import Path
 from contextlib import redirect_stderr
 import subprocess
+import sys
+import tempfile
+import time
 import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
@@ -203,21 +208,64 @@ class NotesTests(unittest.TestCase):
             self.assertNotIn("signature", str(caught.exception))
             self.assertNotIn("PRIVATE KEY", str(caught.exception))
 
-    def test_altool_token_capture_and_private_key_cleanup(self):
+    @unittest.skipUnless(sys.platform == "darwin", "Requires native macOS CryptoKit")
+    def test_native_jwt_claims_and_es256_signature_with_an_ephemeral_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            key_path = Path(directory) / "arbitrary-key-filename.p8"
+            public_path = Path(directory) / "public.pem"
+            subprocess.run(["openssl", "genpkey", "-algorithm", "EC", "-pkeyopt", "ec_paramgen_curve:P-256", "-out", str(key_path)], capture_output=True, check=True)
+            public = subprocess.run(["openssl", "pkey", "-in", str(key_path), "-pubout"], capture_output=True, check=True).stdout
+            public_path.write_bytes(public)
+            with patch.dict(notes.os.environ, {"APPLE_API_KEY": "TESTKEY", "APPLE_API_ISSUER": "test-issuer"}):
+                token = notes.generate_token(str(key_path))
+            header_text, claims_text, signature_text = token.split(".")
+            decode = lambda part: base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))
+            self.assertEqual(json.loads(decode(header_text)), {"alg": "ES256", "kid": "TESTKEY", "typ": "JWT"})
+            claims = json.loads(decode(claims_text))
+            self.assertEqual(claims["iss"], "test-issuer")
+            self.assertEqual(claims["aud"], "appstoreconnect-v1")
+            self.assertLess(abs(claims["iat"] - time.time()), 60)
+            self.assertEqual(claims["exp"] - claims["iat"], 900)
+            self.assertEqual(len(decode(signature_text)), 64)
+            verifier = Path(directory) / "verify.swift"
+            verifier.write_text('''import Foundation
+import CryptoKit
+func decode(_ text: String) -> Data {
+    let base = text.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+    return Data(base64Encoded: base + String(repeating: "=", count: (4 - base.count % 4) % 4))!
+}
+let publicKey = try P256.Signing.PublicKey(pemRepresentation: String(contentsOfFile: CommandLine.arguments[1], encoding: .utf8))
+let token = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8)!
+let parts = token.split(separator: ".").map(String.init)
+let signature = try P256.Signing.ECDSASignature(rawRepresentation: decode(parts[2]))
+let message = Data((parts[0] + "." + parts[1]).utf8)
+print(publicKey.isValidSignature(signature, for: message) ? "valid" : "invalid")
+''')
+            result = subprocess.run(["xcrun", "swift", str(verifier), str(public_path)], input=token, capture_output=True, text=True, check=True, timeout=60)
+            self.assertEqual(result.stdout.strip(), "valid")
+
+    def test_cryptokit_token_capture_and_private_key_cleanup(self):
         env = {"APPLE_API_KEY": "KEYID", "APPLE_API_ISSUER": "ISSUER", "APPLE_API_PRIVATE_KEY": "private-key-content"}
-        result = subprocess.CompletedProcess([], 0, "", "Running altool...\nheader.payload.signature\n")
+        result = subprocess.CompletedProcess([], 0, "header.payload.signature\n", "")
         with patch.dict(notes.os.environ, env, clear=True), patch.object(notes.subprocess, "run", return_value=result) as run:
             with notes.api_key_file() as key_path:
                 self.assertEqual(Path(key_path).read_text(), "private-key-content")
                 self.assertEqual(Path(key_path).stat().st_mode & 0o777, 0o600)
                 self.assertEqual(notes.generate_token(key_path), "header.payload.signature")
                 self.assertNotIn("private-key-content", str(run.call_args))
+                self.assertEqual(run.call_args.args[0][:3], ["xcrun", "swift", "-"])
+                self.assertIn("import CryptoKit", run.call_args.kwargs["input"])
             self.assertFalse(Path(key_path).exists())
         with patch.dict(notes.os.environ, env, clear=True), patch.object(notes.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "private-key-content", "header.payload.signature")):
-            with self.assertRaisesRegex(ValueError, "JWT generation failed") as caught:
+            with self.assertRaisesRegex(ValueError, "SWIFT_RUNTIME_OR_OUTPUT_FAILED.*exit 1") as caught:
                 notes.generate_token("/unused")
             self.assertNotIn("private-key-content", str(caught.exception))
             self.assertNotIn("header.payload.signature", str(caught.exception))
+        with patch.dict(notes.os.environ, env, clear=True), patch.object(notes.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "KEY_PARSE_FAILED")):
+            with self.assertRaisesRegex(ValueError, "KEY_PARSE_FAILED.*exit 1"):
+                with notes.api_key_file() as key_path:
+                    notes.generate_token(key_path)
+            self.assertFalse(Path(key_path).exists())
 
 
 if __name__ == "__main__":

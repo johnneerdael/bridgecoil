@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Publish versioned What to Test text to one exact processed TestFlight build.
 
-Uses macOS altool for ES256 signing and system curl for trusted HTTPS. Tokens,
+Uses native Swift CryptoKit for ES256 signing and system curl for trusted HTTPS. Tokens,
 private keys and raw authentication/HTTP responses must never reach the logs.
 """
 import argparse
@@ -58,25 +58,65 @@ def api_key_file():
         yield str(key_path)
 
 
+JWT_SIGNER = r'''import Foundation
+import CryptoKit
+
+func fail(_ category: String) -> Never {
+    FileHandle.standardError.write(Data(category.utf8))
+    exit(1)
+}
+func base64url(_ data: Data) -> String {
+    data.base64EncodedString().replacingOccurrences(of: "+", with: "-")
+        .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+}
+let pem: String
+do {
+    pem = try String(contentsOfFile: CommandLine.arguments[1], encoding: .utf8)
+} catch {
+    fail("KEY_READ_FAILED")
+}
+let key: P256.Signing.PrivateKey
+do {
+    key = try P256.Signing.PrivateKey(pemRepresentation: pem)
+} catch {
+    fail("KEY_PARSE_FAILED")
+}
+do {
+    let now = Int(Date().timeIntervalSince1970)
+    let header: [String: Any] = ["alg": "ES256", "kid": CommandLine.arguments[2], "typ": "JWT"]
+    let claims: [String: Any] = ["iss": CommandLine.arguments[3], "iat": now, "exp": now + 900,
+                                "aud": "appstoreconnect-v1"]
+    let unsigned = base64url(try JSONSerialization.data(withJSONObject: header)) + "." +
+                   base64url(try JSONSerialization.data(withJSONObject: claims))
+    let signature = try key.signature(for: Data(unsigned.utf8))
+    print(unsigned + "." + base64url(signature.rawRepresentation))
+} catch {
+    fail("JWT_SIGN_FAILED")
+}
+'''
+
+
 def generate_token(key_path: str) -> str:
     key_id = os.environ.get("APPLE_API_KEY", "")
     issuer = os.environ.get("APPLE_API_ISSUER", "")
     if not key_id or not issuer:
         raise ValueError("Set APPLE_API_KEY and APPLE_API_ISSUER")
     try:
+        # CryptoKit reads the explicit key path; no altool filename lookup or
+        # version-dependent JWT flags/output parsing. Only source enters stdin.
         result = subprocess.run(
-            ["xcrun", "altool", "--generate-jwt", "--apiKey", key_id,
-             "--apiIssuer", issuer, "--p8-file-path", key_path, "--output-format", "json"],
+            ["xcrun", "swift", "-", key_path, key_id, issuer], input=JWT_SIGNER,
             capture_output=True, text=True, timeout=60, check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
-        raise ValueError("Apple JWT generation failed; check Xcode and API credentials") from None
-    # altool 26 emits the token on stderr, even with --output-format json.
-    tokens = re.findall(r"(?<![\w.-])[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?![\w.-])", result.stdout + "\n" + result.stderr)
-    if result.returncode or len(tokens) != 1:
-        raise ValueError("Apple JWT generation failed; check Xcode and API credentials")
-    return tokens[0]
-
+        raise ValueError("Apple JWT generation failed: Swift unavailable or timed out") from None
+    token = result.stdout.strip()
+    if result.returncode or re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", token) is None:
+        # Report controlled diagnostics, never the raw compiler/runtime output.
+        category = next((item for item in ["KEY_READ_FAILED", "KEY_PARSE_FAILED", "JWT_SIGN_FAILED"]
+                         if result.stderr.strip() == item), "SWIFT_RUNTIME_OR_OUTPUT_FAILED")
+        raise ValueError(f"Apple JWT generation failed: {category} (exit {result.returncode})")
+    return token
 
 def config_string(value: str) -> str:
     """Quote one curl config value, including text supplied as plain workflow data."""
