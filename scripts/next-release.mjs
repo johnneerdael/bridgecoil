@@ -51,9 +51,11 @@ const isInternal = (note) => /^internal:/i.test(note);
 const pullRequest = (subject) =>
   subject.match(/\(#(\d+)\)$/)?.[1] ?? subject.match(/^Merge pull request #(\d+)/)?.[1];
 
+const INTERNAL_SCOPES = ["(ci)", "(build)", "(release)", "(test)", "(docs)"];
+
 function commitNote(subject) {
   const match = subject.match(/^(feat|fix)(\([^)]*\))?!?:\s*(.+)$/);
-  if (!match) return "";
+  if (!match || INTERNAL_SCOPES.includes(match[2])) return "";
   return match[3][0].toUpperCase() + match[3].slice(1);
 }
 

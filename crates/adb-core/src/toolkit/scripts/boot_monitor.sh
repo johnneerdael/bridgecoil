@@ -25,8 +25,9 @@ while :; do
       delay=30
       refused=0
       ;;
-    *"not running"*)
-      # The manager hasn't started yet. Waiting for it shows nothing on the TV.
+    124:*|*"not running"*)
+      # The manager hasn't started yet, or the first start outlasted the time limit. Waiting
+      # for it shows nothing on the TV.
       delay=$((delay * 2))
       [ "$delay" -gt 600 ] && delay=600
       ;;

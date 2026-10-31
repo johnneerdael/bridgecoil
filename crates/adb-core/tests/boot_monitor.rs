@@ -77,6 +77,22 @@ fn it_keeps_waiting_for_a_manager_that_has_not_started() {
 }
 
 #[test]
+fn running_out_of_time_is_not_a_refusal() {
+    let dir = tempfile::tempdir().unwrap();
+    // What a real TV printed on the attempt that started the listener, then `timeout`'s status.
+    let log = run_monitor(
+        dir.path(),
+        "#!/bin/sh\necho Entering shell...\nexit 124\n",
+        8,
+    );
+    assert_eq!(log, "", "a slow start is not a refusal");
+    assert_eq!(
+        fs::read_to_string(dir.path().join("naps")).unwrap().trim(),
+        "8"
+    );
+}
+
+#[test]
 fn a_recovered_manager_clears_earlier_refusals() {
     let dir = tempfile::tempdir().unwrap();
     let flaky = format!(

@@ -16,6 +16,7 @@ Every push to `main`, which includes merged PRs, runs `.github/workflows/release
 | A merged PR | Each bullet in its `## Release notes` section. The PR gate won't pass without it |
 | A PR that says `Internal:` | Nothing, and it doesn't release by itself |
 | A direct `feat:` or `fix:` commit | The commit subject, so write it for someone using the app |
+| A direct `fix(ci):`, `fix(build):`, `fix(release):`, `fix(test):` or `fix(docs):` commit | Nothing, and it doesn't release by itself |
 | Any other direct commit, such as `docs:` or `ci:` | Nothing, and it doesn't release by itself |
 
 Internal changes wait for the next user-facing one. To release one anyway, run **Release** from the Actions tab with **publish** ticked. It still needs a user-facing note.

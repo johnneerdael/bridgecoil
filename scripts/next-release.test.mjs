@@ -82,7 +82,13 @@ test("notes come from PRs and from feat and fix commits, never internal changes"
 });
 
 test("internal changes alone release nothing", () => {
-  assert.deepEqual(publicNotes(["docs: a", "ci: b", "chore: c"], {}), []);
+  assert.deepEqual(
+    publicNotes(
+      ["docs: a", "ci: b", "chore: c", "fix(ci): d", "fix(build): e", "fix(release): f", "fix(test): g"],
+      {},
+    ),
+    [],
+  );
 });
 
 test("changes render as one bullet per note with a changelog link", () => {
