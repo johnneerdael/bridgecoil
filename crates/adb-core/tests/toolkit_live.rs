@@ -467,10 +467,8 @@ async fn a_screenshot_and_launchers_come_back_whole() {
         package: Some("com.android.settings".into()),
         lines: 200,
     };
-    println!(
-        "logs {}",
-        &query(&mut c, &t, logs).await.unwrap().to_string()[..60]
-    );
+    let narrowed = query(&mut c, &t, logs).await.unwrap();
+    println!("logs not running {}", narrowed["notRunning"]);
     let logs = Query::Logs {
         level: "debug".into(),
         package: None,
