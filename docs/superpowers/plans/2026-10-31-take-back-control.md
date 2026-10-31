@@ -12,7 +12,7 @@ The user requested this directly and asked for continuous work without questions
 - Nobody pre-downloads anything: the app fetches the latest release, verifies it and installs it.
 - No typing is required for any of this, including advanced commands.
 - A step is only "done" after a probe proves it. Installed never means ready.
-- Test on emulators only while unattended. Never change the user's TV or phone. Release only when the owner asks.
+- Test on emulators only while unattended. Never change the user's TV or phone. Every user-facing push to `main` releases, at the owner's direction on 2026-10-31.
 
 ## Proven on an API 36 emulator, 2026-10-31
 
@@ -73,4 +73,4 @@ The certificate is pinned, so a release signed by anyone else is refused even if
 
 ## Verification
 
-`npx vitest run`, `npm run -s check`, `node scripts/cargo.mjs test --workspace`, then the emulator run. Commit and push to `main` at tested milestones. A `v*` tag publishes a release, so tag only when the owner asks. They approved v0.1.7 as a normal release on 2026-10-31.
+`npx vitest run`, `npm run -s check`, `node scripts/cargo.mjs test --workspace`, then the emulator run. Commit and push to `main` at tested milestones. A `feat:` or `fix:` push publishes a release, so don't push one before it's tested. See `docs/release.md`.

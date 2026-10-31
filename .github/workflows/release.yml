@@ -1,17 +1,72 @@
-name: Android release
+name: Release
 
-# Runs only on version tags and manual dispatch, both of which need write access.
-# Never add pull_request here: this job can read the signing key.
+# Every push to main, which includes merged PRs, releases Android and iOS when it has something
+# user-facing since the last release. A manual run is a private test build unless told otherwise.
+# Never add pull_request here: these jobs can read the signing keys.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a release, rather than only building
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      release: ${{ steps.ready.outputs.release }}
+      version: ${{ steps.ready.outputs.version }}
+      focus: ${{ steps.ready.outputs.focus }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      - run: node --test scripts/next-release.test.mjs
+
+      - name: Decide what to release
+        id: ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+          MANUAL_PUBLISH: ${{ inputs.publish }}
+        run: |
+          node scripts/next-release.mjs plan changes.md
+          # A newer push will release these notes too, and its tag is on the tip of main.
+          tip=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$tip" != "$RELEASE_SHA" ]; then
+            echo "A newer commit is on main, so its run will release this."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$MANUAL_PUBLISH" != true ]; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-changes
+          path: changes.md
+          if-no-files-found: error
+
   android:
+    needs: plan
+    if: needs.plan.outputs.release == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -46,22 +101,19 @@ jobs:
           "$sdkmanager" --install "platforms;android-37.0" "build-tools;$BUILD_TOOLS" "ndk;$NDK_VERSION" > /dev/null
           echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
 
-      - name: Check the tag matches the app version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          [ "$GITHUB_REF_NAME" = "v$version" ] || {
-            echo "::error::Tag $GITHUB_REF_NAME doesn't match app version $version"
-            exit 1
-          }
-
       - run: npm ci
+
+      - name: Set the release version
+        if: needs.plan.outputs.release == 'true'
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: node scripts/next-release.mjs stamp "$VERSION"
 
       - name: Test
         run: |
           npx vitest run
           npm run -s check
-          node --test scripts/release-notes.test.mjs
+          node --test scripts/release-notes.test.mjs scripts/next-release.test.mjs
           node scripts/cargo.mjs test -p adb-core
 
       - name: Write signing config
@@ -109,24 +161,32 @@ jobs:
           path: release/
           if-no-files-found: error
 
-      - name: Prepare branded release notes
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          gh api --method POST "repos/$GH_REPO/releases/generate-notes" \
-            -f tag_name="$GITHUB_REF_NAME" -f target_commitish="$GITHUB_SHA" \
-            --jq .body > "$RUNNER_TEMP/generated-notes.md"
-          node scripts/release-notes.mjs --repository "$GH_REPO" \
-            --version "${GITHUB_REF_NAME#v}" --sha "$GITHUB_SHA" \
-            --changes "$RUNNER_TEMP/generated-notes.md" > "$RUNNER_TEMP/release-notes.md"
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        if: needs.plan.outputs.release == 'true'
+        with:
+          name: release-changes
+          path: ${{ runner.temp }}/changes
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: needs.plan.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.plan.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release/* --verify-tag \
-            --title "Bridgecoil $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
+          node scripts/release-notes.mjs --repository "$GH_REPO" --version "$VERSION" \
+            --sha "$GITHUB_SHA" --changes "$RUNNER_TEMP/changes/changes.md" > "$RUNNER_TEMP/release-notes.md"
+          gh release create "v$VERSION" release/* --target "$GITHUB_SHA" --latest \
+            --title "Bridgecoil v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+
+  ios:
+    needs: [plan, android]
+    if: needs.plan.outputs.release == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ios-beta.yml
+    with:
+      mode: testflight
+      version: ${{ needs.plan.outputs.version }}
+      release_focus: ${{ needs.plan.outputs.focus }}
+    secrets: inherit

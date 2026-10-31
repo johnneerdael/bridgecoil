@@ -25,7 +25,7 @@ test("release body pins the banner and links the exact artifacts the workflow pr
 test("empty generated notes retain useful installation and validation information", () => {
   const body = renderReleaseNotes({ ...input, changes: "" });
   assert.ok(body.includes("No generated change notes were supplied."));
-  assert.ok(body.includes("Physical-TV setup validation is still pending"));
+  assert.ok(body.includes("real Android 9 TV box"));
   assert.ok(body.includes("iOS and desktop"));
 });
 

@@ -1,7 +1,26 @@
 name: iOS beta
 
-# Owner-triggered only. Signing credentials must never be exposed to PR builds.
+# Runs when the owner starts it, or from Release after a push to main.
+# Signing credentials must never be exposed to PR builds.
 on:
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        required: true
+      version:
+        description: Version this build is released as
+        type: string
+        required: false
+      app_version:
+        type: string
+        required: false
+      build_number:
+        type: string
+        required: false
+      release_focus:
+        type: string
+        required: false
   workflow_dispatch:
     inputs:
       mode:
@@ -10,6 +29,10 @@ on:
         options: [validate, testflight, notes]
         default: validate
         required: true
+      version:
+        description: Build as this version instead of the one in the repository
+        type: string
+        required: false
       app_version:
         description: Existing marketing version for notes mode (for example 0.1.7)
         type: string
@@ -79,6 +102,12 @@ jobs:
         if: inputs.mode != 'notes'
       - run: npm ci
         if: inputs.mode != 'notes'
+
+      - name: Set the release version
+        if: inputs.mode != 'notes' && inputs.version != ''
+        env:
+          VERSION: ${{ inputs.version }}
+        run: node scripts/next-release.mjs stamp "$VERSION"
 
       - name: Test and prepare the build number
         if: inputs.mode != 'notes'

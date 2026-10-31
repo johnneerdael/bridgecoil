@@ -22,6 +22,7 @@ export function renderReleaseNotes({ repository, version, sha, changes = "" }) {
 | --- | --- | --- |
 | [Bridgecoil ${version} — Android APK](${download}/Bridgecoil-${version}-arm64.apk) | Android phone, arm64 | Signed with the Bridgecoil release key. |
 | [SHA256SUMS](${download}/SHA256SUMS) | Any computer | SHA-256 checksums for the attached APK. |
+| TestFlight beta | iPhone and iPad | Same version, for invited testers. |
 
 Install the APK on your phone, enable Wireless debugging on the TV and pair them on the same local network. Keep Wi-Fi enabled on the TV. iOS and desktop are source-build targets; this release workflow publishes only the Android APK.
 
@@ -29,7 +30,7 @@ ${changes.trim() || "## Changes\n\nNo generated change notes were supplied."}
 
 ## Before you start
 
-Guided TV setup has been exercised on an Android TV 16 emulator with secure ADB and no root. Physical-TV setup validation is still pending; firmware, key capture and reboot behavior vary. Review the [compatibility notes](${site}guide.html#limits).
+Guided TV setup has been exercised on Android TV 16 emulators with secure ADB and no root, and on a real Android 9 TV box. Firmware, key capture and restart behavior vary between TVs. Review the [compatibility notes](${site}guide.html#limits).
 
 <details>
 <summary>Build and source verification</summary>
