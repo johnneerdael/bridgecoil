@@ -22,9 +22,9 @@ export function renderReleaseNotes({ repository, version, sha, changes = "" }) {
 | --- | --- | --- |
 | [Bridgecoil ${version} — Android APK](${download}/Bridgecoil-${version}-arm64.apk) | Android phone, arm64 | Signed with the Bridgecoil release key. |
 | [SHA256SUMS](${download}/SHA256SUMS) | Any computer | SHA-256 checksums for the attached APK. |
-| TestFlight beta | iPhone and iPad | Same version, for invited testers. |
+| TestFlight beta | iPhone and iPad | Uploaded automatically after Android publishes; [check iOS build status](${repo}/actions/workflows/release.yml). Apple processing and beta review can delay tester access. |
 
-Install the APK on your phone, enable Wireless debugging on the TV and pair them on the same local network. Keep Wi-Fi enabled on the TV. iOS and desktop are source-build targets; this release workflow publishes only the Android APK.
+Install the APK on your phone, enable Wireless debugging on the TV and pair them on the same local network. Keep Wi-Fi enabled on the TV. The same release version is then built, signed and uploaded to TestFlight with its What to Test notes. A published GitHub release does not mean the iOS job or Apple's processing has finished. Desktop packages remain source builds.
 
 ${changes.trim() || "## Changes\n\nNo generated change notes were supplied."}
 

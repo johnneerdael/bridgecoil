@@ -7,7 +7,7 @@ Every push to `main`, which includes merged PRs, runs `.github/workflows/release
 1. **Decide.** `scripts/next-release.mjs` reads what's new since the last tag. A release needs at least one user-facing note. If a newer commit is already on `main`, that commit's run takes over and includes these notes.
 2. **Version.** The next patch number comes from the tags. To start a new minor version, change the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`. The build stamps the released version in and never commits it.
 3. **Android.** The tests run, a signed arm64 APK is built, its certificate is checked and the GitHub release is published with the tag.
-4. **iOS.** The same version is uploaded to TestFlight, with the same notes as What to Test. If this fails, the Android release stays up and the run shows the failure.
+4. **iOS.** After Android publishes, the same source/version is built, signed, verified and uploaded to TestFlight, with the release notes included in What to Test. GitHub publication precedes the iOS build and Apple's processing; check the release run's **ios / ios** job. If this fails, the Android release stays up and the run shows the failure. Apple beta review and tester access remain separate from upload.
 
 ## Release notes
 

@@ -64,7 +64,7 @@ Check [GitHub Releases](https://github.com/johnneerdael/bridgecoil/releases) for
 | Controller | Distribution | Status |
 | --- | --- | --- |
 | **Android phone, arm64** | `Bridgecoil-<version>-arm64.apk` and `SHA256SUMS` | Signed APK from the release workflow. Install on the phone. |
-| **iPhone / iPad** | [iOS validation / TestFlight workflow](docs/ios-beta.md) | Device archive builds are verified. Signed beta delivery requires Apple account setup; physical-iPhone acceptance is pending. |
+| **iPhone / iPad** | [TestFlight beta delivery](docs/ios-beta.md) | Each release automatically builds and uploads the same version after Android publishes. Check the release run's iOS job; Apple processing/review and tester access follow separately. Physical-iPhone acceptance is pending. |
 | **macOS / Windows / Linux** | Build from source | No public desktop packages in the current release workflow. |
 
 Releases use one Android signing identity so compatible builds can update an existing installation. See [release and signing details](docs/release.md). Do not infer platform availability from a design preview.

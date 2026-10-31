@@ -26,7 +26,10 @@ test("empty generated notes retain useful installation and validation informatio
   const body = renderReleaseNotes({ ...input, changes: "" });
   assert.ok(body.includes("No generated change notes were supplied."));
   assert.ok(body.includes("real Android 9 TV box"));
-  assert.ok(body.includes("iOS and desktop"));
+  assert.ok(body.includes("Desktop packages remain source builds"));
+  assert.ok(body.includes("actions/workflows/release.yml"));
+  assert.ok(!body.includes("Same version, for invited testers."));
+  assert.ok(!body.includes("this release workflow publishes only the Android APK"));
 });
 
 test("reject malformed repository, source and version instead of creating misleading links", () => {

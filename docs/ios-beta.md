@@ -10,14 +10,17 @@ This establishes current source-build support. Physical-iPhone permission handli
 
 ## Run the workflow
 
-Open [Actions → iOS beta](https://github.com/johnneerdael/bridgecoil/actions/workflows/ios-beta.yml), choose **Run workflow**, and select a mode:
+Every published release from the [Release workflow](https://github.com/johnneerdael/bridgecoil/actions/workflows/release.yml) automatically calls the iOS workflow after the Android release is published. It builds the same source commit, stamps the same marketing version, signs and verifies the IPA, uploads it to App Store Connect, waits for processing and posts the exact build's What to Test notes. The release therefore appears on GitHub before its iOS build appears in TestFlight. Check the **ios / ios** job in that release's run for progress or failure. Apple beta review and tester access remain separate steps.
+
+For a one-off validation, signed build or notes update, open [Actions → iOS beta](https://github.com/johnneerdael/bridgecoil/actions/workflows/ios-beta.yml), choose **Run workflow**, and select a mode:
 
 | Mode | Result | Credentials |
 | --- | --- | --- |
 | `validate` | Unsigned ARM64 device archive, metadata checks and an archive artifact | None |
 | `testflight` | App Store Connect IPA, signature/profile checks and upload to Apple | Apple signing secrets; `main` only |
+| `notes` | Update and verify What to Test for an existing exact version/build | Apple API secrets; `main` only |
 
-The workflow runs only when dispatched. A push does not publish a beta or a GitHub release. Run numbers and retry attempts produce a distinct numeric bundle version, such as `12.2`, while `package.json` and Tauri retain the marketing version. Never reuse a bundle version after Apple accepts it. The current format accepts run numbers 1–9999 and attempts 1–99.
+Only pushes with user-facing changes publish releases; see [release selection](release.md#how-a-release-happens). A manual **Release** run without `publish` does not upload to TestFlight. Run numbers and retry attempts produce a distinct numeric bundle version, such as `12.2`; the release workflow supplies the marketing version without committing a version bump. Never reuse a bundle version after Apple accepts it. The current format accepts run numbers 1–9999 and attempts 1–99.
 
 The macOS runner uses an iOS 26+ SDK, runs frontend checks/tests and Rust core tests, then builds the app. Build artifacts are retained for seven days, including after an artifact-check failure so the exported package can be inspected. Only a verified exported IPA is eligible for upload to Apple; the `.xcarchive` is build/debug material and may be unsigned or use Tauri's temporary export signature.
 
