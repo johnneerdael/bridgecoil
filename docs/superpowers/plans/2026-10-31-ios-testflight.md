@@ -14,4 +14,11 @@ User selected TestFlight beta builds. Use the existing Apple Distribution identi
 
 The cached v0.1.7 archive is unsigned and still uses `nl.neerdael.adbstudio.poc`; a fresh current release archive has now built successfully with `nl.neerdael.bridgecoil`, version 0.1.7, and the expected LAN/Bonjour metadata. A second build verified the independent `1.1` bundle build number. Source contains iOS Bonjour discovery and file-picker integration. Physical iPhone tests remain pending. A valid distribution identity exists locally. No Bridgecoil distribution profile, Apple API key in the usual local folders, or Apple GitHub secrets were found. The user has been asked for the API key path and IDs; no private key was requested in chat.
 
-The selected identity could not be exported unattended: macOS returned Keychain authentication status -25293. No access-control policy was changed and no GitHub signing secrets were written. User-side export authorization or a password-protected P12 is required. The user requested API-key creation guidance and received the App Store Connect steps.
+The initial unattended certificate export was rejected by Keychain. A subsequent owner-authorized, single-identity export succeeded without changing its access policy or writing a private signing file to disk. All five signing/API secrets are now configured in GitHub. The owner supplied the Apple API key path and IDs through a local metadata file; that file is excluded from Git.
+
+
+## Verified CI and remaining delivery gate
+
+[Unsigned iOS workflow run 41215611335](https://github.com/johnneerdael/bridgecoil/actions/runs/41215611335) completed successfully, including app checks/tests, Rust core tests, the release archive, artifact metadata verification and upload. Independent workflow review found no important code defects. Local frontend validation passed 201 tests and type checking; four iOS metadata/profile tests passed.
+
+An authenticated Apple provisioning API request is currently rejected with `FORBIDDEN_ERROR.PLA_NOT_ACCEPTED`. The Account Holder must review and accept the updated Developer Program License Agreement on Apple's website. No TestFlight signing/upload run was attempted against that known account-level rejection. App Store Connect app-record availability, signed export, Apple processing and physical-device acceptance remain to be verified afterward.
