@@ -44,3 +44,15 @@ fn install_requires_exact_success_and_exit() {
         assert!(!install_succeeded(code, text));
     }
 }
+
+#[test]
+fn a_play_protect_block_says_how_to_continue() {
+    let message = adb_core::backend::install_rejection(
+        "Failure [INSTALL_FAILED_VERIFICATION_FAILURE: Install not allowed for file:///data/app/x.tmp]",
+    );
+    assert!(message.contains("Play Protect"));
+    assert!(message.contains("Install anyway"));
+    assert!(!message.contains("INSTALL_FAILED"));
+    let other = adb_core::backend::install_rejection("Failure [INSTALL_FAILED_OLDER_SDK]");
+    assert!(other.contains("INSTALL_FAILED_OLDER_SDK"));
+}

@@ -152,6 +152,8 @@
   {#if error}<p class="error-text" role="alert">{error}</p>{/if}
   {#if installing}<p class="subtle" role="status">
       {stageLabels[installing.stage] ?? "Working…"}
+      {#if installing.stage === "installing"}Look at the TV in case it's asking
+        you something.{/if}
     </p>{/if}
   <div class="setup-card">
     {#if snapshot.stage === "manager"}
@@ -196,6 +198,16 @@
         Termux keeps your button mappings running on the TV. You won't need to
         type anything in it.
       </p>
+      {#if !snapshot.termux.installed || !snapshot.termuxBoot.installed}<p
+          class="risk-note"
+          role="note"
+        >
+          Google Play Protect may stop this on the TV with "Unsafe app blocked",
+          because Termux is built for an older version of Android. Bridgecoil
+          has checked it really is Termux. To continue, use your remote on the
+          TV and choose <strong>More details</strong>, then
+          <strong>Install anyway</strong>.
+        </p>{/if}
       {#if snapshot.termux.installed && !snapshot.termux.official}<p
           class="error-text"
         >

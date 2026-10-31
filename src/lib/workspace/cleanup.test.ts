@@ -129,3 +129,33 @@ it("asks for the ratings before suggesting anything", async () => {
   await waitFor(() => expect(api.ratingsUpdate).toHaveBeenCalled());
   expect(await screen.findByRole("checkbox", { name: "Turn off ads" })).toBeTruthy();
 });
+
+it("doesn't offer back apps it wouldn't have turned off", async () => {
+  const api = platform({ system: [], disabled: [app("factory", "expert")] });
+  open(api);
+  await screen.findByText(/nothing left/i);
+  expect(screen.queryByRole("button", { name: /back on/ })).toBeNull();
+});
+
+it("remembers an app left unticked after the next batch", async () => {
+  const api = platform({
+    system: [app("keep", "recommended"), app("ads", "recommended")],
+    disabled: [],
+  });
+  const first = render(CleanupTool, {
+    device: { ...device, deviceId: "remembering" },
+    api,
+    reload: 0,
+    onbulk: vi.fn(),
+  });
+  await fireEvent.click(await screen.findByRole("checkbox", { name: "Turn off keep" }));
+  first.unmount();
+  render(CleanupTool, {
+    device: { ...device, deviceId: "remembering" },
+    api,
+    reload: 1,
+    onbulk: vi.fn(),
+  });
+  const keep = await screen.findByRole("checkbox", { name: "Turn off keep" });
+  expect((keep as HTMLInputElement).checked).toBe(false);
+});

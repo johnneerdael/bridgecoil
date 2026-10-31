@@ -459,6 +459,7 @@ async fn save_tv_file(
     state: State<'_, Backend>,
     uploads: State<'_, Uploads>,
 ) -> Result<bool> {
+    state.0.lock().await.can_read(&session_id, &remote).await?;
     let Some((file, path)) = choose_destination(&app, &name).await? else {
         return Ok(false);
     };
@@ -479,7 +480,7 @@ async fn save_tv_file(
         )
         .await;
     if copied.is_err() {
-        // A document URI has no path to remove, so a picked document can stay behind empty.
+        // A document URI has no path to remove, so on a phone part of the file can stay behind.
         if let tauri_plugin_fs::FilePath::Path(partial) = path {
             let _ = std::fs::remove_file(partial);
         }

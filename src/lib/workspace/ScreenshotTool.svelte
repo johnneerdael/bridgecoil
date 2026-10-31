@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { errorMessage, type Device } from "../model";
+  import Modal from "../Modal.svelte";
   import {
     targetOf,
     type Platform,
@@ -52,6 +54,15 @@
       kind: "recording",
       step: next,
     });
+  // A recording outlives this screen, so pick up whatever the TV is doing.
+  onMount(() => {
+    void step({ kind: "status" })
+      .then((state) => {
+        if (state.running) recording = true;
+        else if (state.size) finished = state;
+      })
+      .catch(() => {});
+  });
   function done(state: RecordingState) {
     recording = false;
     if (state.size) finished = state;
@@ -71,8 +82,8 @@
         .then((state) => {
           if (recording && !state.running) done(state);
         })
+        // One missed check isn't the end of a recording, and Stop has to stay available.
         .catch((e) => {
-          recording = false;
           error = errorMessage(e);
         });
     }, 2000);
@@ -138,9 +149,6 @@
 {#if recording}<p role="status">Recording the TV screen…</p>
   <button class="primary" disabled={busy} onclick={stop}>Stop recording</button>
 {:else if finished}
-  {#if saving !== null}<p class="subtle" role="status">
-      Copying… {saving}%
-    </p>{/if}
   <div class="capture-actions">
     <button class="primary" disabled={busy} onclick={saveRecording}
       >Save recording</button
@@ -150,3 +158,12 @@
 {:else}<button class="secondary" disabled={busy} onclick={start}
     >Start recording</button
   >{/if}
+<Modal
+  open={saving !== null}
+  title="Saving recording"
+  dismissible={false}
+  onclose={() => {}}
+>
+  <p role="status">Copying… {saving}%</p>
+  <button class="secondary" onclick={() => api.cancelUpload()}>Cancel</button>
+</Modal>

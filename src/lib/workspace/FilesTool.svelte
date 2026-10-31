@@ -163,8 +163,9 @@
       );
       if (saved) notice = `Saved ${entry.name}.`;
     } catch (e) {
-      if ((e as { kind?: string }).kind !== "cancelled")
-        actionError = errorMessage(e);
+      if ((e as { kind?: string }).kind === "cancelled")
+        notice = "Save cancelled. Delete any partial file left on this device.";
+      else actionError = errorMessage(e);
     } finally {
       saving = null;
     }
@@ -316,10 +317,6 @@
         </p>{/if}
     </div>{/if}
 {/if}
-{#if saving}<div class="file-moving">
-    <p role="status">Saving {saving.name}… {saving.percent}%</p>
-    <button class="secondary" onclick={() => api.cancelUpload()}>Cancel</button>
-  </div>{/if}
 {#if moving}<div class="file-moving">
     <p>Moving <strong>{moving.name}</strong></p>
     <div>
@@ -346,6 +343,17 @@
 {:else if listing?.status === "ok"}<p class="subtle">
     This folder is read-only for ADB.
   </p>{/if}
+
+<!-- The connection is busy until a transfer ends, so stay here with the Cancel button. -->
+<Modal
+  open={!!saving}
+  title={saving ? `Saving ${saving.name}` : ""}
+  dismissible={false}
+  onclose={() => {}}
+>
+  <p role="status">Copying… {saving?.percent}%</p>
+  <button class="secondary" onclick={() => api.cancelUpload()}>Cancel</button>
+</Modal>
 
 <Modal open={!!menu} title={menu?.name ?? ""} onclose={() => (menu = null)}>
   {#if menu}{@const entry = menu}<div class="file-actions">

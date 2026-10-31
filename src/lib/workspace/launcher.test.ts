@@ -128,7 +128,7 @@ it("offers going back when Home didn't open the new launcher", async () => {
     await screen.findByRole("button", { name: "Home opened something else" }),
   );
   await fireEvent.click(
-    await screen.findByRole("button", { name: "Go back to com.vendor.home" }),
+    await screen.findByRole("button", { name: "Use com.vendor.home instead" }),
   );
   await waitFor(() =>
     expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
@@ -148,4 +148,33 @@ it("takes a screenshot on request and shows it", async () => {
   );
   const image = (await screen.findByRole("img")) as HTMLImageElement;
   expect(image.src).toContain("iVBORw0KGgo=");
+});
+
+it("keeps a way back after the new launcher is proven", async () => {
+  const api = platform(fresh);
+  const onreview = vi.fn();
+  open(api, onreview);
+  await fireEvent.click(await screen.findByRole("button", { name: "Home opened it" }));
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Use com.vendor.home instead" }),
+  );
+  await waitFor(() => expect(onreview).toHaveBeenCalled());
+  expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+    kind: "defaultHome",
+    component: stock,
+  });
+});
+
+it("says where to go when stock is off and nothing else is left", async () => {
+  const api = platform(fresh);
+  (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+    homes: [fresh],
+    current: fresh,
+    stock: [],
+  });
+  open(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Home opened something else" }),
+  );
+  expect(await screen.findByText(/undo that in History/)).toBeTruthy();
 });

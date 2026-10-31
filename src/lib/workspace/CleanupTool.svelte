@@ -1,3 +1,8 @@
+<script lang="ts" module>
+  // Applying a review remounts this screen, and a choice to keep an app has to survive that.
+  const keptByDevice = new Map<string, string[]>();
+</script>
+
 <script lang="ts">
   import { errorMessage, type Device } from "../model";
   import {
@@ -25,7 +30,8 @@
   let hasRatings = $state<boolean | null>(null);
   let offer = $state<AppMetadata[]>([]);
   let turnedOff = $state<AppMetadata[]>([]);
-  let skipped = $state<string[]>([]);
+  // svelte-ignore state_referenced_locally
+  let skipped = $state<string[]>(keptByDevice.get(device.deviceId) ?? []);
   let loaded = $state(false);
   let busy = $state(false);
   let error = $state("");
@@ -37,7 +43,8 @@
       .slice(0, reviewLimit),
   );
   const leftOver = $derived(
-    offer.length - skipped.length - chosen.length,
+    offer.filter((app) => !skipped.includes(app.package)).length -
+      chosen.length,
   );
   const plural = (n: number) => (n === 1 ? "app" : "apps");
   async function readAll(
@@ -79,7 +86,8 @@
         if (cancelled) return;
         const disabled = new Set(off.map((app) => app.package));
         offer = candidates.filter((app) => !disabled.has(app.package));
-        turnedOff = off;
+        // Only what this tool would turn off. Some TVs ship with other apps disabled on purpose.
+        turnedOff = off.filter((app) => app.group === "recommended");
         loaded = true;
       } catch (e) {
         if (!cancelled) error = errorMessage(e);
@@ -113,6 +121,7 @@
     skipped = skipped.includes(id)
       ? skipped.filter((p) => p !== id)
       : [...skipped, id];
+    keptByDevice.set(device.deviceId, skipped);
   }
 </script>
 

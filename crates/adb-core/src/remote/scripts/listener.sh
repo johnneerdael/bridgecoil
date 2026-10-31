@@ -46,7 +46,18 @@ paths=" "
 path=
 scan=
 scan_device=
-pressed=
+held=
+# Sets $pressed to when this key went down and forgets it, so a chord times each key by itself.
+take() {
+  pressed=
+  case "$held" in
+    *" $1="*)
+      rest=${held#*" $1="}
+      pressed=${rest%% *}
+      held="${held%%" $1="*} ${rest#* }"
+      ;;
+  esac
+}
 {
   getevent -l 2>/dev/null &
   echo $! > "$events_file"
@@ -77,14 +88,14 @@ pressed=
     EV_KEY)
       read -r now _ < /proc/uptime
       now=${now%.*}${now#*.}
+      take "$device:$3"
       if [ "$4" = DOWN ]; then
-        pressed=$now
+        held="$held $device:$3=$now "
         continue
       fi
       [ "$4" = UP ] || continue
       gesture=tap
       [ -n "$pressed" ] && [ $((now - pressed)) -ge 60 ] && gesture=hold
-      pressed=
       [ "$device" = "$scan_device" ] || scan=
       source=
       case "$paths" in

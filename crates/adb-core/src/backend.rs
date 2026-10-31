@@ -429,7 +429,7 @@ impl Client {
             progress(InstallProgress{stage:"installing".into(),sent:actual.bytes,total:actual.bytes});
             installer_started=true;
             let output=command(&mut active.wire,&format!("pm install -r --user {} {}",active.info.profile_id,shell_quote(&remote))).await?;
-            if !install_succeeded(output.0,&output.1) {return Err(PocError::new("installRejected",format!("Android rejected the installation: {}",output.1.trim())));}
+            if !install_succeeded(output.0,&output.1) {return Err(PocError::new("installRejected",install_rejection(&output.1)));}
             progress(InstallProgress{stage:"verifying".into(),sent:actual.bytes,total:actual.bytes});
             let output=command(&mut active.wire,&format!("dumpsys package {}",shell_quote(&actual.package))).await?;
             if output.0!=Some(0)||installed_version(&output.1)!=Some(actual.version_code){return Err(PocError::new("unknownInstall","Android reported success, but the expected installed version could not be verified. Check the TV before retrying."));}
@@ -586,6 +586,26 @@ impl Client {
         }
         Err(files::after_disconnect(failure))
     }
+    /// Run before asking where to save, because choosing an existing file empties it.
+    pub async fn can_read(&mut self, session: &str, remote: &str) -> Result<()> {
+        let target = self
+            .current_target()
+            .filter(|_| self.active.as_ref().is_some_and(|a| a.info.id == session))
+            .ok_or_else(|| {
+                PocError::new(
+                    "staleSession",
+                    "The connection changed. Reconnect and try again.",
+                )
+            })?;
+        let check = format!("[ -r {} ]", shell_quote(remote));
+        if self.execute_target(&target, &check).await?.success() {
+            return Ok(());
+        }
+        Err(PocError::new(
+            "fileUnavailable",
+            "This file can't be read over ADB.",
+        ))
+    }
     /// Copies a file off the TV. The write side is the caller's, because on a phone it is a
     /// document the user picked rather than a plain path.
     pub async fn download(
@@ -632,6 +652,8 @@ impl Client {
                 {
                     Ok(next) => next.map_err(connection_error)?,
                     Err(files::Interrupted::Cancelled) => {
+                        // Each abandoned channel would use up one of the connection's slots.
+                        let _ = timeout(Duration::from_secs(2), sync.quit()).await;
                         return Err(PocError::new("cancelled", "Download cancelled."));
                     }
                     Err(files::Interrupted::Stalled) => {
@@ -683,6 +705,16 @@ const SHELL_OUTPUT_LIMIT: usize = 1024 * 1024;
 const LARGE_OUTPUT_LIMIT: usize = 24 * 1024 * 1024;
 fn connection_error(e: impl std::fmt::Display) -> PocError {
     PocError::new("connection", e.to_string())
+}
+/// Google Play Protect ends the install this way when someone leaves its prompt on the TV, which
+/// is the owner's call to make rather than something to switch off behind their back.
+pub fn install_rejection(output: &str) -> String {
+    if output.contains("INSTALL_FAILED_VERIFICATION_FAILURE") {
+        return "Google Play Protect stopped this install on the TV. Try again, and on the TV \
+                choose More details, then Install anyway."
+            .into();
+    }
+    format!("Android rejected the installation: {}", output.trim())
 }
 pub fn installed_version(output: &str) -> Option<u64> {
     output.lines().find_map(|l| {

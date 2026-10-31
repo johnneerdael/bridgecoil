@@ -209,3 +209,20 @@ it("drops a saved command the app no longer has", async () => {
   expect(screen.queryByRole("button", { name: /^Gone/ })).toBeNull();
   localStorage.clear();
 });
+
+it("won't aim a saved command at a different app", async () => {
+  const command = catalog
+    .flatMap((group) => group.commands)
+    .find((item) => item.options?.some((option) => option.kind === "app"))!;
+  localStorage.setItem(
+    "bridgecoil.savedCommands",
+    JSON.stringify([{ id: command.id, title: "Kept", values: { app: "org.gone" } }]),
+  );
+  render(CommandsTool, { device, api: platform(), onreview: vi.fn() });
+  await fireEvent.click(await screen.findByRole("button", { name: /^Kept/ }));
+  expect(await screen.findByRole("alert")).toBeTruthy();
+  expect(
+    (screen.getByRole("button", { name: "Run on the TV" }) as HTMLButtonElement).disabled,
+  ).toBe(true);
+  localStorage.clear();
+});

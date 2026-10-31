@@ -34,6 +34,8 @@ function platform(saved = true) {
         ];
       if (q.kind === "logs")
         return { output: q.package === "org.gone" ? "" : "a log line", notRunning: false };
+      if (q.kind === "recording" && q.step.kind === "status")
+        return { running: false, size: null, path };
       return { running: false, size: 1000, path };
     }),
     saveFile: vi.fn(async () => saved),
@@ -44,7 +46,8 @@ const stepsOf = (api: Platform) =>
   (api.query as ReturnType<typeof vi.fn>).mock.calls
     .map(([, q]) => q)
     .filter((q) => q.kind === "recording")
-    .map((q) => q.step.kind);
+    .map((q) => q.step.kind)
+    .filter((kind) => kind !== "status");
 
 it("saves the screenshot it took", async () => {
   const api = platform();
@@ -77,7 +80,10 @@ it("records for the chosen length and removes the file once it's saved", async (
   await fireEvent.click(await screen.findByRole("button", { name: "Stop recording" }));
   await fireEvent.click(await screen.findByRole("button", { name: "Save recording" }));
   await waitFor(() => expect(stepsOf(api)).toEqual(["start", "stop", "discard"]));
-  expect((api.query as ReturnType<typeof vi.fn>).mock.calls[0][1].step.seconds).toBe(60);
+  expect(api.query).toHaveBeenCalledWith(expect.anything(), {
+    kind: "recording",
+    step: { kind: "start", seconds: 60 },
+  });
   expect(api.saveTvFile).toHaveBeenCalledWith(
     "session",
     path,
@@ -98,6 +104,20 @@ it("keeps the recording on the TV until it's actually saved", async () => {
   expect(screen.getByRole("button", { name: "Save recording" })).toBeTruthy();
 });
 
+it("picks a recording back up after leaving the screen", async () => {
+  const api = platform();
+  (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({ running: true, size: 10, path });
+  render(ScreenshotTool, { device, api });
+  expect(await screen.findByRole("button", { name: "Stop recording" })).toBeTruthy();
+});
+
+it("offers a finished recording left on the TV", async () => {
+  const api = platform();
+  (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({ running: false, size: 10, path });
+  render(ScreenshotTool, { device, api });
+  expect(await screen.findByRole("button", { name: "Save recording" })).toBeTruthy();
+});
+
 it("reports a recording that came out empty", async () => {
   const api = platform();
   (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -106,7 +126,7 @@ it("reports a recording that came out empty", async () => {
     path,
   });
   render(ScreenshotTool, { device, api });
-  await fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Start recording" }));
   await fireEvent.click(await screen.findByRole("button", { name: "Stop recording" }));
   expect(await screen.findByRole("alert")).toBeTruthy();
 });

@@ -113,7 +113,11 @@ fn a_key_from_an_unnamed_device_is_ignored() {
 
 #[test]
 fn capture_is_bounded() {
-    assert!(capture_command(8).unwrap().contains("timeout 8 getevent -l"));
+    assert!(
+        capture_command(8)
+            .unwrap()
+            .contains("timeout 8 getevent -l")
+    );
     assert!(capture_command(0).is_err());
     assert!(capture_command(25).is_err());
 }
@@ -209,10 +213,11 @@ paused=
     assert_eq!(state.mappings[0].send, None);
 }
 
-/// Runs the generated listener for real against stand-ins for the TV's tools.
+/// Runs the generated listener for real against stand-ins for the TV's tools. Each event is
+/// (centiseconds since boot, key, DOWN or UP).
 #[cfg(unix)]
-fn run_listener(set: &[Mapping], held_centiseconds: u32) -> String {
-    use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+fn run_events(set: &[Mapping], events: &[(u32, &str, &str)]) -> String {
+    use std::{fmt::Write, fs, os::unix::fs::PermissionsExt, process::Command};
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     let bin = root.join("bin");
@@ -225,25 +230,27 @@ fn run_listener(set: &[Mapping], held_centiseconds: u32) -> String {
         fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
     };
     tool("am", format!("echo \"am $*\" >> {}\n", calls.display()));
-    tool("input", format!("echo \"input $*\" >> {}\n", calls.display()));
-    let released = 1000_00 + held_centiseconds;
     tool(
-        "getevent",
-        format!(
-            "printf 'add device 1: /dev/input/event4\\n  name:     \"Vendor Remote 01\"\\n'\n\
-             echo '1000.00 1.00' > {up}\n\
-             echo '/dev/input/event4: EV_MSC MSC_SCAN 000c0057'\n\
-             echo '/dev/input/event4: EV_KEY KEY_UNKNOWN DOWN'\n\
-             sleep 0.2\n\
-             echo '{}.{:02} 1.00' > {up}\n\
-             echo '/dev/input/event4: EV_MSC MSC_SCAN 000c0057'\n\
-             echo '/dev/input/event4: EV_KEY KEY_UNKNOWN UP'\n\
-             sleep 0.6\n",
-            released / 100,
-            released % 100,
-            up = uptime.display(),
-        ),
+        "input",
+        format!("echo \"input $*\" >> {}\n", calls.display()),
     );
+    let mut stream = String::from(
+        "printf 'add device 1: /dev/input/event4\\n  name:     \"Vendor Remote 01\"\\n'\n",
+    );
+    for (at, key, state) in events {
+        write!(
+            stream,
+            "echo '{}.{:02} 1.00' > {}\n\
+             echo '/dev/input/event4: EV_KEY {key} {state}'\n\
+             sleep 0.15\n",
+            at / 100,
+            at % 100,
+            uptime.display(),
+        )
+        .unwrap();
+    }
+    stream.push_str("sleep 0.6\n");
+    tool("getevent", stream);
     let script = listener_script(set)
         .unwrap()
         .replace("/data/local/tmp/bridgecoil", &root.display().to_string())
@@ -253,22 +260,72 @@ fn run_listener(set: &[Mapping], held_centiseconds: u32) -> String {
     let run = Command::new("sh")
         .arg(&path)
         .arg("--run")
-        .env(
-            "PATH",
-            format!("{}:/bin:/usr/bin", bin.display()),
-        )
+        .env("PATH", format!("{}:/bin:/usr/bin", bin.display()))
         .output()
         .unwrap();
     assert!(run.status.success(), "{run:?}");
     fs::read_to_string(calls).unwrap_or_default()
+}
+#[cfg(unix)]
+fn run_listener(set: &[Mapping], held_centiseconds: u32) -> String {
+    run_events(
+        set,
+        &[
+            (100_000, "KEY_F1", "DOWN"),
+            (100_000 + held_centiseconds, "KEY_F1", "UP"),
+        ],
+    )
+}
+fn f_key(name: &str) -> KeyIdentity {
+    key("Vendor Remote 01", name, None)
+}
+
+#[cfg(unix)]
+#[test]
+fn keys_held_together_are_timed_separately() {
+    let set = [
+        mapping(f_key("KEY_F1"), "org.tap/.Main"),
+        holding(f_key("KEY_F1"), "org.hold/.Main"),
+        mapping(f_key("KEY_F2"), "org.other/.Main"),
+    ];
+    let calls = run_events(
+        &set,
+        &[
+            (100_000, "KEY_F1", "DOWN"),
+            (100_010, "KEY_F2", "DOWN"),
+            (100_020, "KEY_F2", "UP"),
+            (100_200, "KEY_F1", "UP"),
+        ],
+    );
+    assert!(calls.contains("org.hold/.Main"), "{calls}");
+    assert!(calls.contains("org.other/.Main"), "{calls}");
+    assert!(!calls.contains("org.tap/.Main"), "{calls}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_lost_key_up_does_not_turn_the_next_press_into_a_hold() {
+    let set = [
+        mapping(f_key("KEY_F1"), "org.tap/.Main"),
+        holding(f_key("KEY_F1"), "org.hold/.Main"),
+    ];
+    let calls = run_events(
+        &set,
+        &[
+            (100_000, "KEY_F1", "DOWN"),
+            (200_000, "KEY_F1", "DOWN"),
+            (200_010, "KEY_F1", "UP"),
+        ],
+    );
+    assert_eq!(calls, "am start -n org.tap/.Main\n");
 }
 
 #[cfg(unix)]
 #[test]
 fn a_quick_press_runs_the_tap_mapping() {
     let set = [
-        mapping(remote("000c0057"), "org.demo/.Main"),
-        holding(remote("000c0057"), "org.other/.Main"),
+        mapping(f_key("KEY_F1"), "org.demo/.Main"),
+        holding(f_key("KEY_F1"), "org.other/.Main"),
     ];
     assert_eq!(run_listener(&set, 10), "am start -n org.demo/.Main\n");
 }
@@ -277,8 +334,8 @@ fn a_quick_press_runs_the_tap_mapping() {
 #[test]
 fn a_long_press_runs_the_hold_mapping() {
     let set = [
-        mapping(remote("000c0057"), "org.demo/.Main"),
-        holding(remote("000c0057"), "org.other/.Main"),
+        mapping(f_key("KEY_F1"), "org.demo/.Main"),
+        holding(f_key("KEY_F1"), "org.other/.Main"),
     ];
     assert_eq!(run_listener(&set, 80), "am start -n org.other/.Main\n");
 }
@@ -286,21 +343,21 @@ fn a_long_press_runs_the_hold_mapping() {
 #[cfg(unix)]
 #[test]
 fn a_slow_press_still_counts_when_only_a_tap_is_mapped() {
-    let set = [mapping(remote("000c0057"), "org.demo/.Main")];
+    let set = [mapping(f_key("KEY_F1"), "org.demo/.Main")];
     assert_eq!(run_listener(&set, 80), "am start -n org.demo/.Main\n");
 }
 
 #[cfg(unix)]
 #[test]
 fn a_tap_does_nothing_when_only_a_hold_is_mapped() {
-    let set = [holding(remote("000c0057"), "org.other/.Main")];
+    let set = [holding(f_key("KEY_F1"), "org.other/.Main")];
     assert_eq!(run_listener(&set, 10), "");
 }
 
 #[cfg(unix)]
 #[test]
 fn a_mapping_can_press_a_different_button() {
-    let set = [sending(remote("000c0057"), "HOME")];
+    let set = [sending(f_key("KEY_F1"), "HOME")];
     assert_eq!(run_listener(&set, 10), "input keyevent KEYCODE_HOME\n");
 }
 

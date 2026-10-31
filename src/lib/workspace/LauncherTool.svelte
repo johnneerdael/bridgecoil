@@ -79,6 +79,19 @@
     });
 </script>
 
+{#snippet wayBack()}
+  {#each others as component (component)}<button
+      class="secondary"
+      disabled={busy}
+      onclick={() => makeDefault(component)}
+      >Use {packageOf(component)} instead</button
+    >{:else}<p class="subtle">
+      No other launcher is available. If you turned off the one your TV came
+      with, undo that in History or turn it back on in Apps, under Disabled
+      apps.
+    </p>{/each}
+{/snippet}
+
 {#if error}<p class="error-text" role="alert">{error}</p>{/if}
 {#if !homes}{#if !error}<p class="subtle" role="status">Checking the TV…</p>{/if}
 {:else if tried}
@@ -116,13 +129,8 @@
 {:else if result === "wrong"}
   <div class="setup-card">
     <h3>This TV kept its own Home</h3>
-    <p>Some TVs don't let the Home button change. You can go back.</p>
-    {#each stockLeft as component (component)}<button
-        class="primary"
-        disabled={busy}
-        onclick={() => makeDefault(component)}
-        >Go back to {packageOf(component)}</button
-      >{/each}
+    <p>Some TVs don't let the Home button change.</p>
+    {@render wayBack()}
   </div>
 {:else if result === "proven"}
   <div class="setup-card">
@@ -137,6 +145,7 @@
           onclick={() => turnOff(component)}
           >Turn off {packageOf(component)}</button
         >{/each}{/if}
+    {@render wayBack()}
   </div>
 {:else}
   <p class="subtle">In use: {homes.current ?? "the TV didn't say"}</p>

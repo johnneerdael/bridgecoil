@@ -132,8 +132,15 @@
       choice = tool,
       diagnostic = section;
     reload;
-    if (!choice || selfLoading.includes(choice)) return;
-    if (choice === "diagnostics" && diagnostic === "logs") return;
+    // A load this replaces can no longer clear its own busy state.
+    if (
+      !choice ||
+      selfLoading.includes(choice) ||
+      (choice === "diagnostics" && diagnostic === "logs")
+    ) {
+      busy = false;
+      return;
+    }
     let cancelled = false;
     busy = true;
     error = "";

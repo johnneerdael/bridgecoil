@@ -30,6 +30,8 @@ Bridgecoil talks to the TV directly over wireless debugging. It needs no compute
 
 You don't download anything beforehand or type anything in Termux. Releases signed by anyone other than the expected developer are refused.
 
+Google Play Protect may stop the Termux apps with "Unsafe app blocked", because they're built for an older version of Android. Use your remote on the TV to choose **More details**, then **Install anyway**. Bridgecoil leaves that decision to you and never turns Play Protect off.
+
 ## Get started
 
 1. Install the APK from [Releases](https://github.com/johnneerdael/bridgecoil/releases) on an arm64 Android phone.
@@ -46,7 +48,7 @@ You don't download anything beforehand or type anything in Termux. Releases sign
 - Shizuku-Next can't be installed over a different app that holds the Shizuku name. Porter can sit alongside it.
 - Turning off an app only affects that TV. Unrated apps are unknown, not safe.
 
-Bridgecoil has been tested end to end on Android TV emulators. Real TVs differ, so check the [validation notes](docs/validation) for what has and hasn't been proven on physical hardware.
+Guided setup has been run end to end on an Android TV 16 emulator image with secure ADB and no root. It has not been completed on a physical TV yet, and real TVs differ.
 
 ## Development
 

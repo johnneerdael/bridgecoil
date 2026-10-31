@@ -97,8 +97,11 @@
           label: a.label,
         }));
       }
-      if (!apps.some((a) => a.package === values.app))
-        values = { ...values, app: apps[0]?.package ?? "" };
+      if (kept?.app && !apps.some((a) => a.package === kept.app)) {
+        // Never swap in a different app: this might be about to delete its data.
+        values = { ...values, app: "" };
+        error = "That app isn't on this TV.";
+      } else if (!values.app) values = { ...values, app: apps[0]?.package ?? "" };
     } catch (e) {
       error = errorMessage(e);
     }

@@ -18,6 +18,10 @@ use adb_core::{
 };
 use std::time::Duration;
 
+/// A secure TV prompts for every new key, so a run can keep one it has already been allowed.
+fn identity(dir: &std::path::Path) -> std::path::PathBuf {
+    std::env::var_os("BC_IDENTITY").map_or_else(|| dir.join("identity"), Into::into)
+}
 async fn install(c: &mut Client, id: ToolId, dir: &std::path::Path) {
     let info = c.status().unwrap();
     let abis = info.abis.clone();
@@ -101,7 +105,7 @@ async fn walks_every_stage() {
         Ok("porter") => Manager::Porter,
         _ => Manager::ShizukuNext,
     };
-    let mut c = Client::new(dir.path().join("identity"));
+    let mut c = Client::new(identity(dir.path()));
     c.connect(std::env::var("BC_ENDPOINT").unwrap(), true)
         .await
         .unwrap();
@@ -154,19 +158,30 @@ fn press() {
 fn hold() {
     key_down_up("sleep 1;");
 }
+/// With no root the emulator console is the only way to a real key event, and it can only tap.
+fn can_hold() -> bool {
+    std::env::var("BC_EMU_KEY").is_err()
+}
 fn key_down_up(between: &str) {
     let device = std::env::var("BC_DEVICE").unwrap();
+    let adb = |args: &[&str]| {
+        let done = std::process::Command::new("adb")
+            .args(["-s", &device])
+            .args(args)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        assert!(done.status.success());
+    };
+    if !can_hold() {
+        adb(&["emu", "event", "text", "a"]);
+        return;
+    }
     let keys = format!(
         "sendevent /dev/input/event0 1 116 1; sendevent /dev/input/event0 0 0 0; {between} \
          sendevent /dev/input/event0 1 116 0; sendevent /dev/input/event0 0 0 0"
     );
-    let done = std::process::Command::new("adb")
-        .args(["-s", &device, "shell", "su", "0", "sh", "-c"])
-        .arg(format!("'{keys}'"))
-        .stdin(std::process::Stdio::null())
-        .output()
-        .unwrap();
-    assert!(done.status.success());
+    adb(&["shell", "su", "0", "sh", "-c", &format!("'{keys}'")]);
 }
 async fn wake(c: &mut Client, t: &Target) {
     c.shell(t, "input keyevent KEYCODE_WAKEUP").await.unwrap();
@@ -194,7 +209,7 @@ async fn a_learned_button_opens_its_app() {
         mappings::{Mapping, MappingChange},
     };
     let dir = tempfile::tempdir().unwrap();
-    let mut c = Client::new(dir.path().join("identity"));
+    let mut c = Client::new(identity(dir.path()));
     c.connect(std::env::var("BC_ENDPOINT").unwrap(), true)
         .await
         .unwrap();
@@ -212,7 +227,10 @@ async fn a_learned_button_opens_its_app() {
     presser.join().unwrap();
     println!("captured {}", result["presses"]);
     let key: KeyIdentity = serde_json::from_value(result["presses"][0].clone()).unwrap();
-    assert_eq!(key.key, "KEY_POWER");
+    assert_eq!(
+        key.key,
+        std::env::var("BC_EMU_KEY").unwrap_or_else(|_| "KEY_POWER".into())
+    );
     wake(&mut c, &t).await;
     c.shell(&t, "input keyevent KEYCODE_HOME").await.unwrap();
 
@@ -222,12 +240,7 @@ async fn a_learned_button_opens_its_app() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|a| {
-            a["component"]
-                .as_str()
-                .unwrap()
-                .starts_with("com.android.settings/")
-        })
+        .find(|a| a["component"].as_str().unwrap().contains(".settings/"))
         .unwrap();
     let mapping = Mapping {
         key: key.clone(),
@@ -260,7 +273,7 @@ async fn a_learned_button_opens_its_app() {
     let fired = state["log"].as_array().unwrap().len();
     let shown = top(&mut c, &t).await;
     println!("top {}", shown.trim());
-    assert!(shown.contains("com.android.settings"));
+    assert!(shown.contains(".settings"));
     assert!(
         state["log"]
             .as_array()
@@ -312,22 +325,24 @@ async fn a_learned_button_opens_its_app() {
         w.apply(&mut c, &review.id).await.unwrap().status,
         OperationStatus::Verified
     );
-    hold();
-    tokio::time::sleep(Duration::from_secs(2)).await;
-    wake(&mut c, &t).await;
-    let held = mapping_state(&mut c, &t).await;
-    println!("hold log {}", held["log"]);
-    assert!(
-        held["log"]
-            .as_array()
-            .unwrap()
-            .last()
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .ends_with("sent KEYCODE_MEDIA_STOP"),
-        "a real long press runs the hold mapping"
-    );
+    if can_hold() {
+        hold();
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        wake(&mut c, &t).await;
+        let held = mapping_state(&mut c, &t).await;
+        println!("hold log {}", held["log"]);
+        assert!(
+            held["log"]
+                .as_array()
+                .unwrap()
+                .last()
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .ends_with("sent KEYCODE_MEDIA_STOP"),
+            "a real long press runs the hold mapping"
+        );
+    }
 
     let snap = inspect(&mut c, &t).await.unwrap();
     println!("listener {} monitor {}", snap.listener, snap.monitor);
@@ -352,7 +367,7 @@ async fn a_learned_button_opens_its_app() {
 #[ignore]
 async fn a_screenshot_and_launchers_come_back_whole() {
     let dir = tempfile::tempdir().unwrap();
-    let mut c = Client::new(dir.path().join("identity"));
+    let mut c = Client::new(identity(dir.path()));
     c.connect(std::env::var("BC_ENDPOINT").unwrap(), true)
         .await
         .unwrap();
@@ -394,13 +409,25 @@ async fn a_screenshot_and_launchers_come_back_whole() {
     assert_eq!((n, copied.len()), (3_000_000, 3_000_000));
     let hash = c.shell(&t, &format!("sha256sum {path}")).await.unwrap();
     use sha2::Digest;
-    assert!(hash.stdout.starts_with(&hex::encode(sha2::Sha256::digest(&copied))));
+    assert!(
+        hash.stdout
+            .starts_with(&hex::encode(sha2::Sha256::digest(&copied)))
+    );
     let denied = c
-        .download(&id, "/data/system/users/0.xml", &mut Vec::new(), &cancel, |_, _| {})
+        .download(
+            &id,
+            "/data/system/users/0.xml",
+            &mut Vec::new(),
+            &cancel,
+            |_, _| {},
+        )
         .await
         .unwrap_err();
     println!("denied {} {}", denied.kind, denied.message);
-    assert!(c.status().is_some(), "a refused file leaves the connection up");
+    assert!(
+        c.status().is_some(),
+        "a refused file leaves the connection up"
+    );
     c.shell(&t, &format!("rm -f {path}")).await.unwrap();
 
     let start = Query::Recording {
@@ -440,7 +467,10 @@ async fn a_screenshot_and_launchers_come_back_whole() {
         package: Some("com.android.settings".into()),
         lines: 200,
     };
-    println!("logs {}", &query(&mut c, &t, logs).await.unwrap().to_string()[..60]);
+    println!(
+        "logs {}",
+        &query(&mut c, &t, logs).await.unwrap().to_string()[..60]
+    );
     let logs = Query::Logs {
         level: "debug".into(),
         package: None,
@@ -451,4 +481,56 @@ async fn a_screenshot_and_launchers_come_back_whole() {
 
     let homes = query(&mut c, &t, Query::Launchers).await.unwrap();
     println!("launchers {homes}");
+}
+
+#[tokio::test]
+#[ignore]
+async fn a_restart_is_noticed() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = Client::new(identity(dir.path()));
+    c.connect(std::env::var("BC_ENDPOINT").unwrap(), true)
+        .await
+        .unwrap();
+    let t = c.current_target().unwrap();
+    let state = query(&mut c, &t, Query::Mappings).await.unwrap();
+    println!("after restart {state}");
+    assert_eq!(state["running"], true);
+    assert_eq!(state["survivedRestart"], true);
+}
+
+#[tokio::test]
+#[ignore]
+async fn cancelled_downloads_leave_the_connection_working() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = Client::new(identity(dir.path()));
+    c.connect(std::env::var("BC_ENDPOINT").unwrap(), true)
+        .await
+        .unwrap();
+    let t = c.current_target().unwrap();
+    let id = c.status().unwrap().id;
+    let path = "/data/local/tmp/bridgecoil-cancel-test";
+    c.shell(&t, &format!("head -c 8000000 /dev/urandom > {path}"))
+        .await
+        .unwrap();
+    for round in 0..40 {
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let stopped = c
+            .download(&id, path, &mut Vec::new(), &cancel, |received, _| {
+                if received > 200_000 {
+                    cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+                }
+            })
+            .await;
+        assert_eq!(stopped.unwrap_err().kind, "cancelled", "round {round}");
+        let id_now = c.status().map(|s| s.id);
+        assert_eq!(id_now.as_deref(), Some(id.as_str()), "round {round}");
+    }
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let mut whole = Vec::new();
+    c.download(&id, path, &mut whole, &cancel, |_, _| {})
+        .await
+        .unwrap();
+    assert_eq!(whole.len(), 8_000_000);
+    c.shell(&t, &format!("rm -f {path}")).await.unwrap();
+    println!("40 cancels, then a whole file");
 }
