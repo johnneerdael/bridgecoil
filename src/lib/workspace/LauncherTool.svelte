@@ -319,7 +319,21 @@
     >
     <button class="secondary" onclick={() => (tried = null)}>No</button>
   </div>
-{:else if outranked && homes.current && !overriding.length}
+{:else if overriding.length}
+  <div class="setup-card">
+    <h3>Which launcher do you want?</h3>
+    <p>
+      Android's default is {homes.current ? titleOf(homes.current) : "another launcher"},
+      but {nameOf(overriding[0])} takes the Home button back. Keep the one you
+      want, and the other is turned off. You can undo this from History or Apps.
+    </p>
+    {#each contenders as component (component)}<button
+        class="secondary"
+        disabled={busy}
+        onclick={() => switchTo(component)}>Keep {titleOf(component)}</button
+      >{/each}
+  </div>
+{:else if outranked && homes.current}
   {@const inUse = homes.current}
   <div class="setup-card">
     <h3>Your TV's own launcher comes first</h3>
@@ -342,7 +356,7 @@
       onclick={() => makeDefault(inUse)}>Keep {nameOf(inUse)}</button
     >
   </div>
-{:else if !onStock && result === null && homes.current && !confirmed && !overriding.length}
+{:else if !onStock && result === null && homes.current && !confirmed}
   <div class="setup-card">
     <h3>Press Home on your remote</h3>
     <p>
@@ -361,20 +375,8 @@
     {@render wayBack()}
   </div>
 {:else}
-  {#if overriding.length}<div class="setup-card">
-      <h3>Which launcher do you want?</h3>
-      <p>
-        Your TV's default is {homes.current ? titleOf(homes.current) : "another launcher"},
-        but {nameOf(overriding[0])} takes the Home button back. Keep the one you
-        want, and the other is turned off. You can undo this from History or Apps.
-      </p>
-      {#each contenders as component (component)}<button
-          class="secondary"
-          disabled={busy}
-          onclick={() => switchTo(component)}>Keep {titleOf(component)}</button
-        >{/each}
-    </div>{/if}
-  {#if !overriding.length && (result === "proven" || (confirmed && stockLeft.length))}<div class="setup-card">
+  <div class="launcher-page">
+  {#if result === "proven" || (confirmed && stockLeft.length)}<div class="setup-card">
       <h3>Your launcher is in charge</h3>
       {#if stockLeft.length}<p>
           You can switch off the launcher your TV came with. Some TV features can
@@ -388,7 +390,7 @@
           >{/each}{/if}
       {@render wayBack()}
     </div>{/if}
-  <p class="subtle">In use: {homes.current ? nameOf(homes.current) : "the TV didn't say"}</p>
+  <p class="subtle">In use: {homes.current ? titleOf(homes.current) : "the TV didn't say"}</p>
   {#if installing}<p class="subtle" role="status">
       {stageLabels[installing.stage] ?? "Working…"}
     </p>{/if}
@@ -433,4 +435,5 @@
     >Install from a file</button
   >
   {@render restoreButtons()}
+  </div>
 {/if}

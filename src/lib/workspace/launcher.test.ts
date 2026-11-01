@@ -357,11 +357,12 @@ it("can keep the default and turn off the launcher taking Home back", async () =
   );
 });
 
-it("still lets you reach every launcher while asking", async () => {
+it("asks that first, with nothing else on screen", async () => {
   open(contested());
   await screen.findByText("Which launcher do you want?");
-  expect(screen.getByRole("button", { name: "Install from a file" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Update Projectivy" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Install from a file" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Update Projectivy" })).toBeNull();
+  expect(screen.queryByText(/In use/)).toBeNull();
   expect(screen.queryByText(/Press Home/)).toBeNull();
 });
 
@@ -444,7 +445,7 @@ it("offers going back when Home didn't open the new launcher", async () => {
 
 it("names the launcher in use the way the rest of the page does", async () => {
   open(platform(stock));
-  expect(await screen.findByText("In use: com.vendor.home")).toBeTruthy();
+  expect(await screen.findByText("In use: your TV's launcher")).toBeTruthy();
 });
 
 describe("when the TV's own launcher comes first", () => {

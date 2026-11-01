@@ -4,9 +4,9 @@
 
 ## "Which launcher do you want?"
 
-Android has one launcher as its default, while another takes the Home button back through its accessibility service. Projectivy's **Override current launcher** option does this. Bridgecoil can't know which one you want, so it asks. **Keep {name}** makes that launcher the default, opens it and turns the other one off, after a review.
+Android has one launcher as its default, while another takes the Home button back through its accessibility service. Projectivy's **Override current launcher** option does this. Bridgecoil can't know which one you want, so it asks before showing anything else. **Keep {name}** makes that launcher the default, opens it and turns the other one off, after a review. Your list of launchers appears once you've chosen.
 
-If you use an override on purpose and want to leave things as they are, ignore the question. Everything else on the screen still works, including the list of launchers.
+If you use an override on purpose and want to leave things as they are, leave this screen without choosing, and nothing changes.
 
 Turning a launcher off also clears its accessibility setting. If you turn it back on later, you'll have to turn that on again in the launcher's own settings.
 

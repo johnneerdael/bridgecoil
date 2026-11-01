@@ -958,9 +958,27 @@ textarea {
   flex: 1;
   min-width: 0;
 }
-.list-row > .truncate + button {
+.list-row > .truncate ~ button {
   flex: none;
   width: auto;
+}
+/* One scrolling page, so a card above the list can't squeeze either of them. */
+.launcher-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.launcher-page > * {
+  flex: none;
+}
+.feature-page .launcher-page .row-list,
+.launcher-page .setup-card {
+  flex: none;
+  overflow: visible;
 }
 .truncate {
   overflow: hidden;

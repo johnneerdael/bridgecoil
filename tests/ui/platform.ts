@@ -252,7 +252,11 @@ async function query<T>(t: Target, q: Query): Promise<T> {
         homes: [
           "org.bridgecoil.fixture.home/.MainActivity",
           "org.bridgecoil.fixture.extra/.Home",
+          "nl.neerdael.backdrop_launcher/.MainActivity",
+          "com.spocky.projengmenu/.ui.home.MainActivity",
         ],
+        overriding: ["com.spocky.projengmenu"],
+        restorable: [{ package: "com.vendor.stock", component: "com.vendor.stock/.Home" }],
         stock: ["org.bridgecoil.fixture.home/.MainActivity"],
         current: "org.bridgecoil.fixture.home/.MainActivity",
         catalog: [
@@ -261,7 +265,7 @@ async function query<T>(t: Target, q: Query): Promise<T> {
             name: "Backdrop",
             package: "nl.neerdael.backdrop_launcher",
             installed: true,
-            version: "1.4.10",
+            version: "1.4.9",
             official: true,
           },
           {
