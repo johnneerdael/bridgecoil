@@ -306,6 +306,7 @@ async fn restoring_turns_the_launcher_on_and_makes_it_the_default() {
             &target(),
             Action::RestoreHome {
                 component: "com.google.tvlauncher/.Home".into(),
+                enable: Vec::new(),
             },
         )
         .await
@@ -330,6 +331,7 @@ async fn restoring_refuses_a_component_that_could_be_a_command() {
             &target(),
             Action::RestoreHome {
                 component: "com.good/.Home; reboot".into(),
+                enable: Vec::new(),
             },
         )
         .await;
@@ -339,7 +341,7 @@ async fn restoring_refuses_a_component_that_could_be_a_command() {
 fn switching(replacing: Option<&str>) -> Action {
     Action::SwitchHome {
         component: "com.vendor.home/.Main".into(),
-        replacing: replacing.map(str::to_owned),
+        replacing: replacing.into_iter().map(str::to_owned).collect(),
     }
 }
 
@@ -424,5 +426,48 @@ async fn a_switch_counts_only_once_the_old_launcher_is_off() {
     let done = w.apply(&mut d, &on.id).await.unwrap();
     assert_eq!(done.status, OperationStatus::Unknown);
     assert!(done.error.unwrap().contains("org.fresh is still on"));
+}
+
+/// Every launcher that could keep Home goes off, or a switch could report success with one on.
+#[tokio::test]
+async fn switching_turns_off_every_launcher_in_the_way() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    let review = w
+        .prepare(
+            &mut tv("org.fresh"),
+            &target(),
+            Action::SwitchHome {
+                component: "com.vendor.home/.Main".into(),
+                replacing: vec!["org.fresh".into(), "org.third".into()],
+            },
+        )
+        .await
+        .unwrap();
+    let command = &review.commands[0];
+    assert!(command.contains("pm disable-user --user 0 'org.fresh'"));
+    assert!(command.contains("pm disable-user --user 0 'org.third'"));
+    assert_eq!(command.matches("&&").count(), 3, "{command}");
+}
+
+/// Undo goes through the same state check as everything else, so a mismatch refuses it.
+#[tokio::test]
+async fn undoing_a_switch_brings_back_every_launcher_it_turned_off() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    let mut d = tv("org.fresh");
+    let review = w
+        .prepare(&mut d, &target(), switching(Some("com.google.tvlauncher")))
+        .await
+        .unwrap();
+    let done = w.apply(&mut d, &review.id).await.unwrap();
+    assert_eq!(done.status, OperationStatus::Verified, "{:?}", done.error);
+    let undo = w.prepare_recovery(&mut d, &done.id).await.unwrap();
+    let command = &undo.commands[0];
+    let back = command.find("pm enable --user 0 'com.google.tvlauncher'").unwrap();
+    let default = command
+        .find("set-home-activity --user 0 'com.vendor.home/.Main'")
+        .unwrap();
+    assert!(back < default, "{command}");
 }
 

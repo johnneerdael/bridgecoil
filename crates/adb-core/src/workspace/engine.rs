@@ -63,15 +63,18 @@ pub enum Action {
     DefaultHome {
         component: String,
     },
-    /// Turns a disabled launcher back on and makes it the default, in one step.
+    /// Turns a disabled launcher back on and makes it the default, in one step. `enable` lists
+    /// other launchers to turn back on, which is how a switch is undone.
     RestoreHome {
         component: String,
+        #[serde(default)]
+        enable: Vec<String>,
     },
-    /// Hands Home to a launcher: makes it the default, opens it, and turns the old one off. A
-    /// launcher that stays on can take Home back, as Projectivy's override does.
+    /// Hands Home to a launcher: makes it the default, opens it, and turns off every launcher in
+    /// `replacing`. One left on can take Home back, as Projectivy's override does.
     SwitchHome {
         component: String,
-        replacing: Option<String>,
+        replacing: Vec<String>,
     },
     Permission {
         package: String,
@@ -336,11 +339,13 @@ impl Workspace {
                 component: before.clone(),
             });
         }
-        if let Action::SwitchHome { .. } = &action {
+        if let Action::SwitchHome { replacing, .. } = &action {
             let home = before.lines().next().unwrap_or_default();
             if component_arg(home).is_ok() {
+                let package = home.split('/').next().unwrap_or_default();
                 recovery = Some(Action::RestoreHome {
                     component: home.to_owned(),
+                    enable: replacing.iter().filter(|p| *p != package).cloned().collect(),
                 });
             }
         }
@@ -469,13 +474,15 @@ impl Workspace {
                             };
                             if row.status == OperationStatus::Unknown {
                                 row.error = Some(match &p.action {
-                                    Action::SwitchHome {
-                                        component,
-                                        replacing: Some(old),
-                                    } if after.lines().next() == Some(component) => format!(
-                                        "{} is the default now, but {old} is still on.",
-                                        component.split('/').next().unwrap_or_default()
-                                    ),
+                                    Action::SwitchHome { component, .. }
+                                        if after.lines().next() == Some(component) =>
+                                    {
+                                        format!(
+                                            "{} is the default now, but {} is still on.",
+                                            component.split('/').next().unwrap_or_default(),
+                                            after.lines().skip(1).collect::<Vec<_>>().join(", ")
+                                        )
+                                    }
                                     Action::DefaultHome { .. }
                                     | Action::RestoreHome { .. }
                                     | Action::SwitchHome { .. }
@@ -735,15 +742,11 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
             )
         }
         Action::DefaultHome { .. } | Action::RestoreHome { .. } => home_query(t.profile_id),
-        Action::SwitchHome { replacing, .. } => match replacing {
-            Some(old) => format!(
-                "{}; pm list packages -d --user {} {}",
-                home_query(t.profile_id),
-                t.profile_id,
-                shell_quote(old)
-            ),
-            None => home_query(t.profile_id),
-        },
+        Action::SwitchHome { .. } => format!(
+            "{}; pm list packages -d --user {}",
+            home_query(t.profile_id),
+            t.profile_id
+        ),
         Action::Setup { .. } => facts_command().to_owned(),
         Action::Mappings { .. } => mappings::state_command(),
         Action::Shell { .. } => return Ok(String::new()),
@@ -780,14 +783,14 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
                 .unwrap_or("")
                 .trim()
                 .to_owned();
-            let off = replacing.as_ref().is_none_or(|old| {
+            let still_on = replacing.iter().filter(|old| {
                 let wanted = format!("package:{old}");
-                output.stdout.lines().any(|l| l.trim() == wanted)
+                !output.stdout.lines().any(|l| l.trim() == wanted)
             });
-            Ok(match replacing {
-                Some(old) if !off => format!("{home}\n{old}"),
-                _ => home,
-            })
+            Ok(std::iter::once(home.as_str())
+                .chain(still_on.map(String::as_str))
+                .collect::<Vec<_>>()
+                .join("\n"))
         }
         Action::DefaultHome { .. } | Action::RestoreHome { .. } => Ok(output
             .stdout
@@ -818,10 +821,9 @@ fn verified(a: &Action, after: &str) -> bool {
             }
         }
         Action::Setting { value, .. } => after == value.as_deref().unwrap_or("null"),
-        Action::DefaultHome { component } | Action::RestoreHome { component } => {
-            after == component
-        }
-        Action::SwitchHome { component, .. } => after == component,
+        Action::DefaultHome { component }
+        | Action::RestoreHome { component, .. }
+        | Action::SwitchHome { component, .. } => after == component,
         Action::Shell { .. } => false,
         Action::Permission { grant, .. } => after == if *grant { "granted" } else { "denied" },
         Action::FileDelete { path } | Action::FileCreateFolder { path } => {
@@ -1045,7 +1047,7 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
                 "cmd package set-home-activity --user {user} {c} && am start -n {c}"
             );
             let mut effect = format!("Make {package} the default for this profile and open it.");
-            if let Some(old) = replacing {
+            for old in replacing {
                 if old == package || old == "android" || old.ends_with(".settings") {
                     return Err(PocError::new(
                         "protected",
@@ -1054,9 +1056,7 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
                 }
                 let p = package_arg(old)?;
                 command.push_str(&format!(" && pm disable-user --user {user} {p}"));
-                effect = format!(
-                    "Make {package} the default for this profile, open it, and turn off {old}. Its data stays on the TV."
-                );
+                effect.push_str(&format!(" Turn off {old}. Its data stays on the TV."));
                 losses.push(format!("Some TV features can depend on {old}."));
             }
             (
@@ -1065,14 +1065,18 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
                 command,
             )
         }
-        Action::RestoreHome { component } => {
+        Action::RestoreHome { component, enable } => {
             let c = component_arg(component)?;
             let package = component.split('/').next().unwrap_or_default();
-            let p = package_arg(package)?;
+            let mut command = String::new();
+            for name in std::iter::once(package).chain(enable.iter().map(String::as_str)) {
+                command.push_str(&format!("pm enable --user {user} {} && ", package_arg(name)?));
+            }
+            command.push_str(&format!("cmd package set-home-activity --user {user} {c}"));
             (
                 format!("Restore your TV's launcher · {package}"),
                 "Turn the launcher your TV came with back on and make it the default for this profile. Test the physical Home button afterwards.".into(),
-                format!("pm enable --user {user} {p} && cmd package set-home-activity --user {user} {c}"),
+                command,
             )
         }
         Action::Mappings { change } => {

@@ -260,7 +260,7 @@ it("only offers making it the default after the try worked", async () => {
   expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
     kind: "switchHome",
     component: fresh,
-    replacing: "com.vendor.home",
+    replacing: ["com.vendor.home"],
   });
 });
 
@@ -283,7 +283,7 @@ it("turns off the launcher it replaces, in the same step", async () => {
     expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
       kind: "switchHome",
       component: fresh,
-      replacing: "com.spocky.projengmenu",
+      replacing: ["com.spocky.projengmenu"],
     }),
   );
   await waitFor(() =>
@@ -302,10 +302,33 @@ it("doesn't try to turn off something that isn't a launcher", async () => {
   await fireEvent.click(
     await screen.findByRole("button", { name: "Use org.fresh.launcher instead" }),
   );
-  await waitFor(() => expect(api.prepare).toHaveBeenCalled());
-  expect(api.prepare).not.toHaveBeenCalledWith(
-    expect.anything(),
-    expect.objectContaining({ kind: "switchHome" }),
+  await waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "switchHome",
+      component: fresh,
+      replacing: [],
+    }),
+  );
+});
+
+// A launcher left on could take Home back straight after a success.
+it("turns off everything that could keep Home, not only the one in use", async () => {
+  const api = onProjectivy();
+  (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+    homes: [fresh, projectivy, "org.third/.Home"],
+    current: fresh,
+    stock: [],
+    catalog: [listed({})],
+    overriding: ["com.spocky.projengmenu", "org.third"],
+  });
+  open(api);
+  await fireEvent.click(await screen.findByRole("button", { name: "Turn off Projectivy" }));
+  await waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "switchHome",
+      component: fresh,
+      replacing: ["com.spocky.projengmenu", "org.third"],
+    }),
   );
 });
 
@@ -324,9 +347,9 @@ it("says when another launcher is still taking over Home", async () => {
   await fireEvent.click(screen.getByRole("button", { name: "Turn off Projectivy" }));
   await waitFor(() =>
     expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
-      kind: "package",
-      package: "com.spocky.projengmenu",
-      action: "disable",
+      kind: "switchHome",
+      component: fresh,
+      replacing: ["com.spocky.projengmenu"],
     }),
   );
 });
@@ -384,8 +407,9 @@ it("offers going back when Home didn't open the new launcher", async () => {
   );
   await waitFor(() =>
     expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
-      kind: "defaultHome",
+      kind: "switchHome",
       component: stock,
+      replacing: ["org.fresh.launcher"],
     }),
   );
 });
@@ -417,9 +441,9 @@ describe("when the TV's own launcher comes first", () => {
     );
     await waitFor(() =>
       expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
-        kind: "package",
-        package: "com.vendor.home",
-        action: "disable",
+        kind: "switchHome",
+        component: fresh,
+        replacing: ["com.vendor.home"],
       }),
     );
     expect(onreview).toHaveBeenCalled();
@@ -505,8 +529,9 @@ it("keeps a way back after the new launcher is proven", async () => {
   );
   await waitFor(() => expect(onreview).toHaveBeenCalled());
   expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
-    kind: "defaultHome",
+    kind: "switchHome",
     component: stock,
+    replacing: ["org.fresh.launcher"],
   });
 });
 

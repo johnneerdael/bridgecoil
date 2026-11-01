@@ -219,8 +219,12 @@
   const switchTo = (component: string) =>
     attempt(async () => {
       keepPick(component);
+      // Everything that could keep Home goes off, so this can't report success with one left on.
       const inUse = packageOf(homes?.current ?? "");
-      const replacing = homes?.homes.some((h) => packageOf(h) === inUse) ? inUse : null;
+      const launcher = homes?.homes.some((h) => packageOf(h) === inUse);
+      const replacing = [...new Set([...(launcher ? [inUse] : []), ...overriding])].filter(
+        (p) => p !== packageOf(component),
+      );
       onreview(
         await api.prepare(targetOf(device), {
           kind: "switchHome",
@@ -278,7 +282,7 @@
   {#each others as component (component)}<button
       class="secondary"
       disabled={busy}
-      onclick={() => makeDefault(component)}
+      onclick={() => switchTo(component)}
       >Use {nameOf(component)} instead</button
     >{:else}{#if restorable.length}{@render restoreButtons()}{:else}<p class="subtle">
         To go back, undo turning off the launcher your TV came with in History,
@@ -317,7 +321,9 @@
     <button
       class="primary"
       disabled={busy}
-      onclick={() => turnOff(overriding[0])}>Turn off {nameOf(overriding[0])}</button
+      onclick={() =>
+        homes?.current ? switchTo(homes.current) : turnOff(overriding[0])}
+      >Turn off {nameOf(overriding[0])}</button
     >
   </div>
 {:else if outranked && homes.current}
@@ -332,7 +338,10 @@
     <button
       class="primary"
       disabled={busy}
-      onclick={() => turnOff(inUse)}>Turn off {nameOf(inUse)}</button
+      onclick={() => {
+        const next = homes?.homes.find((h) => packageOf(h) === chosen);
+        return next ? switchTo(next) : turnOff(inUse);
+      }}>Turn off {nameOf(inUse)}</button
     >
     <button
       class="secondary"
