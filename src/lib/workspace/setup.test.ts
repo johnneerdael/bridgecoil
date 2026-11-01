@@ -90,6 +90,11 @@ it("leaves the agent alone until Termux is ready", async () => {
   expect(api.installAgent).not.toHaveBeenCalled();
 });
 
+it("warns about the Termux:Boot page before it can appear", async () => {
+  open(platform(snapshot(pairing)));
+  expect(await screen.findByText(/closes by itself/)).toBeTruthy();
+});
+
 it("connects with only the code on the TV", async () => {
   const api = platform(snapshot(pairing));
   open(api);

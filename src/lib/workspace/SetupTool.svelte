@@ -300,6 +300,10 @@
           onclick={pair}>Connect</button
         >
       {/if}
+      {#if snapshot.agent}<p class="subtle">
+          Your TV may show a Termux:Boot page for about 2 seconds afterwards.
+          That's normal, and it closes by itself.
+        </p>{/if}
     {:else if snapshot.stage === "startup"}
       <p>Termux is connected. One step left.</p>
       <button

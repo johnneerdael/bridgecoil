@@ -81,15 +81,18 @@ while [ $i -lt 8 ]; do\n\
   sleep 3\n\
 done\n\
 exit 0";
-const BACKGROUND: &str = "for package in \"$1\" com.termux com.termux.boot; do\n\
+pub const WAKE_BOOT_APP: &str = include_str!("scripts/wake_boot_app.sh");
+const BACKGROUND: &str = concat!(
+    "for package in \"$1\" com.termux com.termux.boot; do\n\
   cmd appops set \"$package\" RUN_IN_BACKGROUND allow 2>/dev/null\n\
   cmd appops set \"$package\" RUN_ANY_IN_BACKGROUND allow 2>/dev/null\n\
   cmd appops set \"$package\" AUTO_START allow 2>/dev/null\n\
   dumpsys deviceidle whitelist \"+$package\" >/dev/null 2>&1\n\
 done\n\
-cmd appops write-settings 2>/dev/null\n\
-am start -n com.termux.boot/.BootActivity >/dev/null 2>&1\n\
-exit 0";
+cmd appops write-settings 2>/dev/null\n",
+    include_str!("scripts/wake_boot_app.sh"),
+    "exit 0"
+);
 
 /// Keeps Termux allowed to run, and adds the boot script that brings mappings back.
 pub fn keep_mappings_command() -> String {

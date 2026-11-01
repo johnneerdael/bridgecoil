@@ -459,6 +459,68 @@ fn pairing_leaves_the_search_to_the_agent_without_a_record() {
     assert!(pair_on_tv(PAIRING_RECORD, open).ends_with("pair 123456\n"));
 }
 
+/// Runs the real script with stand-ins, and returns the commands it sent to the TV. `users` is what
+/// Android reports about Termux:Boot, and `top` is what's on screen after it's asked to open.
+fn wake_boot_app(users: &str, top: &str) -> String {
+    use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    let calls = dir.path().join("calls");
+    let log = format!("echo \"$(basename \"$0\") $*\" >> '{}'", calls.display());
+    let tool = |name: &str, body: &str| {
+        let path = bin.join(name);
+        fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    tool(
+        "dumpsys",
+        &format!(
+            "case \"$1\" in\n  package) printf '%b' '{users}' ;;\n  activity) echo '  topResumedActivity={top}' ;;\nesac"
+        ),
+    );
+    tool("am", &log);
+    tool("input", &log);
+    tool("sleep", "exit 0");
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let status = Command::new("sh")
+        .args(["-c", adb_core::toolkit::setup::WAKE_BOOT_APP])
+        .env("PATH", path)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    fs::read_to_string(calls).unwrap_or_default()
+}
+
+const BOOT_WINDOW: &str = "com.termux.boot/.BootActivity";
+
+/// Android keeps the boot event from an app that has never run, and opening it is the only way a
+/// shell can change that. It has to close again, or setup leaves a window on the TV.
+#[test]
+fn an_app_that_never_ran_is_opened_and_closed_again() {
+    let calls = wake_boot_app("  User 0: stopped=true\\n", BOOT_WINDOW);
+    assert_eq!(calls, format!("am start -n {BOOT_WINDOW}\ninput keyevent KEYCODE_BACK\n"));
+}
+
+#[test]
+fn an_app_that_already_ran_is_left_alone() {
+    assert_eq!(wake_boot_app("  User 0: stopped=false\\n", BOOT_WINDOW), "");
+}
+
+/// A TCL had a second profile where the app has never run, which doesn't matter here.
+#[test]
+fn only_the_main_user_counts() {
+    let users = "  User 0: stopped=false\\n  User 10: stopped=true\\n";
+    assert_eq!(wake_boot_app(users, BOOT_WINDOW), "");
+}
+
+/// Back would land on whatever is on screen instead.
+#[test]
+fn back_is_pressed_only_on_the_window_it_opened() {
+    let calls = wake_boot_app("  User 0: stopped=true\\n", "org.tv.player/.Main");
+    assert_eq!(calls, format!("am start -n {BOOT_WINDOW}\n"));
+}
+
 /// The boot script has to run the agent, because rish can be blocked while a helper is closed.
 #[test]
 fn mappings_come_back_without_a_helper() {
