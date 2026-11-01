@@ -2,7 +2,7 @@ import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/sv
 import { afterEach, it, expect, vi } from "vitest";
 import ScreenshotTool from "./ScreenshotTool.svelte";
 import LogsTool from "./LogsTool.svelte";
-import type { Platform, Query } from "./client";
+import type { SavedCapture, Platform, Query } from "./client";
 import type { Device } from "../model";
 // jsdom has no <dialog> methods.
 HTMLDialogElement.prototype.showModal = function () {
@@ -30,7 +30,8 @@ const device: Device = {
   abis: [],
 };
 const path = "/data/local/tmp/bridgecoil-recording.mp4";
-function platform(saved = true) {
+const download = { location: "Download", uri: "content://media/1" };
+function platform(saved: SavedCapture | null = download) {
   return {
     query: vi.fn(async (_t: unknown, q: Query) => {
       if (q.kind === "screenshot") return { png: "iVBORw0KGgo" };
@@ -45,8 +46,11 @@ function platform(saved = true) {
         return { running: false, size: null, path };
       return { running: false, size: 1000, path };
     }),
-    saveFile: vi.fn(async () => saved),
-    saveTvFile: vi.fn(async () => saved),
+    saveFile: vi.fn(async () => true),
+    saveTvFile: vi.fn(async () => true),
+    saveCapture: vi.fn(async () => saved),
+    saveTvCapture: vi.fn(async () => saved),
+    openCapture: vi.fn(async () => {}),
   } as unknown as Platform;
 }
 const stepsOf = (api: Platform) =>
@@ -56,28 +60,59 @@ const stepsOf = (api: Platform) =>
     .map((q) => q.step.kind)
     .filter((kind) => kind !== "status");
 
-it("saves the screenshot it took", async () => {
+it("puts a screenshot in Download without asking", async () => {
   const api = platform();
   render(ScreenshotTool, { device, api });
   await fireEvent.click(screen.getByRole("button", { name: "Take a screenshot" }));
-  await fireEvent.click(await screen.findByRole("button", { name: "Save screenshot" }));
   await waitFor(() =>
-    expect(api.saveFile).toHaveBeenCalledWith(expect.stringMatching(/\.png$/), {
-      base64: "iVBORw0KGgo",
-    }),
+    expect(api.saveCapture).toHaveBeenCalledWith(
+      expect.stringMatching(/^tv-.*\.png$/),
+      "iVBORw0KGgo",
+    ),
   );
-  expect(await screen.findByText("Screenshot saved.")).toBeTruthy();
+  expect(
+    await screen.findByText("Screenshot saved to your phone's Download folder."),
+  ).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Save screenshot" })).toBeNull();
 });
 
-it("says nothing was saved when the picker is closed", async () => {
-  render(ScreenshotTool, { device, api: platform(false) });
+it("keeps the picture on screen when a picker was closed, so it can be saved again", async () => {
+  render(ScreenshotTool, { device, api: platform(null) });
   await fireEvent.click(screen.getByRole("button", { name: "Take a screenshot" }));
-  await fireEvent.click(await screen.findByRole("button", { name: "Save screenshot" }));
-  await new Promise((r) => setTimeout(r, 0));
-  expect(screen.queryByText("Screenshot saved.")).toBeNull();
+  expect(await screen.findByRole("button", { name: "Save screenshot" })).toBeTruthy();
+  expect(screen.queryByText(/Screenshot saved/)).toBeNull();
 });
 
-it("records for the chosen length and removes the file once it's saved", async () => {
+it("says only that it was saved after a picker", async () => {
+  render(ScreenshotTool, { device, api: platform({ location: "", uri: null }) });
+  await fireEvent.click(screen.getByRole("button", { name: "Take a screenshot" }));
+  expect(await screen.findByText("Screenshot saved.")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Open screenshot" })).toBeNull();
+});
+
+it("offers to open a screenshot in the phone's default app", async () => {
+  const api = platform();
+  render(ScreenshotTool, { device, api });
+  await fireEvent.click(screen.getByRole("button", { name: "Take a screenshot" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Open screenshot" }));
+  await waitFor(() =>
+    expect(api.openCapture).toHaveBeenCalledWith("content://media/1", "image/png"),
+  );
+  expect(screen.getByText("Screenshot saved to your phone's Download folder.")).toBeTruthy();
+});
+
+it("offers to open a recording once it's on the phone", async () => {
+  const api = platform();
+  render(ScreenshotTool, { device, api });
+  await fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Stop recording" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Open recording" }));
+  await waitFor(() =>
+    expect(api.openCapture).toHaveBeenCalledWith("content://media/1", "video/mp4"),
+  );
+});
+
+it("moves a finished recording to the phone and off the TV by itself", async () => {
   const api = platform();
   render(ScreenshotTool, { device, api });
   await fireEvent.change(screen.getByLabelText("Record for"), {
@@ -85,30 +120,41 @@ it("records for the chosen length and removes the file once it's saved", async (
   });
   await fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
   await fireEvent.click(await screen.findByRole("button", { name: "Stop recording" }));
-  await fireEvent.click(await screen.findByRole("button", { name: "Save recording" }));
   await waitFor(() => expect(stepsOf(api)).toEqual(["start", "stop", "discard"]));
   expect(api.query).toHaveBeenCalledWith(expect.anything(), {
     kind: "recording",
     step: { kind: "start", seconds: 60 },
   });
-  expect(api.saveTvFile).toHaveBeenCalledWith(
+  expect(api.saveTvCapture).toHaveBeenCalledWith(
     "session",
     path,
-    expect.stringMatching(/\.mp4$/),
+    expect.stringMatching(/^tv-.*\.mp4$/),
     expect.any(Function),
   );
+  expect(
+    await screen.findByText(
+      "Recording saved to your phone's Download folder and removed from the TV.",
+    ),
+  ).toBeTruthy();
 });
 
-it("keeps the recording on the TV until it's actually saved", async () => {
-  const api = platform(false);
+it("keeps the recording on the TV until it's on the phone", async () => {
+  const api = platform(null);
   render(ScreenshotTool, { device, api });
   await fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
   await fireEvent.click(await screen.findByRole("button", { name: "Stop recording" }));
-  await fireEvent.click(await screen.findByRole("button", { name: "Save recording" }));
-  await waitFor(() => expect(api.saveTvFile).toHaveBeenCalled());
-  await new Promise((r) => setTimeout(r, 0));
+  expect(await screen.findByRole("button", { name: "Save recording" })).toBeTruthy();
   expect(stepsOf(api)).toEqual(["start", "stop"]);
-  expect(screen.getByRole("button", { name: "Save recording" })).toBeTruthy();
+});
+
+it("keeps the recording on the TV when copying it fails", async () => {
+  const api = platform();
+  (api.saveTvCapture as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("stalled"));
+  render(ScreenshotTool, { device, api });
+  await fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Stop recording" }));
+  expect(await screen.findByRole("button", { name: "Save recording" })).toBeTruthy();
+  expect(stepsOf(api)).toEqual(["start", "stop"]);
 });
 
 it("picks a recording back up after leaving the screen", async () => {
@@ -118,11 +164,11 @@ it("picks a recording back up after leaving the screen", async () => {
   expect(await screen.findByRole("button", { name: "Stop recording" })).toBeTruthy();
 });
 
-it("offers a finished recording left on the TV", async () => {
+it("moves a finished recording left on the TV to the phone", async () => {
   const api = platform();
   (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({ running: false, size: 10, path });
   render(ScreenshotTool, { device, api });
-  expect(await screen.findByRole("button", { name: "Save recording" })).toBeTruthy();
+  await waitFor(() => expect(api.saveTvCapture).toHaveBeenCalled());
 });
 
 it("reports a recording that came out empty", async () => {

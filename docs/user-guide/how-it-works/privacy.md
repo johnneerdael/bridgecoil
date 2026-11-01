@@ -30,7 +30,7 @@ The agent and listener on the TV don't contact the internet. The agent's only tr
 
 History stays on your phone. It includes the commands you ran, and their output, up to 64 KB each. That means anything you typed into [Shell](../tools/shell.md) is stored, so don't put passwords there. **Clear records** removes it.
 
-Saved TVs store their address, name and a hash of the device ID. Your ADB key stays in the app's private data. Files and screenshots go only where you save them.
+Saved TVs store their address, name and a hash of the device ID. Your ADB key stays in the app's private data. Screenshots and recordings go to your phone's Download folder, or wherever you choose in the save dialog on devices that ask. Other files go only where you save them.
 
 ## On iPhone
 

@@ -52,6 +52,58 @@ pub async fn keep_connection(app: &AppHandle, connected: bool) -> crate::Result<
     let _ = (app, connected);
     Ok(())
 }
+/// Where a capture ended up. `uri` is what opens it, on a device that can.
+#[derive(Default, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct Saved {
+    pub location: String,
+    pub uri: Option<String>,
+}
+/// Puts a file in the phone's Download folder and says where it went. `None` means this device
+/// can't do that without asking, as on Android 9 and older, iPhone and desktop.
+pub async fn save_to_downloads(
+    app: &AppHandle,
+    file: &std::path::Path,
+    name: &str,
+    mime: &str,
+) -> crate::Result<Option<Saved>> {
+    #[cfg(target_os = "android")]
+    {
+        let handle = app.state::<LanHandle<tauri::Wry>>().0.clone();
+        let args = serde_json::json!({ "path": file, "name": name, "mime": mime });
+        let saved = tauri::async_runtime::spawn_blocking(move || {
+            handle.run_mobile_plugin::<Saved>("saveToDownloads", args)
+        })
+        .await
+        .map_err(|e| adb_core::backend::PocError::new("save", e.to_string()))?
+        .map_err(|e| adb_core::backend::PocError::new("save", e.to_string()))?;
+        Ok((!saved.location.is_empty()).then_some(saved))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, file, name, mime);
+        Ok(None)
+    }
+}
+/// Opens a saved capture in the phone's default app for it.
+pub async fn open_capture(app: &AppHandle, uri: String, mime: String) -> crate::Result<()> {
+    #[cfg(target_os = "android")]
+    {
+        let handle = app.state::<LanHandle<tauri::Wry>>().0.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            handle.run_mobile_plugin::<serde_json::Value>(
+                "openCapture",
+                serde_json::json!({ "uri": uri, "mime": mime }),
+            )
+        })
+        .await
+        .map_err(|e| adb_core::backend::PocError::new("open", e.to_string()))?
+        .map_err(|e| adb_core::backend::PocError::new("open", e.to_string()))?;
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = (app, uri, mime);
+    Ok(())
+}
 pub async fn discover(app: &AppHandle) -> crate::Result<adb_core::discovery::DiscoveryResult> {
     ensure(app).await?;
     let state = app.state::<DiscoveryScan>();

@@ -491,6 +491,92 @@ async fn save_tv_file(
     }
     copied.map(|_| true)
 }
+/// Gets a finished capture onto this device, into Download where that needs no question. The
+/// location is empty after a picker, and the answer is `None` if the picker was closed.
+async fn place_capture(
+    app: &tauri::AppHandle,
+    file: &std::path::Path,
+    name: &str,
+) -> Result<Option<local_network::Saved>> {
+    let mime = if name.ends_with(".mp4") { "video/mp4" } else { "image/png" };
+    if let Some(saved) = local_network::save_to_downloads(app, file, name, mime).await? {
+        return Ok(Some(saved));
+    }
+    let Some((mut target, _)) = choose_destination(app, name).await? else {
+        return Ok(None);
+    };
+    let source = file.to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::File::open(source).and_then(|mut from| std::io::copy(&mut from, &mut target))
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)?;
+    Ok(Some(local_network::Saved::default()))
+}
+fn capture_file(app: &tauri::AppHandle, name: &str) -> Result<std::path::PathBuf> {
+    let folder = app.path().app_cache_dir().map_err(err)?;
+    std::fs::create_dir_all(&folder).map_err(err)?;
+    Ok(folder.join(format!("capture-{name}")))
+}
+#[tauri::command]
+async fn open_capture(app: tauri::AppHandle, uri: String, mime: String) -> Result<()> {
+    local_network::open_capture(&app, uri, mime).await
+}
+/// Keeps a screenshot on this device.
+#[tauri::command]
+async fn save_capture(
+    app: tauri::AppHandle,
+    name: String,
+    base64: String,
+) -> Result<Option<local_network::Saved>> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64)
+        .map_err(err)?;
+    let file = capture_file(&app, &name)?;
+    std::fs::write(&file, bytes).map_err(err)?;
+    let placed = place_capture(&app, &file, &name).await;
+    let _ = std::fs::remove_file(&file);
+    placed
+}
+/// Copies a recording off the TV and keeps it on this device.
+#[tauri::command]
+async fn save_tv_capture(
+    app: tauri::AppHandle,
+    session_id: String,
+    remote: String,
+    name: String,
+    on_progress: Channel<SaveProgress>,
+    state: State<'_, Backend>,
+    uploads: State<'_, Uploads>,
+) -> Result<Option<local_network::Saved>> {
+    state.0.lock().await.can_read(&session_id, &remote).await?;
+    uploads.cancel.store(false, Ordering::SeqCst);
+    let file = capture_file(&app, &name)?;
+    let mut sink = tokio::fs::File::create(&file).await.map_err(err)?;
+    let copied = state
+        .0
+        .lock()
+        .await
+        .download(
+            &session_id,
+            &remote,
+            &mut sink,
+            &uploads.cancel,
+            move |received, total| {
+                let _ = on_progress.send(SaveProgress { received, total });
+            },
+        )
+        .await;
+    drop(sink);
+    let placed = match copied {
+        Ok(_) => place_capture(&app, &file, &name).await,
+        Err(error) => Err(error),
+    };
+    let _ = std::fs::remove_file(&file);
+    placed
+}
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SaveContent {
@@ -654,6 +740,9 @@ pub fn run() {
             cancel_upload,
             save_tv_file,
             save_file,
+            save_capture,
+            save_tv_capture,
+            open_capture,
             install_tool,
             latest_launchers,
             install_agent,

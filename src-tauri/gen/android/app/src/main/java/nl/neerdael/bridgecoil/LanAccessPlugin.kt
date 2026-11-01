@@ -1,9 +1,15 @@
 package nl.neerdael.bridgecoil
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.ContentValues
 import android.content.Intent
 import android.os.Build
+import android.os.Environment
 import android.graphics.Color
+import android.net.Uri
+import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import app.tauri.annotation.InvokeArg
@@ -16,12 +22,26 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import java.io.File
 
 @InvokeArg
 class AppearanceArgs { var dark: Boolean = false }
 
 @InvokeArg
 class ConnectionArgs { var connected: Boolean = false }
+
+@InvokeArg
+class DownloadArgs {
+    var path: String = ""
+    var name: String = ""
+    var mime: String = ""
+}
+
+@InvokeArg
+class OpenArgs {
+    var uri: String = ""
+    var mime: String = ""
+}
 
 @TauriPlugin(permissions = [Permission(strings = ["android.permission.ACCESS_LOCAL_NETWORK"], alias = "localNetwork")])
 class LanAccessPlugin(private val hostActivity: Activity) : Plugin(hostActivity) {
@@ -51,6 +71,68 @@ class LanAccessPlugin(private val hostActivity: Activity) : Plugin(hostActivity)
             Logger.error("Could not keep the connection: ${e.message}")
         }
         invoke.resolve(JSObject())
+    }
+
+    /** Resolves with no location on Android 9 and older, which have no Downloads collection. */
+    @Command
+    fun saveToDownloads(invoke: Invoke) {
+        val args = invoke.parseArgs(DownloadArgs::class.java)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            invoke.resolve(JSObject())
+        } else {
+            Thread { copyToDownloads(invoke, args) }.start()
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun copyToDownloads(invoke: Invoke, args: DownloadArgs) {
+        val resolver = hostActivity.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, args.name)
+            put(MediaStore.MediaColumns.MIME_TYPE, args.mime)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val item = resolver.insert(collection, values)
+        if (item == null) {
+            invoke.reject("Android couldn't create the file in Download.")
+            return
+        }
+        try {
+            resolver.openOutputStream(item).use { target ->
+                File(args.path).inputStream().use { it.copyTo(target!!) }
+            }
+            resolver.update(
+                item,
+                ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) },
+                null,
+                null,
+            )
+            val result = JSObject()
+            result.put("location", Environment.DIRECTORY_DOWNLOADS)
+            result.put("uri", item.toString())
+            invoke.resolve(result)
+        } catch (e: Exception) {
+            resolver.delete(item, null, null)
+            invoke.reject("The file couldn't be saved to Download: ${e.message}")
+        }
+    }
+
+    /** Opens a saved capture in whichever app the phone uses for that kind of file. */
+    @Command
+    fun openCapture(invoke: Invoke) {
+        val args = invoke.parseArgs(OpenArgs::class.java)
+        val viewer = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(Uri.parse(args.uri), args.mime)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            hostActivity.startActivity(viewer)
+            invoke.resolve(JSObject())
+        } catch (e: ActivityNotFoundException) {
+            invoke.reject("No app on this phone can open this file.")
+        }
     }
 
     @Command

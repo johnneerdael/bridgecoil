@@ -7,6 +7,7 @@
     type Platform,
     type RecordingState,
     type RecordingStep,
+    type SavedCapture,
   } from "./client";
   let { device, api }: { device: Device; api: Platform } = $props();
   const lengths = [
@@ -16,6 +17,7 @@
     { seconds: 180, label: "3 minutes" },
   ];
   let image = $state("");
+  let imageKept = $state(false);
   let busy = $state(false);
   let error = $state("");
   let notice = $state("");
@@ -32,10 +34,13 @@
       .replace(/[-:]/g, "")
       .replace("T", "-");
   };
-  async function attempt(work: () => Promise<void>) {
+  async function attempt(work: () => Promise<void>, keepNotice = false) {
     busy = true;
     error = "";
-    notice = "";
+    if (!keepNotice) {
+      notice = "";
+      saved = null;
+    }
     try {
       await work();
     } catch (e) {
@@ -44,37 +49,76 @@
       busy = false;
     }
   }
+  let saved = $state<{ uri: string; mime: string; label: string } | null>(null);
+  const placed = (to: SavedCapture) =>
+    to.location ? ` to your phone's ${to.location} folder` : "";
+  async function keepImage() {
+    const to = await api.saveCapture(`tv-${stamp()}.png`, image);
+    if (!to) return;
+    imageKept = true;
+    notice = `Screenshot saved${placed(to)}.`;
+    saved = to.uri ? { uri: to.uri, mime: "image/png", label: "screenshot" } : null;
+  }
+  const openSaved = () =>
+    attempt(async () => {
+      if (saved) await api.openCapture(saved.uri, saved.mime);
+    }, true);
+  // A screenshot taken from the phone belongs on the phone, so it goes there straight away.
   const take = () =>
     attempt(async () => {
       const r = await api.query<{ png: string }>(targetOf(device), {
         kind: "screenshot",
       });
       image = r.png;
+      imageKept = false;
+      await keepImage();
     });
-  const saveImage = () =>
-    attempt(async () => {
-      if (await api.saveFile(`tv-${stamp()}.png`, { base64: image }))
-        notice = "Screenshot saved.";
-    });
+  const saveImage = () => attempt(keepImage);
   const step = (next: RecordingStep) =>
     api.query<RecordingState>(targetOf(device), {
       kind: "recording",
       step: next,
     });
+  // It leaves the TV only once it's on this device, so a failed copy can be tried again.
+  async function keepRecording() {
+    if (!finished) return;
+    saving = 0;
+    let to: SavedCapture | null;
+    try {
+      to = await api.saveTvCapture(
+        device.id,
+        finished.path,
+        `tv-${stamp()}.mp4`,
+        ({ received, total }) =>
+          (saving = total ? Math.round((received / total) * 100) : 0),
+      );
+    } finally {
+      saving = null;
+    }
+    if (!to) return;
+    await step({ kind: "discard" });
+    finished = null;
+    notice = `Recording saved${placed(to)} and removed from the TV.`;
+    saved = to.uri ? { uri: to.uri, mime: "video/mp4", label: "recording" } : null;
+  }
+  async function done(state: RecordingState) {
+    recording = false;
+    if (!state.size) {
+      error = "The TV didn't produce a recording.";
+      return;
+    }
+    finished = state;
+    await keepRecording();
+  }
   // A recording outlives this screen, so pick up whatever the TV is doing.
   onMount(() => {
     void step({ kind: "status" })
       .then((state) => {
         if (state.running) recording = true;
-        else if (state.size) finished = state;
+        else if (state.size) void attempt(() => done(state));
       })
       .catch(() => {});
   });
-  function done(state: RecordingState) {
-    recording = false;
-    if (state.size) finished = state;
-    else error = "The TV didn't produce a recording.";
-  }
   const start = () =>
     attempt(async () => {
       finished = null;
@@ -87,7 +131,7 @@
     const timer = setInterval(() => {
       void step({ kind: "status" })
         .then((state) => {
-          if (recording && !state.running) done(state);
+          if (recording && !state.running) void attempt(() => done(state));
         })
         // One missed check isn't the end of a recording, and Stop has to stay available.
         .catch((e) => {
@@ -96,26 +140,7 @@
     }, 2000);
     return () => clearInterval(timer);
   });
-  const saveRecording = () =>
-    attempt(async () => {
-      if (!finished) return;
-      saving = 0;
-      try {
-        const saved = await api.saveTvFile(
-          device.id,
-          finished.path,
-          `tv-${stamp()}.mp4`,
-          ({ received, total }) =>
-            (saving = total ? Math.round((received / total) * 100) : 0),
-        );
-        if (!saved) return;
-      } finally {
-        saving = null;
-      }
-      await step({ kind: "discard" });
-      finished = null;
-      notice = "Recording saved and removed from the TV.";
-    });
+  const saveRecording = () => attempt(keepRecording);
   const discard = () =>
     attempt(async () => {
       await step({ kind: "discard" });
@@ -125,6 +150,9 @@
 
 {#if error}<p class="error-text" role="alert">{error}</p>{/if}
 {#if notice}<p class="subtle" role="status">{notice}</p>{/if}
+{#if saved}<button class="secondary" disabled={busy} onclick={openSaved}
+    >Open {saved.label}</button
+  >{/if}
 <p class="subtle">
   Streaming apps usually appear black, because they protect their video.
 </p>
@@ -132,7 +160,7 @@
   <button class="primary" disabled={busy || recording} onclick={take}
     >{busy ? "Working…" : "Take a screenshot"}</button
   >
-  {#if image}<button class="secondary" disabled={busy} onclick={saveImage}
+  {#if image && !imageKept}<button class="secondary" disabled={busy} onclick={saveImage}
       >Save screenshot</button
     >{/if}
 </div>

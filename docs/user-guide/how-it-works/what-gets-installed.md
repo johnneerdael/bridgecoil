@@ -53,7 +53,7 @@ These live in `/data/local/tmp/bridgecoil`, which only the ADB shell user can op
 | File | When | Cleaned up |
 |---|---|---|
 | `/data/local/tmp/bridgecoil-inspector-{hash}.jar` | When Bridgecoil reads app names and icons | No. It stays, and a new version adds another. [Remove it by hand](remove-everything.md) |
-| `/data/local/tmp/bridgecoil-recording.mp4` | While recording the screen | When you save or discard it |
+| `/data/local/tmp/bridgecoil-recording.mp4` | While recording the screen | Once it's copied to your phone, or when you discard it |
 | `/data/local/tmp/adb-studio-{id}.apk` | During an install | Yes, after the install |
 
 The inspector is a small Java program that Android runs with `app_process` to read app labels, icons and signatures, which the shell can't get otherwise. It runs and exits, so it isn't a background service, and it's used even on a TV where you never ran setup.

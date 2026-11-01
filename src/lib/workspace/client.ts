@@ -114,6 +114,8 @@ export type ToolId =
   | "monet"
   | "at4k";
 export type LatestLauncher = { tool: ToolId; version: string };
+/** `location` is empty after a picker. `uri` opens it, where this device can. */
+export type SavedCapture = { location: string; uri: string | null };
 /** What a mapped button's press opened, kept above the pages because they rebuild after a change. */
 export type ButtonFollowUp = {
   key: KeyIdentity;
@@ -302,6 +304,15 @@ export type Platform = {
     name: string,
     content: { text: string } | { base64: string },
   ): Promise<boolean>;
+  /** Each resolves where the capture went, or null if a picker was closed. */
+  saveCapture(name: string, base64: string): Promise<SavedCapture | null>;
+  saveTvCapture(
+    sessionId: string,
+    remote: string,
+    name: string,
+    onprogress: (progress: { received: number; total: number }) => void,
+  ): Promise<SavedCapture | null>;
+  openCapture(uri: string, mime: string): Promise<void>;
   prepare(
     target: Target,
     action: Action,
@@ -373,6 +384,13 @@ export function nativePlatform(
       return call("save_tv_file", { sessionId, remote, name, onProgress });
     },
     saveFile: (name, content) => call("save_file", { name, content }),
+    saveCapture: (name, base64) => call("save_capture", { name, base64 }),
+    openCapture: (uri, mime) => call("open_capture", { uri, mime }),
+    saveTvCapture: (sessionId, remote, name, onprogress) => {
+      const onProgress = new Channel<{ received: number; total: number }>();
+      onProgress.onmessage = onprogress;
+      return call("save_tv_capture", { sessionId, remote, name, onProgress });
+    },
     prepare: (target, action, allowUnsafe) =>
       call("prepare_action", { target, action, allowUnsafe }),
     ratingsStatus: () => call("ratings_status"),
