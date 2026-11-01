@@ -288,7 +288,12 @@ impl Client {
                 self.active = Some(active);
                 Ok(output)
             }
-            Ok(Err(e)) => Err(e),
+            Ok(Err(e)) => {
+                if keeps_connection(&e) {
+                    self.active = Some(active);
+                }
+                Err(e)
+            }
             Err(_) => Err(PocError::new(
                 "timeout",
                 "Device operation timed out. Reconnect before retrying.",
@@ -745,6 +750,13 @@ impl Client {
 }
 const UPLOAD_STALL: Duration = Duration::from_secs(60);
 const SHELL_OUTPUT_LIMIT: usize = 1024 * 1024;
+const OUTPUT_LIMIT: &str = "outputLimit";
+const OUTPUT_LIMIT_MESSAGE: &str = "The TV returned more output than this command allows.";
+/// By the time this is reported the command has finished and its stream is closed, so the
+/// connection is as good as it was. Every other failure can leave it mid-conversation.
+fn keeps_connection(error: &PocError) -> bool {
+    error.kind == OUTPUT_LIMIT
+}
 const CUT_NOTE: &str = "\n\nBridgecoil stopped showing this at 1 MB. The command ran to the end.\n";
 /// A busy 1080p screen is several megabytes as PNG, and base64 adds a third.
 const LARGE_OUTPUT_LIMIT: usize = 24 * 1024 * 1024;
@@ -800,7 +812,7 @@ async fn command_output_limited(
     shell.close_stdin().await.map_err(connection_error)?;
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
-    let mut cut = false;
+    let mut over_limit = false;
     let exit = loop {
         let frame = shell.read_frame().await.map_err(connection_error)?;
         let (Frame::Stdout(b) | Frame::Stderr(b)) = &frame else {
@@ -810,14 +822,8 @@ async fn command_output_limited(
             continue;
         };
         if stdout.len() + stderr.len() + b.len() > limit {
-            if overflow == Overflow::Refuse {
-                return Err(PocError::new(
-                    "outputLimit",
-                    "The TV returned more output than this command allows.",
-                ));
-            }
             // Keep reading to the end: the stream has to finish for the connection to stay usable.
-            cut = true;
+            over_limit = true;
             continue;
         }
         if matches!(frame, Frame::Stdout(_)) {
@@ -827,7 +833,10 @@ async fn command_output_limited(
         }
     };
     shell.close().await.map_err(connection_error)?;
-    if cut {
+    if over_limit {
+        if overflow == Overflow::Refuse {
+            return Err(PocError::new(OUTPUT_LIMIT, OUTPUT_LIMIT_MESSAGE));
+        }
         stderr.extend_from_slice(CUT_NOTE.as_bytes());
     }
     Ok(crate::workspace::driver::ShellOutput {
@@ -890,5 +899,21 @@ impl crate::workspace::driver::ShellDriver for Client {
     ) -> Result<crate::workspace::driver::ShellOutput> {
         self.execute_limited(target, command, LARGE_OUTPUT_LIMIT, Overflow::Refuse)
             .await
+    }
+}
+
+#[cfg(test)]
+mod output_limit_tests {
+    use super::*;
+
+    #[test]
+    fn only_a_finished_command_leaves_the_connection_usable() {
+        assert!(keeps_connection(&PocError::new(
+            OUTPUT_LIMIT,
+            OUTPUT_LIMIT_MESSAGE
+        )));
+        for kind in ["connection", "timeout", "staleTarget", "input"] {
+            assert!(!keeps_connection(&PocError::new(kind, "x")), "{kind}");
+        }
     }
 }
