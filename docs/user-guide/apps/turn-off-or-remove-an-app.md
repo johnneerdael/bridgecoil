@@ -2,8 +2,7 @@
 
 <p class="lead">Open an app and go to **Actions**. Each action opens a review first, so you can read what it does before anything happens.</p>
 
-!!! screenshot "apps-detail-actions.png"
-    The Application dialog on the Actions tab.
+![The Application dialog on the Actions tab.](../assets/shots/apps-detail-actions.png){ .bc-shot loading=lazy }
 
 ## Read an app's state
 

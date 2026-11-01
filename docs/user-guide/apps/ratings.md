@@ -23,8 +23,7 @@ Apps you installed yourself appear under **Installed by you**, whatever their ra
 
 Open an app. **Overview** shows its rating, a description and where the description came from. **Needs** lists what it depends on and **Needed by** lists what depends on it, with **· On this TV** next to packages your TV really has. **None listed** means the community list names none, and an empty list doesn't prove there are none.
 
-!!! screenshot "apps-rating-detail.png"
-    An app's Overview with its rating, Needs and Needed by.
+![An app's Overview with its rating, Needs and Needed by.](../assets/shots/apps-rating-detail.png){ .bc-shot loading=lazy }
 
 ## Trust it with care
 

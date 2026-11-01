@@ -2,8 +2,7 @@
 
 <p class="lead">The Apps page lists what's on the selected profile, 32 at a time as you scroll.</p>
 
-!!! screenshot "apps-list.png"
-    Apps with ratings on, showing the group headers and badges.
+![Apps with ratings on, showing the group headers and badges.](../assets/shots/apps-list.png){ .bc-shot loading=lazy }
 
 The line under the toolbar shows the profile and how many apps match. If it adds **Some app details unavailable**, the TV didn't give Bridgecoil every name or icon, and you'll see the package ID instead.
 

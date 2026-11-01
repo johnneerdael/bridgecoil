@@ -4,8 +4,7 @@
 
 Open an app and tap **Access**. It has three tabs.
 
-!!! screenshot "apps-access-runtime.png"
-    The Access tab on Runtime, with a Revoke button.
+![The Access tab on Runtime, with a Revoke button.](../assets/shots/apps-access-runtime.png){ .bc-shot loading=lazy }
 
 ## Runtime
 

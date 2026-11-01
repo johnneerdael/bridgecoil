@@ -12,8 +12,7 @@ Open **Tools → Commands** and choose a group. Each command shows a description
 
 ![Commands showing the eight groups.](../assets/shots/commands-groups.png){ .bc-shot loading=lazy }
 
-!!! screenshot "commands-detail.png"
-    A command with its badge, options and This runs on the TV.
+![A command with its badge, options and This runs on the TV.](../assets/shots/commands-detail.png){ .bc-shot loading=lazy }
 
 **This runs on the TV:** shows the exact command. **Run on the TV** opens a review, and **Save for later** adds it to the top of the list.
 

@@ -4,8 +4,7 @@
 
 Open **Tools → Shell**, type a command and tap **Review command**. The review shows it exactly as it will run. Tick the box and tap **Apply change**.
 
-!!! screenshot "shell-review.png"
-    The Run shell command review.
+![The Run shell command review.](../assets/shots/shell-review.png){ .bc-shot loading=lazy }
 
 The result shows the command followed by its output.
 
