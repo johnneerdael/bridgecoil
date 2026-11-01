@@ -50,3 +50,4 @@ pub mod connection;
 pub mod discovery;
 
 pub mod apk_set;
+pub mod wake;

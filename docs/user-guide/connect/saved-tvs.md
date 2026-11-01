@@ -16,6 +16,14 @@ Tap **Quick connect →**. Bridgecoil scans your network for a few seconds to fi
 | "That address belongs to a different device." | Another TV now has this address | Use **Update connection address** |
 | The connection form with an error | Quick connect couldn't finish | Read the error, or use **← Saved devices** to go back |
 
+## Wake a sleeping TV
+
+Quick connect also sends a Wake-on-LAN message, which asks a sleeping TV to wake up. If the TV doesn't answer straight away, Bridgecoil shows **Waking TV** and tries a few more times before giving up. A TV that's already on connects as quickly as before.
+
+Whether a TV wakes depends on the TV. Many switch off their network completely when they sleep, or only listen on a network cable, so this doesn't work on every model. Look for a setting like *Wake on LAN*, *Wake on Wi-Fi* or *Network standby* in the TV's settings, and turn it on if it's there.
+
+Bridgecoil learns the addresses it needs while the TV is connected, so connect once after updating the app. **Delete** removes them along with the rest of the saved TV.
+
 ## Add another TV
 
 Tap **Add device** and follow [Connect your phone to the TV](../get-started/first-connection.md). You can save up to 32 TVs, and only one is connected at a time.

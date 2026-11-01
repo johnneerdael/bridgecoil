@@ -53,6 +53,8 @@ pub struct DeviceInfo {
     pub sdk: u32,
     pub abis: Vec<String>,
     pub encrypted: bool,
+    /// What Wake-on-LAN needs, saved while the TV is awake enough to say.
+    pub hardware_addresses: Vec<String>,
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -181,7 +183,7 @@ impl Client {
         progress(ConnectionProgress {
             stage: ConnectionStage::Inspecting,
         });
-        let output=timeout(Duration::from_secs(10),command(&mut wire,"getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.version.sdk; getprop ro.product.cpu.abilist; getprop ro.serialno; getprop ro.build.fingerprint; getprop ro.product.manufacturer; getprop persist.adb.wifi.guid")).await.map_err(|_|PocError::new("timeout","ADB connected, but the TV's device inspection did not finish."))??;
+        let output=timeout(Duration::from_secs(10),command(&mut wire,"getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.version.sdk; getprop ro.product.cpu.abilist; getprop ro.serialno; getprop ro.build.fingerprint; getprop ro.product.manufacturer; getprop persist.adb.wifi.guid; for i in eth0 wlan0; do echo $i $(cat /sys/class/net/$i/address 2>/dev/null); done; ip -o link 2>/dev/null; true")).await.map_err(|_|PocError::new("timeout","ADB connected, but the TV's device inspection did not finish."))??;
         if output.0 != Some(0) {
             return Err(PocError::new(
                 "connection",
@@ -220,6 +222,9 @@ impl Client {
                 .map(str::to_owned)
                 .collect(),
             encrypted,
+            hardware_addresses: crate::wake::parse_hardware_addresses(
+                lines.get(8..).unwrap_or_default(),
+            ),
         };
         self.active = Some(Active {
             wire,

@@ -15,7 +15,16 @@ export type SavedDevice = {
   legacy: boolean;
   pairedAt: number | null;
   lastConnectedAt: number | null;
+  /** Kept for Wake-on-LAN, since a sleeping TV can't be asked. */
+  hardwareAddresses?: string[];
 };
+const hardwareAddresses = (v: unknown) =>
+  v === undefined ||
+  (Array.isArray(v) &&
+    v.length <= 4 &&
+    v.every(
+      (a) => typeof a === "string" && /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(a),
+    ));
 const timestamp = (v: unknown): v is number | null =>
   v === null ||
   (typeof v === "number" &&
@@ -81,6 +90,7 @@ export function loadSavedDevices(
               (validEndpoint(v.endpoint) &&
                 endpointHost(v.endpoint) === v.host)) &&
             typeof v.legacy === "boolean" &&
+            hardwareAddresses(v.hardwareAddresses) &&
             timestamp(v.pairedAt) &&
             timestamp(v.lastConnectedAt),
         )
@@ -145,9 +155,14 @@ export function rememberConnected(
   const previous =
     records.find((r) => deviceId && r.deviceId === deviceId) ??
     records.find((r) => r.host === host && !r.deviceId);
+  // A TV that couldn't say this time still has the addresses it gave before.
+  const addresses = device.hardwareAddresses?.length
+    ? device.hardwareAddresses
+    : previous?.hardwareAddresses;
   return bounded([
     {
       deviceId,
+      ...(addresses?.length ? { hardwareAddresses: addresses } : {}),
       ...(previous?.discoveryName
         ? { discoveryName: previous.discoveryName }
         : {}),

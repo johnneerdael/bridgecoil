@@ -11,6 +11,7 @@ export type Device = {
   androidVersion: string;
   sdk: number;
   abis: string[];
+  hardwareAddresses?: string[];
 };
 export type Selection = {
   id: string;

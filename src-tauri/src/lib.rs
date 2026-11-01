@@ -113,6 +113,19 @@ async fn connection_status(state: State<'_, Backend>) -> Result<Option<DeviceInf
 async fn discover_adb(app: tauri::AppHandle) -> Result<adb_core::discovery::DiscoveryResult> {
     local_network::discover(&app).await
 }
+/// Says whether any packet left this device, which is not the same as the TV waking.
+#[tauri::command]
+async fn wake_tv(app: tauri::AppHandle, addresses: Vec<String>, host: String) -> Result<bool> {
+    local_network::ensure(&app).await?;
+    let targets = adb_core::wake::targets(&host);
+    let addresses = addresses.into_iter().take(4).collect::<Vec<_>>();
+    let sent = tauri::async_runtime::spawn_blocking(move || {
+        adb_core::wake::send(&addresses, &targets)
+    })
+    .await
+    .map_err(err)?;
+    Ok(sent > 0)
+}
 #[tauri::command]
 async fn pair_device(
     app: tauri::AppHandle,
@@ -731,6 +744,7 @@ pub fn run() {
             connection_status,
             keep_connection,
             discover_adb,
+            wake_tv,
             pair_device,
             connect_device,
             disconnect_device,

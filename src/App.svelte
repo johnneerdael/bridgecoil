@@ -22,6 +22,7 @@
   } from "./lib/saved-devices";
   import Modal from "./lib/Modal.svelte";
   import WorkspaceScreen from "./lib/workspace/WorkspaceScreen.svelte";
+  import { wakeTiming, wakingFailure } from "./lib/wake";
   import Icon from "./lib/workspace/Icon.svelte";
   import { dropScrollback } from "./lib/workspace/shell-line";
   import { destinations, type Destination } from "./lib/workspace/client";
@@ -178,6 +179,7 @@
   const pairingRecord = $derived(
     pairs.find((record) => record.host === endpointHost(endpoint)),
   );
+  const wakingLabel = "Waking TV";
   let attemptId = $state("");
   let connectionSequence = 0;
   function progressChannel() {
@@ -345,66 +347,91 @@
     await run(
       refreshAddress ? "Finding TV on your network" : "Connecting to TV",
       async () => {
-        if (refreshAddress && connectionChoice) {
-          discoveryPhase = true;
+        const saved = refreshAddress ? connectionChoice : null;
+        const woken =
+          !!saved?.hardwareAddresses?.length &&
+          (await invoke<boolean>("wake_tv", {
+            addresses: saved.hardwareAddresses,
+            host: saved.host,
+          }).catch(() => false));
+        // A TV that's awake connects on the first go, so this only costs time when it can't.
+        for (let tried = 0; ; tried++) {
           try {
-            const result = await discover();
-            const current = reconnectService(
-              connectionChoice,
-              result.services,
-              pairs,
-            );
-            if (current) {
-              endpoint = current.endpoint;
-              selectedAdvertisement = current;
-            }
+            await attemptConnection(refreshAddress);
+            return;
           } catch (e) {
-            if (
-              e &&
-              typeof e === "object" &&
-              "kind" in e &&
-              e.kind === "permission"
-            )
+            if (!woken || tried >= wakeTiming.retries || !wakingFailure(e))
               throw e;
-            // Networks can block multicast. The saved endpoint remains a valid fallback.
-          } finally {
-            discoveryPhase = false;
           }
+          discoveryPhase = true;
+          busyLabel = wakingLabel;
+          await new Promise((done) => setTimeout(done, wakeTiming.pause));
+          discoveryPhase = false;
           if (cancelRefresh)
             throw { kind: "cancelled", message: "Connection cancelled." };
-          if (!selectedAdvertisement && !connectionChoice.endpoint)
-            throw {
-              kind: "discovery",
-              message:
-                "No connection port was found for this paired TV. Find again or enter the address from its main Wireless debugging screen.",
-            };
-          busyLabel = "Connecting to TV";
         }
-        device = await invoke<Device>("connect_device", {
-          endpoint,
-          allowLegacy: legacy,
-          expectedDeviceId: connectionChoice?.deviceId ?? null,
-          onProgress: progressChannel(),
-        });
-        savedDevices = rememberConnected(savedDevices, device);
-        if (selectedAdvertisement?.endpoint === device.endpoint) {
-          savedDevices = savedDevices.map((d) =>
-            d.endpoint === device?.endpoint &&
-            d.deviceId ===
-              (device.deviceId.startsWith("session:") ? null : device.deviceId)
-              ? { ...d, discoveryName: selectedAdvertisement!.name }
-              : d,
-          );
-        }
-        storeSaved();
-        try {
-          localStorage.setItem("adb.connectionEndpoint", endpoint.trim());
-        } catch {
-          /* Connection succeeded. */
-        }
-        page = "device";
       },
     );
+  }
+  async function attemptConnection(refreshAddress: boolean) {
+    if (refreshAddress && connectionChoice) {
+      discoveryPhase = true;
+      try {
+        const result = await discover();
+        const current = reconnectService(
+          connectionChoice,
+          result.services,
+          pairs,
+        );
+        if (current) {
+          endpoint = current.endpoint;
+          selectedAdvertisement = current;
+        }
+      } catch (e) {
+        if (
+          e &&
+          typeof e === "object" &&
+          "kind" in e &&
+          e.kind === "permission"
+        )
+          throw e;
+        // Networks can block multicast. The saved endpoint remains a valid fallback.
+      } finally {
+        discoveryPhase = false;
+      }
+      if (cancelRefresh)
+        throw { kind: "cancelled", message: "Connection cancelled." };
+      if (!selectedAdvertisement && !connectionChoice.endpoint)
+        throw {
+          kind: "discovery",
+          message:
+            "No connection port was found for this paired TV. Find again or enter the address from its main Wireless debugging screen.",
+        };
+      busyLabel = "Connecting to TV";
+    }
+    device = await invoke<Device>("connect_device", {
+      endpoint,
+      allowLegacy: legacy,
+      expectedDeviceId: connectionChoice?.deviceId ?? null,
+      onProgress: progressChannel(),
+    });
+    savedDevices = rememberConnected(savedDevices, device);
+    if (selectedAdvertisement?.endpoint === device.endpoint) {
+      savedDevices = savedDevices.map((d) =>
+        d.endpoint === device?.endpoint &&
+        d.deviceId ===
+          (device.deviceId.startsWith("session:") ? null : device.deviceId)
+          ? { ...d, discoveryName: selectedAdvertisement!.name }
+          : d,
+      );
+    }
+    storeSaved();
+    try {
+      localStorage.setItem("adb.connectionEndpoint", endpoint.trim());
+    } catch {
+      /* Connection succeeded. */
+    }
+    page = "device";
   }
   async function disconnect() {
     await run("Disconnecting", async () => {
@@ -773,7 +800,9 @@
                 <p class="subtle">
                   {busyLabel === "Approve debugging on the TV"
                     ? "Check the TV for its Allow USB debugging prompt. This installation has its own key."
-                    : discoveryPhase
+                    : busyLabel === wakingLabel
+                      ? "It can take a moment to come back on the network."
+                      : discoveryPhase
                       ? "Looking for the TV’s current connection port."
                       : "Pairing and connection use different TV ports. You can cancel this attempt."}
                 </p>

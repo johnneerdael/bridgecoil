@@ -173,3 +173,24 @@ describe("renameSaved", () => {
     expect(loadSavedDevices(stored, [], null)).toEqual([]);
   });
 });
+describe("hardware addresses", () => {
+  const addresses = ["90:0e:b3:fd:fe:d0"];
+  it("keeps them through a restart, and through a connection that can't read them", () => {
+    let saved = rememberConnected([], { ...tv, hardwareAddresses: addresses }, 20);
+    saved = loadSavedDevices(JSON.stringify(saved), [], null);
+    expect(saved[0].hardwareAddresses).toEqual(addresses);
+    saved = rememberConnected(saved, { ...tv, hardwareAddresses: [] }, 30);
+    expect(saved[0].hardwareAddresses).toEqual(addresses);
+  });
+  it("ignores stored values that aren't addresses", () => {
+    const saved = rememberConnected([], tv, 20);
+    for (const bad of ["x", ["x"], [1], Array(5).fill(addresses[0])])
+      expect(
+        loadSavedDevices(
+          JSON.stringify([{ ...saved[0], hardwareAddresses: bad }]),
+          [],
+          null,
+        ),
+      ).toEqual([]);
+  });
+});

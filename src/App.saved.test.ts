@@ -5,10 +5,11 @@ import {
   cleanup,
   waitFor,
 } from "@testing-library/svelte";
-import { afterEach, beforeAll, it, expect, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, it, expect, vi } from "vitest";
 import App from "./App.svelte";
 import { savedDevicesKey } from "./lib/saved-devices";
 import { pairStoreKey } from "./lib/connection-model";
+import { wakeTiming } from "./lib/wake";
 import { keep, scrollback } from "./lib/workspace/shell-line";
 import type { Device } from "./lib/model";
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -512,4 +513,127 @@ it("renames a saved TV, and the new name survives connecting and restarting", as
   expect(JSON.parse(localStorage.getItem(savedDevicesKey)!)[0].name).toBe(
     tv.model,
   );
+});
+describe("Wake-on-LAN", () => {
+  const addresses = ["90:0e:b3:fd:fe:d0"];
+  const asleep = (failures: number, kind = "connection") => {
+    let left = failures;
+    invoke.mockImplementation(async (command, args) => {
+      if (command === "connection_status") return null;
+      if (command === "discover_adb") return { services: [], warnings: [] };
+      if (command === "wake_tv") return true;
+      if (command === "workspace_query")
+        return args.query.kind === "profiles"
+          ? [{ id: 0, name: "Owner", running: true }]
+          : {};
+      if (command === "connect_device") {
+        if (left-- > 0) throw { kind, message: "TV is asleep." };
+        return { ...tv, endpoint: args.endpoint };
+      }
+    });
+  };
+  const connects = () =>
+    invoke.mock.calls.filter(([command]) => command === "connect_device");
+  const quick = async () => {
+    const button = (await screen.findByRole("button", {
+      name: `Quick connect to ${tv.model}`,
+    })) as HTMLButtonElement;
+    await waitFor(() => expect(button.disabled).toBe(false));
+    await fireEvent.click(button);
+  };
+  const restore = wakeTiming.pause;
+  beforeAll(() => {
+    wakeTiming.pause = 1;
+  });
+  afterAll(() => {
+    wakeTiming.pause = restore;
+  });
+  it("wakes the TV and keeps trying while it comes up", async () => {
+    asleep(2);
+    localStorage.setItem(
+      savedDevicesKey,
+      JSON.stringify([{ ...stored, hardwareAddresses: addresses }]),
+    );
+    render(App);
+    await quick();
+    await screen.findByRole("button", { name: "Connection status: Connected" });
+    expect(invoke).toHaveBeenCalledWith("wake_tv", {
+      addresses,
+      host: stored.host,
+    });
+    expect(connects()).toHaveLength(3);
+  });
+  it("keeps trying while the TV's port still refuses", async () => {
+    asleep(1, "connectionRefused");
+    localStorage.setItem(
+      savedDevicesKey,
+      JSON.stringify([{ ...stored, hardwareAddresses: addresses }]),
+    );
+    render(App);
+    await quick();
+    await screen.findByRole("button", { name: "Connection status: Connected" });
+    expect(connects()).toHaveLength(2);
+  });
+  it("doesn't delay a TV that's already awake", async () => {
+    asleep(0);
+    localStorage.setItem(
+      savedDevicesKey,
+      JSON.stringify([{ ...stored, hardwareAddresses: addresses }]),
+    );
+    render(App);
+    await quick();
+    await screen.findByRole("button", { name: "Connection status: Connected" });
+    expect(connects()).toHaveLength(1);
+  });
+  it("stops after its last try and shows why", async () => {
+    asleep(99);
+    localStorage.setItem(
+      savedDevicesKey,
+      JSON.stringify([{ ...stored, hardwareAddresses: addresses }]),
+    );
+    render(App);
+    await quick();
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "TV is asleep.",
+    );
+    expect(connects()).toHaveLength(wakeTiming.retries + 1);
+  });
+  it("doesn't retry something waking can't fix", async () => {
+    asleep(99, "differentDevice");
+    localStorage.setItem(
+      savedDevicesKey,
+      JSON.stringify([{ ...stored, hardwareAddresses: addresses }]),
+    );
+    render(App);
+    await quick();
+    await screen.findByRole("alert");
+    expect(connects()).toHaveLength(1);
+  });
+  it("connects as before when the TV never gave an address, or the packet can't be sent", async () => {
+    asleep(99);
+    localStorage.setItem(savedDevicesKey, JSON.stringify([stored]));
+    const first = render(App);
+    await quick();
+    await screen.findByRole("alert");
+    expect(invoke).not.toHaveBeenCalledWith("wake_tv", expect.anything());
+    expect(connects()).toHaveLength(1);
+    first.unmount();
+    invoke.mockClear();
+    asleep(99);
+    const refused = invoke.getMockImplementation()!;
+    invoke.mockImplementation(async (command, args) => {
+      if (command === "wake_tv") throw { kind: "permission", message: "No." };
+      return refused(command, args);
+    });
+    localStorage.setItem(
+      savedDevicesKey,
+      JSON.stringify([{ ...stored, hardwareAddresses: addresses }]),
+    );
+    render(App);
+    await quick();
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "TV is asleep.",
+    );
+    expect(connects()).toHaveLength(1);
+  });
 });
