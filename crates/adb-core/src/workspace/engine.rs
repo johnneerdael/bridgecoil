@@ -596,6 +596,10 @@ fn state_label(action: &Action, before: &str) -> String {
                 .map(|states| files::state_summary(&states))
                 .unwrap_or_else(|_| "Current state unavailable.".into())
         }
+        Action::SwitchHome { .. } => format!(
+            "Current value: {}",
+            before.lines().next().unwrap_or_default()
+        ),
         _ => format!("Current value: {before}"),
     }
 }
@@ -1074,8 +1078,8 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
             }
             command.push_str(&format!("cmd package set-home-activity --user {user} {c}"));
             (
-                format!("Restore your TV's launcher · {package}"),
-                "Turn the launcher your TV came with back on and make it the default for this profile. Test the physical Home button afterwards.".into(),
+                format!("Restore launcher · {package}"),
+                format!("Turn {package} back on and make it the default for this profile. Test the physical Home button afterwards."),
                 command,
             )
         }

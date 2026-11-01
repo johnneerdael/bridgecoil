@@ -13,7 +13,7 @@
 | Device | Android | Connection | Tested |
 |---|---|---|---|
 | TCL Smart TV Pro | 14 | Wi-Fi, wireless debugging | Setup, pairing, cold boot, launchers |
-| Ugoos AM6 | 9 | Cable, port 5555 | Setup with the approval prompt, button detection, launcher switching, screen capture |
+| Ugoos AM6 | 9 | Cable, port 5555 | Setup with the approval prompt, button detection, launcher switching with undo, launcher updates, screen capture |
 | Android TV emulator | 16 | Legacy ADB | Most screens |
 
 Other TVs should work the same way, and brands differ, so you may find something new. If you do, [report it](../help/report-a-problem.md).

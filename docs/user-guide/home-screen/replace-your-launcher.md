@@ -10,8 +10,7 @@
 4. In Bridgecoil, tap **Yes, it works**, or **No** to stay where you are.
 5. Read the review and apply it.
 
-!!! screenshot "home-try.png"
-    Did it open, with Yes, it works and No.
+![Did it open, with Yes, it works and No.](../assets/shots/home-try.png){ .bc-shot loading=lazy }
 
 ![The Switch Home app review showing what will be turned off.](../assets/shots/home-switch-review.png){ .bc-shot loading=lazy }
 

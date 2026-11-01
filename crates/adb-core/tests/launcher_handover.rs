@@ -471,3 +471,36 @@ async fn undoing_a_switch_brings_back_every_launcher_it_turned_off() {
     assert!(back < default, "{command}");
 }
 
+/// Undoing a switch restores whatever was in use, which needn't be what the TV came with.
+#[tokio::test]
+async fn restoring_names_the_launcher_it_brings_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    let review = w
+        .prepare(
+            &mut tv("org.fresh"),
+            &target(),
+            Action::RestoreHome {
+                component: "com.spocky.projengmenu/.Home".into(),
+                enable: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(review.title, "Restore launcher · com.spocky.projengmenu");
+    assert!(review.effect.contains("Turn com.spocky.projengmenu back on"));
+    assert!(!review.effect.contains("came with"));
+}
+
+/// The list of launchers still on is for checking the result, and only confuses a review.
+#[tokio::test]
+async fn a_switch_shows_the_current_launcher_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    let review = w
+        .prepare(&mut tv("org.fresh"), &target(), switching(Some("org.fresh")))
+        .await
+        .unwrap();
+    assert_eq!(review.current_state, "Current value: com.vendor.home/.Main");
+}
+

@@ -12,7 +12,7 @@ Android has one launcher as its default, while another takes the Home button bac
 
 If you use an override on purpose and want to leave things as they are, leave this screen without choosing, and nothing changes.
 
-Turning a launcher off also clears its accessibility setting. If you turn it back on later, you'll have to turn that on again in the launcher's own settings.
+A launcher that's off can't use its accessibility service. Android 14 also cleared the setting when we tested it, while Android 9 kept it, so after turning a launcher back on, check its accessibility setting in the launcher's own settings.
 
 ## "Your TV's own launcher comes first"
 

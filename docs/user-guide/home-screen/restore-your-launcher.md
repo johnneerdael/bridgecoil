@@ -14,7 +14,7 @@ Your other launcher stays on after this. Stock launchers usually have priority, 
 
 ## To undo a switch instead
 
-If you switched between launchers, open the switch in [History](../history/undo-a-change.md) and tap **Review recovery**. That turns back on whatever the switch turned off and makes your old launcher the default again.
+If you switched between launchers, open the switch in [History](../history/undo-a-change.md) and tap **Review recovery**. That turns back on whatever the switch turned off and makes your old launcher the default again. The review is titled **Restore launcher**.
 
 ## On Android 11 and earlier
 
