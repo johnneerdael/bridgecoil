@@ -57,17 +57,26 @@ fn processors(abis: &[String]) -> String {
     }
     format!("{} ({})", names.join(" and "), abis.join(", "))
 }
-/// A file with native code runs only if Android has one of its processor types. A 64-bit chip
-/// often runs 32-bit Android, and only Android's side counts, so the message says which it is.
+fn is_64_bit(abi: &String) -> bool {
+    abi == "arm64-v8a" || abi == "x86_64"
+}
+/// A file with native code runs only if Android has one of its processor types. The banner shows
+/// two lines, so the first sentence has to say what to look for by itself. A 64-bit chip often
+/// runs 32-bit Android, which would otherwise make this look wrong.
 pub fn wrong_processor(file: &[String], tv: &[String]) -> Option<String> {
     let first = tv.first()?;
     if file.is_empty() || file.iter().any(|abi| tv.contains(abi)) {
         return None;
     }
+    let chip = if file.iter().any(is_64_bit) && !tv.iter().any(is_64_bit) {
+        " Many TVs have a 64-bit chip but run 32-bit Android, and it's Android that counts."
+    } else {
+        ""
+    };
     Some(format!(
-        "This file is built for {}, but Android on this TV is {}. Look for the {first} version of this app.",
+        "This file is for {}, but this TV needs {}. Look for the {first} version of this app.{chip}",
         processors(file),
-        processors(tv),
+        processors(std::slice::from_ref(first)),
     ))
 }
 fn android_name(sdk: u32) -> String {

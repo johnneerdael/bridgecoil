@@ -20,9 +20,28 @@ fn a_64_bit_file_on_32_bit_android_names_both_and_what_to_find() {
     let message = unfit(&apk(Some(24), &["arm64-v8a"]), 28, &tv).unwrap();
     assert_eq!(
         message,
-        "This file is built for 64-bit ARM (arm64-v8a), but Android on this TV is 32-bit ARM \
-         (armeabi-v7a, armeabi). Look for the armeabi-v7a version of this app."
+        "This file is for 64-bit ARM (arm64-v8a), but this TV needs 32-bit ARM (armeabi-v7a). \
+         Look for the armeabi-v7a version of this app. Many TVs have a 64-bit chip but run 32-bit \
+         Android, and it's Android that counts."
     );
+}
+
+#[test]
+fn the_first_sentence_fits_the_two_line_banner() {
+    let message = wrong_processor(
+        &list(&["arm64-v8a"]),
+        &list(&["armeabi-v7a", "armeabi"]),
+    )
+    .unwrap();
+    let first = message.split(". ").next().unwrap();
+    assert!(first.len() <= 90, "{first}");
+}
+
+#[test]
+fn a_32_bit_file_on_a_64_bit_only_tv_leaves_out_the_chip_note() {
+    let message = wrong_processor(&list(&["armeabi-v7a"]), &list(&["arm64-v8a"])).unwrap();
+    assert!(message.contains("needs 64-bit ARM (arm64-v8a)"), "{message}");
+    assert!(!message.contains("chip"), "{message}");
 }
 
 #[test]
@@ -41,7 +60,7 @@ fn each_processor_type_is_named_once() {
 #[test]
 fn a_processor_it_has_no_name_for_is_still_shown() {
     let message = wrong_processor(&list(&["riscv64"]), &list(&["arm64-v8a"])).unwrap();
-    assert!(message.contains("built for riscv64 (riscv64)"), "{message}");
+    assert!(message.contains("for riscv64 (riscv64)"), "{message}");
 }
 
 #[test]

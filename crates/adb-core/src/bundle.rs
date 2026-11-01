@@ -463,7 +463,7 @@ mod tests {
         let mut profile = tv();
         profile.abis = vec!["armeabi-v7a".into()];
         let error = choose(&[None, Some("config.arm64_v8a".into())], &profile).unwrap_err();
-        assert!(error.contains("built for 64-bit ARM (arm64-v8a)"), "{error}");
+        assert!(error.contains("for 64-bit ARM (arm64-v8a)"), "{error}");
         assert!(error.contains("32-bit ARM (armeabi-v7a)"), "{error}");
     }
 

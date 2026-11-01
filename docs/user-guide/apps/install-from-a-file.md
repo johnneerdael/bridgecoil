@@ -48,7 +48,7 @@ Bridgecoil shows the file's details, but those don't prove who made it. An insta
 |---|---|
 | "Google Play Protect stopped this install on the TV." | Try again. On the TV, choose **More details**, then **Install anyway** |
 | "This app needs Android 12 or newer, and this TV has Android 9." | Find an older version of the app |
-| "This file is built for 64-bit ARM (arm64-v8a), but Android on this TV is 32-bit ARM (armeabi-v7a, armeabi)." | Find the version the message names. Many TVs have a 64-bit chip but run 32-bit Android, and it's Android that decides |
+| "This file is for 64-bit ARM (arm64-v8a), but this TV needs 32-bit ARM (armeabi-v7a)." | Find the version the message names, usually listed by that name on the download page. Many TVs have a 64-bit chip but run 32-bit Android, and it's Android that counts |
 | "This POC installs standalone APKs, not individual split APKs." | This file is one part of a split app. Find the whole set, as an APKS, XAPK or APKM |
 | "This file is password protected" | Download a version without a password |
 | "This is an Android App Bundle (.aab)" | Android can't install these directly. Find an APK, APKS, XAPK or APKM |
