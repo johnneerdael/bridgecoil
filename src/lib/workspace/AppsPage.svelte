@@ -172,6 +172,7 @@
   const permissionLabel = (name: string) =>
     name.split(".").pop()!.toLowerCase().replaceAll("_", " ");
   const actions: { id: PackageAction; label: string }[] = [
+    { id: "uninstall", label: "Uninstall" },
     { id: "enable", label: "Enable" },
     { id: "disable", label: "Disable" },
     { id: "forceStop", label: "Force stop" },
@@ -181,16 +182,29 @@
     { id: "clearData", label: "Clear app data" },
     { id: "resetEnabled", label: "Default enabled state" },
   ];
-  const blockedOnUnsafe: PackageAction[] = ["disable", "remove", "clearData"];
+  const blockedOnUnsafe: PackageAction[] = [
+    "disable",
+    "remove",
+    "uninstall",
+    "clearData",
+  ];
   let unsafeUnlocked = $state(false);
   const unsafeLocked = $derived(
     detail?.rating?.level === "unsafe" && !unsafeUnlocked,
   );
+  /** An app that came with the TV can only be removed per profile. Any other can really go. */
+  const canUninstall = $derived(detail?.system === false);
   const detailActions = $derived(
-    unsafeLocked
-      ? actions.filter((a) => !blockedOnUnsafe.includes(a.id))
-      : actions,
+    actions.filter(
+      (a) =>
+        !(unsafeLocked && blockedOnUnsafe.includes(a.id)) &&
+        (a.id === "uninstall" ? canUninstall : true) &&
+        !(canUninstall && a.id === "remove") &&
+        !(canUninstall && a.id === "restore" && detail?.state.installed),
+    ),
   );
+  /** Bulk changes span system apps too, so Uninstall stays on each app's own page. */
+  const bulkActions = actions.filter((a) => a.id !== "uninstall");
   $effect(() => {
     const target = targetOf(device);
     const q = {
@@ -389,7 +403,7 @@
       <label class="sr-only" for="bulk-action">Bulk app action</label><select
         id="bulk-action"
         bind:value={bulkAction}
-        >{#each actions as action}<option value={action.id}
+        >{#each bulkActions as action}<option value={action.id}
             >{action.label}</option
           >{/each}</select
       ><button
@@ -565,6 +579,17 @@
             detail && launch(detail.launchActivity || detail.activities[0])}
           >Open app</button
         >{:else}<p class="subtle">No launch activity reported.</p>{/if}
+      {#if canUninstall && !unsafeLocked}<button
+          class="secondary danger-text"
+          disabled={busy}
+          onclick={() =>
+            detail &&
+            plan({
+              kind: "package",
+              package: detail.package,
+              action: "uninstall",
+            })}>Uninstall</button
+        >{/if}
     {:else if tab === "actions"}{#if unsafeLocked}<div
           class="risk-note rating-warning"
         >

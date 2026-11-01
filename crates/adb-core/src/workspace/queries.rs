@@ -3,7 +3,7 @@ use crate::ratings::{
     RatingList,
     groups::{Group, group_for},
 };
-use super::{commands::*, driver::*, engine::parse_package_state, files, types::*};
+use super::{commands::*, driver::*, engine::{is_system_app, parse_package_state}, files, types::*};
 use crate::{
     backend::PocError,
     remote::{
@@ -599,7 +599,7 @@ pub async fn query_rated(
             if launch_activity.is_none() {
                 launch_activity = activities.first().cloned();
             }
-            let mut detail = json!({"package":package,"state":state,"versionName":version_name,"activities":activities,"launchActivity":launch_activity,"permissions":permissions,"raw":raw,"metadata":metadata});
+            let mut detail = json!({"package":package,"state":state,"system":is_system_app(&raw),"versionName":version_name,"activities":activities,"launchActivity":launch_activity,"permissions":permissions,"raw":raw,"metadata":metadata});
             if let Some(list) = ratings {
                 let rating = list.get(&package);
                 let related: BTreeSet<_> = rating

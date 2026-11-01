@@ -37,4 +37,4 @@ Bridgecoil shows the file's details, but those don't prove who made it. An insta
 
 ## Limits
 
-Files can be up to 1 GB. Split APK sets and Android App Bundles aren't supported. Nothing is ever uninstalled automatically. Installs don't appear in History, so there's no undo. To remove an app, use [Remove from profile](turn-off-or-remove-an-app.md).
+Files can be up to 1 GB. Split APK sets and Android App Bundles aren't supported. Nothing is ever uninstalled automatically. Installs don't appear in History, so there's no undo. To remove an app, use [Uninstall](turn-off-or-remove-an-app.md).

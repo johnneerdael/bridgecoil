@@ -85,6 +85,7 @@ export type PackageAction =
   | "resetEnabled"
   | "forceStop"
   | "remove"
+  | "uninstall"
   | "restore"
   | "clearData"
   | "clearCache";
@@ -250,6 +251,8 @@ export type AppMetadata = {
   rating?: Rating | null;
 };
 export type PackageDetail = {
+  /** Came with the TV, so Android won't uninstall it. Absent before this was reported. */
+  system?: boolean;
   launchActivity?: string | null;
   metadata?: AppMetadata | null;
   package: string;

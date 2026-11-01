@@ -5,7 +5,7 @@ import {
   cleanup,
   waitFor,
 } from "@testing-library/svelte";
-import { afterEach, beforeAll, it, expect, vi } from "vitest";
+import { afterEach, beforeAll, describe, it, expect, vi } from "vitest";
 import AppsPage from "./AppsPage.svelte";
 import RemotePage from "./RemotePage.svelte";
 import ActionReview from "./ActionReview.svelte";
@@ -371,4 +371,66 @@ it("identifies original devices in history when package and profile match", asyn
   ).toBeTruthy();
   expect(screen.getByRole("button", { name: /Bedroom TV/ })).toBeTruthy();
   expect(recovery).not.toHaveBeenCalled();
+});
+
+describe("uninstalling an app", () => {
+  const detail = (system: boolean, installed = true) => ({
+    package: "org.demo",
+    system,
+    state: { installed, enabled: 0, stopped: false, version: 1 },
+    versionName: "1",
+    activities: ["org.demo/.Main"],
+    permissions: [],
+    raw: "raw",
+  });
+  async function open(info: ReturnType<typeof detail>) {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [{ package: "org.demo", label: "Player", icon: null }],
+        page: 0,
+        pageSize: 4,
+        total: 1,
+      })
+      .mockResolvedValueOnce(info);
+    const prepare = vi.fn().mockResolvedValue(review);
+    render(AppsPage, {
+      device,
+      api: { query, prepare } as unknown as Platform,
+      onreview: vi.fn(),
+      onbulk: vi.fn(),
+      oninstall: vi.fn(),
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: /Player/ }));
+    await screen.findByRole("button", { name: "Open app" });
+    return prepare;
+  }
+  it("offers it straight away on an app the owner added, and sends it for review", async () => {
+    const prepare = await open(detail(false));
+    await fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
+    expect(prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "package",
+      package: "org.demo",
+      action: "uninstall",
+    });
+  });
+  it("replaces the per-profile actions, which mean little for such an app", async () => {
+    await open(detail(false));
+    await fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    expect(screen.getByRole("button", { name: "Uninstall" })).toBeTruthy();
+    for (const page of [0, 1]) {
+      expect(screen.queryByRole("button", { name: "Remove from profile" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Restore existing package" }),
+      ).toBeNull();
+      const next = screen.queryByRole("button", { name: /next/i });
+      if (page === 0 && next) await fireEvent.click(next);
+    }
+  });
+  it("isn't offered for an app that came with the TV", async () => {
+    await open(detail(true));
+    expect(screen.queryByRole("button", { name: "Uninstall" })).toBeNull();
+    await fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    expect(screen.queryByRole("button", { name: "Uninstall" })).toBeNull();
+  });
 });

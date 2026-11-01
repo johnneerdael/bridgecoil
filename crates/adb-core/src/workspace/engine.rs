@@ -32,6 +32,7 @@ pub enum PackageAction {
     Disable,
     ForceStop,
     Remove,
+    Uninstall,
     Restore,
     ClearData,
     ClearCache,
@@ -105,6 +106,24 @@ pub struct PackageState {
     pub installed: Option<bool>,
     pub enabled: Option<u8>,
     pub stopped: Option<bool>,
+}
+/// Android reports an app that came with the TV as SYSTEM, even after it has been updated.
+pub fn is_system_app(raw: &str) -> bool {
+    raw.lines()
+        .find_map(|l| l.trim().strip_prefix("pkgFlags=["))
+        .is_some_and(|flags| flags.split_whitespace().any(|f| f == "SYSTEM"))
+}
+async fn package_report(d: &mut dyn ShellDriver, t: &Target, package: &str) -> Result<String> {
+    let output = d
+        .shell(t, &format!("dumpsys package {}", package_arg(package)?))
+        .await?;
+    if !output.success() {
+        return Err(PocError::new(
+            "inspection",
+            format!("Cannot inspect the current state: {}", output.combined()),
+        ));
+    }
+    Ok(output.stdout)
 }
 pub fn parse_package_state(raw: &str, user: u32) -> PackageState {
     let version = raw
@@ -212,6 +231,7 @@ impl Workspace {
                 Action::Package {
                     action: PackageAction::Disable
                         | PackageAction::Remove
+                        | PackageAction::Uninstall
                         | PackageAction::ClearData,
                     ..
                 }
@@ -261,9 +281,21 @@ impl Workspace {
                     "The TV did not report this package's state for the selected profile.",
                 ));
             }
+            if matches!(kind, PackageAction::Uninstall) {
+                let raw = package_report(driver, target, package).await?;
+                if is_system_app(&raw) {
+                    return Err(PocError::new(
+                        "protected",
+                        "This app came with the TV, so Android won't uninstall it. Disable it, or use Remove from profile.",
+                    ));
+                }
+            }
             if matches!(
                 kind,
-                PackageAction::Disable | PackageAction::Remove | PackageAction::ClearData
+                PackageAction::Disable
+                    | PackageAction::Remove
+                    | PackageAction::Uninstall
+                    | PackageAction::ClearData
             ) {
                 protect_home(driver, target, package, kind).await?;
             }
@@ -415,7 +447,10 @@ impl Workspace {
         if let Action::Package { package, action } = &p.action
             && matches!(
                 action,
-                PackageAction::Disable | PackageAction::Remove | PackageAction::ClearData
+                PackageAction::Disable
+                    | PackageAction::Remove
+                    | PackageAction::Uninstall
+                    | PackageAction::ClearData
             )
         {
             protect_home(driver, target, package, action).await?;
@@ -448,7 +483,10 @@ impl Workspace {
                 };
                 if !output.success() {
                     row.status = OperationStatus::Failed;
-                    row.error = Some(format!("TV command exited {:?}.", output.exit_code));
+                    row.error = Some(match output.exit_code {
+                        Some(code) => format!("The TV reported exit code {code}."),
+                        None => "The TV didn't report how the command ended.".into(),
+                    });
                 } else if matches!(
                     p.action,
                     Action::Shell { .. }
@@ -770,9 +808,15 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
         Action::AppOp { op, .. } => {
             serde_json::to_string(&super::app_ops::parse(&output.stdout, op)?).map_err(internal)
         }
-        Action::Package { .. } => {
-            serde_json::to_string(&parse_package_state(&output.stdout, t.profile_id))
-                .map_err(internal)
+        Action::Package { package, .. } => {
+            let mut state = parse_package_state(&output.stdout, t.profile_id);
+            // Once a package is really gone there is no section for it. Android 9 then prints its
+            // general report, which has a "User 0:" line of its own.
+            if state.installed.is_none() && !output.stdout.contains(&format!("Package [{package}]"))
+            {
+                state.installed = Some(false);
+            }
+            serde_json::to_string(&state).map_err(internal)
         }
         Action::Setup { .. } => Ok(parse_facts(&output.stdout).summary()),
         Action::Mappings { .. } => serde_json::to_string(&MappingSnapshot::from(
@@ -818,7 +862,7 @@ fn verified(a: &Action, after: &str) -> bool {
                 PackageAction::Enable => s.enabled == Some(1),
                 PackageAction::ResetEnabled => s.enabled == Some(0),
                 PackageAction::Disable => s.enabled == Some(3),
-                PackageAction::Remove => s.installed == Some(false),
+                PackageAction::Remove | PackageAction::Uninstall => s.installed == Some(false),
                 PackageAction::Restore => s.installed == Some(true),
                 PackageAction::ForceStop => s.stopped == Some(true),
                 PackageAction::ClearData | PackageAction::ClearCache => false,
@@ -938,6 +982,17 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
                         "Remove app from profile",
                         format!("pm uninstall --user {user} {p}"),
                         "Remove this app for the selected profile. Other profiles are not requested to change.",
+                    )
+                }
+                PackageAction::Uninstall => {
+                    losses.push("The app and all its data are deleted from every profile. To get it back you have to install it again, and its data doesn't come back.".into());
+                    if ["com.termux", "com.termux.boot"].contains(&package.as_str()) {
+                        losses.push("Bridgecoil uses this app to keep your button mappings running. They stop working until you set it up again.".into());
+                    }
+                    (
+                        "Uninstall app",
+                        format!("pm uninstall {p}"),
+                        "Delete this app from the TV completely.",
                     )
                 }
                 PackageAction::Restore => (

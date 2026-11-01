@@ -31,7 +31,7 @@ The list is written by volunteers and is mostly based on phones. A TV can depend
 
 ## How Unsafe apps are protected
 
-For an Unsafe app, **Disable**, **Remove from profile** and **Clear app data** are hidden. **Show these actions anyway** reveals them for that one visit to the app. Bulk changes and undo can't get around this block, so an Unsafe app is always left out of a bulk change.
+For an Unsafe app, **Disable**, **Remove from profile**, **Uninstall** and **Clear app data** are hidden. **Show these actions anyway** reveals them for that one visit to the app. Bulk changes and undo can't get around this block, so an Unsafe app is always left out of a bulk change.
 
 ## Keep the list up to date
 

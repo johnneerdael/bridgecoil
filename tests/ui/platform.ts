@@ -199,6 +199,7 @@ async function query<T>(t: Target, q: Query): Promise<T> {
         ),
         installedRelated: ["com.fixture.one"],
         package: q.package,
+        system: false,
         state: { installed: true, enabled: 0, stopped: false, version: 1 },
         versionName: "1.0",
         activities: [`${q.package}/.MainActivity`],

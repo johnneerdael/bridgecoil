@@ -23,7 +23,8 @@
 | Turn a disabled app back on | **Enable** | Yes |
 | Return to the app's normal state | **Default enabled state** | Yes |
 | Close an app that's stuck or playing | **Force stop** | It starts again when opened |
-| Delete an app from this profile | **Remove from profile** | Only the app comes back, and its data is gone |
+| Delete an app you added | **Uninstall** | No. Install it again, and its data is gone |
+| Hide an app that came with the TV from this profile | **Remove from profile** | Only the app comes back, and its data is gone |
 | Bring back a removed app | **Restore existing package** | Deleted data isn't restored |
 | Free up cache space | **Clear cache** | Android rebuilds cache as needed |
 | Reset an app completely | **Clear app data** | No |
@@ -40,7 +41,9 @@ Disable is the one to reach for first. It hides the app and stops it running, an
 
 **Force stop** ends the app and anything it was playing or doing in the background. It can start again later.
 
-**Remove from profile** deletes the app for the selected profile, and its data with it. Installing the APK again doesn't bring the data back. For a system app, Android keeps the app itself on the TV, so **Restore existing package** can bring it back.
+**Uninstall** deletes an app you added from the TV completely, for every profile, along with its data. It's on the app's **Overview** tab, under **Open app**, and at the top of **Actions**. Apps that came with the TV don't have it, because Android won't uninstall them. The result only says **Verified** once the app is gone. Uninstalling Termux or Termux:Boot stops your button mappings, and the review tells you so.
+
+**Remove from profile** is for apps that came with the TV. It deletes the app for the selected profile, and its data with it. Android keeps the app itself on the TV, so **Restore existing package** can bring it back. Apps you added show **Uninstall** in its place.
 
 **Clear cache** asks Android to clear the app's temporary files. Older firmware may not support this.
 
@@ -48,7 +51,7 @@ Disable is the one to reach for first. It hides the app and stops it running, an
 
 ## What Bridgecoil refuses to do
 
-Some changes would leave a TV in a bad state, so **Disable**, **Remove from profile** and **Clear app data** are blocked for:
+Some changes would leave a TV in a bad state, so **Disable**, **Remove from profile**, **Uninstall** and **Clear app data** are blocked for:
 
 - Core parts of Android, including Settings and the system interface. You'll see "This system component is protected from this operation."
 - The launcher in use, unless another one is ready. You'll see "Choose and verify a replacement Home app before changing the active launcher."
