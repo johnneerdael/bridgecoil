@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   deleteSaved,
   loadSavedDevices,
+  renameSaved,
+  savedName,
   rememberConnected,
   rememberPaired,
 } from "./saved-devices";
@@ -131,5 +133,43 @@ describe("deleteSaved", () => {
     expect(left.devices.map((d) => d.name)).toEqual(["Other TV"]);
     expect(left.pairs).toEqual(pairs);
     expect(left.lastEndpoint).toBe(tv.endpoint);
+  });
+});
+describe("renameSaved", () => {
+  it("keeps the chosen name through a reconnect and a restart", () => {
+    let saved = renameSaved(
+      rememberConnected([], tv, 20),
+      rememberConnected([], tv, 20)[0],
+      "  Living room  ",
+    );
+    expect(saved[0].label).toBe("Living room");
+    saved = rememberConnected(saved, { ...tv, endpoint: "192.0.2.15:48000" }, 30);
+    saved = loadSavedDevices(JSON.stringify(saved), [], null);
+    expect(savedName(saved[0])).toBe("Living room");
+    expect(saved[0].name).toBe("Smart TV Pro");
+  });
+  it("goes back to the TV's own name when the new name is empty", () => {
+    const saved = rememberConnected([], tv, 20);
+    const named = renameSaved(saved, saved[0], "Bedroom");
+    const cleared = renameSaved(named, named[0], "   ");
+    expect(cleared[0].label).toBeUndefined();
+    expect(savedName(cleared[0])).toBe("Smart TV Pro");
+  });
+  it("renames only that TV, and limits the length", () => {
+    let saved = rememberConnected([], tv, 20);
+    saved = rememberConnected(
+      saved,
+      { ...tv, deviceId: "android:other", model: "Other TV" },
+      30,
+    );
+    const target = saved.find((d) => d.name === "Other TV")!;
+    const named = renameSaved(saved, target, "x".repeat(200));
+    expect(named.find((d) => d.name === "Other TV")!.label).toHaveLength(60);
+    expect(named.find((d) => d.name === "Smart TV Pro")!.label).toBeUndefined();
+  });
+  it("ignores a stored name that isn't valid", () => {
+    const saved = rememberConnected([], tv, 20);
+    const stored = JSON.stringify([{ ...saved[0], label: 42 }]);
+    expect(loadSavedDevices(stored, [], null)).toEqual([]);
   });
 });

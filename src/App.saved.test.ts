@@ -478,3 +478,38 @@ it("doesn't carry a deleted TV's legacy choice over to the next connection", asy
     (screen.getByLabelText(/Connection address/) as HTMLInputElement).value,
   ).toBe("");
 });
+it("renames a saved TV, and the new name survives connecting and restarting", async () => {
+  backend();
+  localStorage.setItem(savedDevicesKey, JSON.stringify([stored]));
+  const first = render(App);
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole("button", {
+          name: `Quick connect to ${tv.model}`,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false),
+  );
+  await fireEvent.click(
+    screen.getByRole("button", { name: `Rename ${tv.model}` }),
+  );
+  const field = (await screen.findByLabelText("TV name")) as HTMLInputElement;
+  expect(field.value).toBe(tv.model);
+  await fireEvent.input(field, { target: { value: "Living room" } });
+  await fireEvent.click(screen.getByRole("button", { name: "Save name" }));
+  const quick = await screen.findByRole("button", {
+    name: "Quick connect to Living room",
+  });
+  await fireEvent.click(quick);
+  await screen.findByRole("button", { name: "Connection status: Connected" });
+  first.unmount();
+  backend();
+  render(App);
+  expect(
+    await screen.findByRole("button", { name: "Quick connect to Living room" }),
+  ).toBeTruthy();
+  expect(JSON.parse(localStorage.getItem(savedDevicesKey)!)[0].name).toBe(
+    tv.model,
+  );
+});

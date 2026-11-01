@@ -20,6 +20,10 @@ Tap **Quick connect →**. Bridgecoil scans your network for a few seconds to fi
 
 Tap **Add device** and follow [Connect your phone to the TV](../get-started/first-connection.md). You can save up to 32 TVs, and only one is connected at a time.
 
+## Rename a saved TV
+
+Tap **Rename** on the TV's row and type a name, such as *Living room*. Bridgecoil keeps your name when it reconnects or the TV's address changes. Clear the name to go back to the TV's own.
+
 ## Delete a saved TV
 
 Use this when you've finished with a TV, such as one that belongs to someone else. Disconnect first, because Saved TVs only shows while you're not connected.
@@ -44,4 +48,4 @@ If a TV never gave Bridgecoil a stable ID, its History records can't be matched 
 
 ## Limits
 
-Bridgecoil doesn't connect by itself when it opens. There's no button to rename a saved TV yet.
+Bridgecoil doesn't connect by itself when it opens.

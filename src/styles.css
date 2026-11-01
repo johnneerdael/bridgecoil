@@ -934,6 +934,7 @@ textarea {
   justify-content: space-between;
   gap: 12px;
 }
+.saved-actions > :first-child {margin-right: auto;}
 .saved-actions .danger-text {flex-shrink: 0;}
 .delete-list {
   margin: 10px 0;

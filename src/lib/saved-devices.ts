@@ -2,10 +2,14 @@ import { endpointHost, type PairRecord } from "./connection-model";
 import type { Device } from "./model";
 
 export const savedDevicesKey = "bridgecoil.devices.v1";
+export const labelLimit = 60;
 export type SavedDevice = {
   discoveryName?: string;
   deviceId: string | null;
+  /** The TV's own model name. It's replaced on every connection. */
   name: string;
+  /** The name someone chose. It wins over `name` wherever a TV is named. */
+  label?: string;
   host: string;
   endpoint: string | null;
   legacy: boolean;
@@ -63,6 +67,10 @@ export function loadSavedDevices(
             (v.discoveryName === undefined ||
               (typeof v.discoveryName === "string" &&
                 v.discoveryName.length <= 160)) &&
+            (v.label === undefined ||
+              (typeof v.label === "string" &&
+                v.label.length > 0 &&
+                v.label.length <= labelLimit)) &&
             typeof v.name === "string" &&
             v.name.length > 0 &&
             v.name.length <= 160 &&
@@ -143,6 +151,7 @@ export function rememberConnected(
       ...(previous?.discoveryName
         ? { discoveryName: previous.discoveryName }
         : {}),
+      ...(previous?.label ? { label: previous.label } : {}),
       name: device.model.slice(0, 160) || host,
       host,
       endpoint: device.endpoint.trim(),
@@ -154,6 +163,22 @@ export function rememberConnected(
       (r) => r !== previous && !(!r.deviceId && r.host === host),
     ),
   ]);
+}
+const sameDevice = (a: SavedDevice, b: SavedDevice) =>
+  a.deviceId === b.deviceId && a.host === b.host && a.endpoint === b.endpoint;
+export const savedName = (saved: SavedDevice) => saved.label ?? saved.name;
+/** An empty name goes back to the TV's own. */
+export function renameSaved(
+  records: SavedDevice[],
+  saved: SavedDevice,
+  name: string,
+): SavedDevice[] {
+  const label = name.trim().slice(0, labelLimit);
+  return records.map((r) => {
+    if (!sameDevice(r, saved)) return r;
+    const { label: _old, ...rest } = r;
+    return label ? { ...rest, label } : rest;
+  });
 }
 export const homePickKey = (deviceId: string) => `bridgecoil.home.${deviceId}`;
 export const homeProvenKey = (deviceId: string) =>
@@ -169,12 +194,7 @@ export function deleteSaved(
   lastEndpoint: string | null,
   saved: SavedDevice,
 ) {
-  const devices = records.filter(
-    (r) =>
-      r.deviceId !== saved.deviceId ||
-      r.host !== saved.host ||
-      r.endpoint !== saved.endpoint,
-  );
+  const devices = records.filter((r) => !sameDevice(r, saved));
   const shared = devices.some((r) => r.host === saved.host);
   return {
     devices,

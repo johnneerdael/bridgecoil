@@ -11,10 +11,13 @@
     deleteSaved,
     homePickKey,
     homeProvenKey,
+    labelLimit,
     loadSavedDevices,
     rememberConnected,
     rememberPaired,
+    renameSaved,
     savedDevicesKey,
+    savedName,
     type SavedDevice,
   } from "./lib/saved-devices";
   import Modal from "./lib/Modal.svelte";
@@ -102,6 +105,18 @@
   let showSaved = $state(true);
   let connectionChoice = $state<SavedDevice | null>(null);
   let deleting = $state<SavedDevice | null>(null);
+  let renaming = $state<SavedDevice | null>(null);
+  let newName = $state("");
+  function startRename(saved: SavedDevice) {
+    renaming = saved;
+    newName = savedName(saved);
+  }
+  function saveName() {
+    if (!renaming) return;
+    savedDevices = renameSaved(savedDevices, renaming, newName);
+    storeSaved();
+    renaming = null;
+  }
   let discoveryOpen = $state(false);
   let discoveryPhase = $state(false);
   let cancelRefresh = false;
@@ -433,7 +448,7 @@
         pairEndpoint = "";
         code = "";
       }
-      notice = `${saved.name} is deleted from this phone.`;
+      notice = `${savedName(saved)} is deleted from this phone.`;
     });
   }
   async function pick() {
@@ -677,7 +692,7 @@
               {#each savedDevices as saved}
                 <article class="saved-device">
                   <div class="truncate">
-                    <h3>{saved.name}</h3>
+                    <h3>{savedName(saved)}</h3>
                     <p class="subtle">{saved.endpoint ?? saved.host}</p>
                     <small class="subtle"
                       >{saved.lastConnectedAt !== null
@@ -694,7 +709,7 @@
                       busy ||
                       (!saved.endpoint && saved.pairedAt === null)}
                     onclick={() => quickConnect(saved)}
-                    aria-label={`Quick connect to ${saved.name}`}
+                    aria-label={`Quick connect to ${savedName(saved)}`}
                     >Quick connect <span aria-hidden="true">→</span></button
                   >
                   <div class="saved-actions">
@@ -705,9 +720,15 @@
                       >Update connection address</button
                     >
                     <button
+                      class="text-action"
+                      disabled={busy}
+                      aria-label={`Rename ${savedName(saved)}`}
+                      onclick={() => startRename(saved)}>Rename</button
+                    >
+                    <button
                       class="text-action danger-text"
                       disabled={busy}
-                      aria-label={`Delete ${saved.name}`}
+                      aria-label={`Delete ${savedName(saved)}`}
                       onclick={() => (deleting = saved)}>Delete</button
                     >
                   </div>
@@ -1043,12 +1064,37 @@
   </p>
 </Modal>
 <Modal
+  open={!!renaming}
+  title="Rename this TV"
+  onclose={() => (renaming = null)}
+>
+  {#if renaming}
+    <form
+      onsubmit={(e) => {
+        e.preventDefault();
+        saveName();
+      }}
+    >
+      <label for="tv-name">TV name</label><input
+        id="tv-name"
+        bind:value={newName}
+        maxlength={labelLimit}
+        placeholder={renaming.name}
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <p class="field-note">Leave this empty to use the TV's own name.</p>
+      <button class="primary" type="submit">Save name</button>
+    </form>
+  {/if}
+</Modal>
+<Modal
   open={!!deleting}
   title="Delete this TV?"
   onclose={() => (deleting = null)}
 >
   {#if deleting}
-    <h3 class="break-word">{label(deleting.name, 120)}</h3>
+    <h3 class="break-word">{label(savedName(deleting), 120)}</h3>
     <p class="delete-lead">
       This removes the following from your phone, and it can't be undone:
     </p>
