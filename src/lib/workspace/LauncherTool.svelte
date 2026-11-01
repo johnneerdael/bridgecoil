@@ -37,6 +37,7 @@
     roles?: boolean;
     catalog?: Listed[];
     restorable?: { package: string; component: string | null }[];
+    overriding?: string[];
   };
   let homes = $state<Homes | null>(null);
   let busy = $state(false);
@@ -49,6 +50,7 @@
   const packageOf = (component: string) => component.split("/")[0];
   const catalog = $derived(homes?.catalog ?? []);
   const restorable = $derived(homes?.restorable ?? []);
+  const overriding = $derived(homes?.overriding ?? []);
   const nameOf = (component: string) =>
     catalog.find((c) => c.package === packageOf(component))?.name ??
     packageOf(component);
@@ -213,6 +215,26 @@
         }),
       );
     });
+  // The old launcher goes off in the same step, or it can take Home straight back.
+  const switchTo = (component: string) =>
+    attempt(async () => {
+      keepPick(component);
+      const inUse = packageOf(homes?.current ?? "");
+      const replacing = homes?.homes.some((h) => packageOf(h) === inUse) ? inUse : null;
+      onreview(
+        await api.prepare(targetOf(device), {
+          kind: "switchHome",
+          component,
+          replacing,
+        }),
+      );
+      // The launcher that was in charge is off, so there's nothing left to ask about Home.
+      try {
+        localStorage.setItem(provenKey, packageOf(component));
+      } catch {
+        // Without storage, the question comes back next time.
+      }
+    });
   // Without a component, the launcher's own priority takes Home back once it's on.
   const restore = (listed: { package: string; component: string | null }) =>
     attempt(async () => {
@@ -279,10 +301,24 @@
       onclick={() => {
         const component = tried!;
         tried = null;
-        return makeDefault(component);
+        return switchTo(component);
       }}>Yes, it works</button
     >
     <button class="secondary" onclick={() => (tried = null)}>No</button>
+  </div>
+{:else if overriding.length}
+  <div class="setup-card">
+    <h3>{nameOf(overriding[0])} is still taking over Home</h3>
+    <p>
+      Your TV's default is {homes.current ? nameOf(homes.current) : "another launcher"},
+      but {nameOf(overriding[0])} takes the Home button back. Turning it off ends
+      that. You can undo this from History or Apps.
+    </p>
+    <button
+      class="primary"
+      disabled={busy}
+      onclick={() => turnOff(overriding[0])}>Turn off {nameOf(overriding[0])}</button
+    >
   </div>
 {:else if outranked && homes.current}
   {@const inUse = homes.current}

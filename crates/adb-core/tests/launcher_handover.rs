@@ -6,8 +6,8 @@ use adb_core::{
         driver::{ShellDriver, ShellOutput},
         engine::{Action, PackageAction, Workspace},
         history::History,
-        queries::{Query, query},
-        types::Target,
+        queries::{Query, overriding_homes, query},
+        types::{OperationStatus, Target},
     },
 };
 use adb_core::{
@@ -46,6 +46,12 @@ impl ShellDriver for Tv {
             } else {
                 "com.google.setup/.Main\ncom.google.tvlauncher/.Home\ncom.google.tvlauncher/.Other\ncom.vendor.home/.Main\n".into()
             }
+        } else if c.contains("enabled_accessibility_services") {
+            "com.other.tool/.Service:com.spocky.projengmenu/com.spocky.projengmenu.services.Hook\n"
+                .into()
+        } else if c.contains("resolve-activity") && c.contains("pm list packages -d") {
+            "priority=2 preferredOrder=0\ncom.vendor.home/.Main\npackage:com.google.tvlauncher\n"
+                .into()
         } else if c.contains("pm list packages -d") {
             "package:com.google.setup\npackage:com.google.tvlauncher\n".into()
         } else if c.starts_with("dumpsys package") {
@@ -329,3 +335,94 @@ async fn restoring_refuses_a_component_that_could_be_a_command() {
         .await;
     assert!(refused.is_err());
 }
+
+fn switching(replacing: Option<&str>) -> Action {
+    Action::SwitchHome {
+        component: "com.vendor.home/.Main".into(),
+        replacing: replacing.map(str::to_owned),
+    }
+}
+
+/// The old launcher goes last. It's refused while it's in use, and it can take Home back if it
+/// stays on, as Projectivy's override did on a TCL.
+#[tokio::test]
+async fn switching_opens_the_new_launcher_and_then_turns_off_the_old_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    let review = w
+        .prepare(&mut tv("org.fresh"), &target(), switching(Some("org.fresh")))
+        .await
+        .unwrap();
+    let command = &review.commands[0];
+    let default = command.find("set-home-activity").unwrap();
+    let open = command.find("am start -n 'com.vendor.home/.Main'").unwrap();
+    let off = command.find("pm disable-user --user 0 'org.fresh'").unwrap();
+    assert!(default < open && open < off, "{command}");
+    assert_eq!(command.matches("&&").count(), 2, "a failed step must stop here");
+    assert!(review.reversible);
+    assert!(review.losses.iter().any(|l| l.contains("org.fresh")));
+}
+
+#[tokio::test]
+async fn switching_with_nothing_to_replace_turns_nothing_off() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    let review = w
+        .prepare(&mut tv("org.fresh"), &target(), switching(None))
+        .await
+        .unwrap();
+    assert!(!review.commands[0].contains("disable-user"));
+}
+
+#[tokio::test]
+async fn switching_never_turns_off_android_or_the_launcher_it_chose() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    for old in ["android", "com.android.tv.settings", "com.vendor.home"] {
+        let e = w
+            .prepare(&mut tv("org.fresh"), &target(), switching(Some(old)))
+            .await
+            .unwrap_err();
+        assert_eq!(e.kind, "protected", "{old}");
+    }
+}
+
+#[test]
+fn an_override_is_another_launcher_with_an_accessibility_service() {
+    let homes = ["com.a/.Home".to_owned(), "com.b/.Home".to_owned()];
+    let services = "com.b/com.b.Hook:com.tool/.Service";
+    assert_eq!(overriding_homes(&homes, Some("com.a/.Home"), services), ["com.b"]);
+    assert!(overriding_homes(&homes, Some("com.b/.Home"), services).is_empty());
+    assert!(overriding_homes(&homes, Some("com.a/.Home"), "null").is_empty());
+}
+
+#[tokio::test]
+async fn reports_a_launcher_that_takes_home_back() {
+    let mut d = tv("com.vendor.home\n");
+    d.homes = "com.vendor.home/.Main\ncom.spocky.projengmenu/.Home\n";
+    let found = query(&mut d, &target(), Query::Launchers).await.unwrap();
+    assert_eq!(found["overriding"], json!(["com.spocky.projengmenu"]));
+}
+
+/// The default changing isn't enough: a TCL said Verified while Projectivy stayed on and kept Home.
+#[tokio::test]
+async fn a_switch_counts_only_once_the_old_launcher_is_off() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    let mut d = tv("org.fresh");
+    let off = w
+        .prepare(&mut d, &target(), switching(Some("com.google.tvlauncher")))
+        .await
+        .unwrap();
+    let done = w.apply(&mut d, &off.id).await.unwrap();
+    assert_eq!(done.status, OperationStatus::Verified, "{:?}", done.error);
+
+    let on = w
+        .prepare(&mut d, &target(), switching(Some("org.fresh")))
+        .await
+        .unwrap();
+    let done = w.apply(&mut d, &on.id).await.unwrap();
+    assert_eq!(done.status, OperationStatus::Unknown);
+    assert!(done.error.unwrap().contains("org.fresh is still on"));
+}
+

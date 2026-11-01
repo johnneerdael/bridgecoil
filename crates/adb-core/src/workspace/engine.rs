@@ -67,6 +67,12 @@ pub enum Action {
     RestoreHome {
         component: String,
     },
+    /// Hands Home to a launcher: makes it the default, opens it, and turns the old one off. A
+    /// launcher that stays on can take Home back, as Projectivy's override does.
+    SwitchHome {
+        component: String,
+        replacing: Option<String>,
+    },
     Permission {
         package: String,
         permission: String,
@@ -330,6 +336,14 @@ impl Workspace {
                 component: before.clone(),
             });
         }
+        if let Action::SwitchHome { .. } = &action {
+            let home = before.lines().next().unwrap_or_default();
+            if component_arg(home).is_ok() {
+                recovery = Some(Action::RestoreHome {
+                    component: home.to_owned(),
+                });
+            }
+        }
         let review = Review {
             id: Uuid::new_v4().to_string(),
             target: target.clone(),
@@ -455,7 +469,16 @@ impl Workspace {
                             };
                             if row.status == OperationStatus::Unknown {
                                 row.error = Some(match &p.action {
-                                    Action::DefaultHome { .. } | Action::RestoreHome { .. }
+                                    Action::SwitchHome {
+                                        component,
+                                        replacing: Some(old),
+                                    } if after.lines().next() == Some(component) => format!(
+                                        "{} is the default now, but {old} is still on.",
+                                        component.split('/').next().unwrap_or_default()
+                                    ),
+                                    Action::DefaultHome { .. }
+                                    | Action::RestoreHome { .. }
+                                    | Action::SwitchHome { .. }
                                         if !after.is_empty() =>
                                     format!(
                                         "Android accepted this choice, but Home still opens {}.",
@@ -579,7 +602,9 @@ fn kind(a: &Action) -> &str {
         Action::Package { .. } => "package",
         Action::Shell { .. } => "shell",
         Action::Setting { .. } => "setting",
-        Action::DefaultHome { .. } | Action::RestoreHome { .. } => "launcher",
+        Action::DefaultHome { .. } | Action::RestoreHome { .. } | Action::SwitchHome { .. } => {
+            "launcher"
+        }
         Action::Permission { .. } => "permission",
         Action::FileDelete { .. } | Action::FileMove { .. } | Action::FileCreateFolder { .. } => {
             "file"
@@ -710,6 +735,15 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
             )
         }
         Action::DefaultHome { .. } | Action::RestoreHome { .. } => home_query(t.profile_id),
+        Action::SwitchHome { replacing, .. } => match replacing {
+            Some(old) => format!(
+                "{}; pm list packages -d --user {} {}",
+                home_query(t.profile_id),
+                t.profile_id,
+                shell_quote(old)
+            ),
+            None => home_query(t.profile_id),
+        },
         Action::Setup { .. } => facts_command().to_owned(),
         Action::Mappings { .. } => mappings::state_command(),
         Action::Shell { .. } => return Ok(String::new()),
@@ -738,6 +772,23 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
             mappings::parse_state(&output.stdout),
         ))
         .map_err(internal),
+        Action::SwitchHome { replacing, .. } => {
+            let home = output
+                .stdout
+                .lines()
+                .find(|v| component_arg(v.trim()).is_ok())
+                .unwrap_or("")
+                .trim()
+                .to_owned();
+            let off = replacing.as_ref().is_none_or(|old| {
+                let wanted = format!("package:{old}");
+                output.stdout.lines().any(|l| l.trim() == wanted)
+            });
+            Ok(match replacing {
+                Some(old) if !off => format!("{home}\n{old}"),
+                _ => home,
+            })
+        }
         Action::DefaultHome { .. } | Action::RestoreHome { .. } => Ok(output
             .stdout
             .lines()
@@ -770,6 +821,7 @@ fn verified(a: &Action, after: &str) -> bool {
         Action::DefaultHome { component } | Action::RestoreHome { component } => {
             after == component
         }
+        Action::SwitchHome { component, .. } => after == component,
         Action::Shell { .. } => false,
         Action::Permission { grant, .. } => after == if *grant { "granted" } else { "denied" },
         Action::FileDelete { path } | Action::FileCreateFolder { path } => {
@@ -982,6 +1034,36 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
             let plan = setup::plan(*step);
             losses.extend(plan.losses);
             (plan.title, plan.effect, plan.command)
+        }
+        Action::SwitchHome {
+            component,
+            replacing,
+        } => {
+            let c = component_arg(component)?;
+            let package = component.split('/').next().unwrap_or_default();
+            let mut command = format!(
+                "cmd package set-home-activity --user {user} {c} && am start -n {c}"
+            );
+            let mut effect = format!("Make {package} the default for this profile and open it.");
+            if let Some(old) = replacing {
+                if old == package || old == "android" || old.ends_with(".settings") {
+                    return Err(PocError::new(
+                        "protected",
+                        "That app can't be turned off to change launchers.",
+                    ));
+                }
+                let p = package_arg(old)?;
+                command.push_str(&format!(" && pm disable-user --user {user} {p}"));
+                effect = format!(
+                    "Make {package} the default for this profile, open it, and turn off {old}. Its data stays on the TV."
+                );
+                losses.push(format!("Some TV features can depend on {old}."));
+            }
+            (
+                format!("Switch Home app · {package}"),
+                effect,
+                command,
+            )
         }
         Action::RestoreHome { component } => {
             let c = component_arg(component)?;

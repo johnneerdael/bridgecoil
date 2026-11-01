@@ -238,6 +238,21 @@ fn homes_command(user: u32) -> String {
         "cmd package query-activities --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME"
     )
 }
+/// Launchers other than the default with an accessibility service switched on. That's how one
+/// takes the Home button back, as Projectivy's "Override current launcher" does, and Android still
+/// reports the default as if it were in charge. A launcher that's off can't do it.
+pub fn overriding_homes(homes: &[String], current: Option<&str>, services: &str) -> Vec<String> {
+    let package = |component: &str| component.split('/').next().unwrap_or_default().to_owned();
+    let current = current.map(package);
+    let active: Vec<String> = services.trim().split(':').map(package).collect();
+    let mut found: Vec<String> = homes
+        .iter()
+        .map(|home| package(home))
+        .filter(|p| Some(p) != current.as_ref() && active.contains(p))
+        .collect();
+    found.dedup();
+    found
+}
 /// Parts of Android that answer to Home during first-time setup. They're no launcher to go back to.
 fn is_setup(package: &str) -> bool {
     package == "android" || ["setup", "provisioning"].iter().any(|n| package.contains(n))
@@ -625,7 +640,10 @@ pub async fn query_rated(
                 .collect();
             let catalog = launcher_catalog(d, t, user).await?;
             let restorable = disabled_homes(d, t, user).await?;
-            Ok(json!({"catalog":catalog,"restorable":restorable,"homes":homes,"stock":stock,"chosen":chosen,"roles":roles.is_some(),"current":parse_components(&current).first()}))
+            let services = checked(d, t, "settings get secure enabled_accessibility_services").await?;
+            let in_use = parse_components(&current);
+            let overriding = overriding_homes(&homes, in_use.first().map(String::as_str), &services);
+            Ok(json!({"catalog":catalog,"restorable":restorable,"overriding":overriding,"homes":homes,"stock":stock,"chosen":chosen,"roles":roles.is_some(),"current":parse_components(&current).first()}))
         }
         Query::Screenshot => {
             let raw = d.shell_large(t, screenshot_command()).await?;

@@ -258,9 +258,77 @@ it("only offers making it the default after the try worked", async () => {
   await fireEvent.click(await screen.findByRole("button", { name: "Yes, it works" }));
   await waitFor(() => expect(onreview).toHaveBeenCalled());
   expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
-    kind: "defaultHome",
+    kind: "switchHome",
     component: fresh,
+    replacing: "com.vendor.home",
   });
+});
+
+// A launcher left on can take Home straight back, as Projectivy did on a TCL.
+it("turns off the launcher it replaces, in the same step", async () => {
+  const api = onProjectivy();
+  (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+    homes: [projectivy, fresh],
+    current: projectivy,
+    stock: [],
+    catalog: [listed({})],
+  });
+  localStorage.setItem("bridgecoil.home.proven.device", "com.spocky.projengmenu");
+  open(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Try org.fresh.launcher" }),
+  );
+  await fireEvent.click(await screen.findByRole("button", { name: "Yes, it works" }));
+  await waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "switchHome",
+      component: fresh,
+      replacing: "com.spocky.projengmenu",
+    }),
+  );
+  await waitFor(() =>
+    expect(localStorage.getItem("bridgecoil.home.proven.device")).toBe(
+      "org.fresh.launcher",
+    ),
+  );
+});
+
+it("doesn't try to turn off something that isn't a launcher", async () => {
+  const api = platform("com.android.tv.settings/.FallbackHome");
+  open(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Home opened something else" }),
+  );
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Use org.fresh.launcher instead" }),
+  );
+  await waitFor(() => expect(api.prepare).toHaveBeenCalled());
+  expect(api.prepare).not.toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ kind: "switchHome" }),
+  );
+});
+
+it("says when another launcher is still taking over Home", async () => {
+  const api = onProjectivy();
+  (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+    homes: [fresh, projectivy],
+    current: fresh,
+    stock: [],
+    catalog: [listed({})],
+    overriding: ["com.spocky.projengmenu"],
+  });
+  const onreview = vi.fn();
+  open(api, onreview);
+  expect(await screen.findByText("Projectivy is still taking over Home")).toBeTruthy();
+  await fireEvent.click(screen.getByRole("button", { name: "Turn off Projectivy" }));
+  await waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "package",
+      package: "com.spocky.projengmenu",
+      action: "disable",
+    }),
+  );
 });
 
 it("changes nothing when the try failed", async () => {
