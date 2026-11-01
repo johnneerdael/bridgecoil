@@ -53,14 +53,18 @@ fn identity() -> Result<(AdbKey, TlsClientConfig), String> {
     Ok((key, tls))
 }
 
-/// Pairs with the TV's pairing screen, which has to be open so that it offers a port.
-async fn pair(code: &str) -> Result<(), String> {
+/// Pairs with the TV's pairing screen, which has to be open so that it offers a port. Android 14
+/// can leave a search unanswered, so whoever can read the port passes it in.
+async fn pair(code: &str, port: Option<u16>) -> Result<(), String> {
     if code.len() != 6 || !code.bytes().all(|b| b.is_ascii_digit()) {
         return Err("A pairing code is six digits".to_owned());
     }
-    let port = mdns::find(mdns::PAIRING_SERVICE, Duration::from_secs(10))
-        .await
-        .ok_or("The TV's pairing screen isn't open")?;
+    let port = match port {
+        Some(port) => port,
+        None => mdns::find(mdns::PAIRING_SERVICE, Duration::from_secs(10))
+            .await
+            .ok_or("Bridgecoil can't find the TV's pairing screen. Check that it's still open.")?,
+    };
     let (key, tls) = identity()?;
     let socket = TcpStream::connect(("127.0.0.1", port))
         .await
@@ -129,12 +133,16 @@ async fn main() -> ExitCode {
             }
             None => Err("The TV isn't offering ADB yet".to_owned()),
         },
-        ["pair", code] => pair(code).await.map(|()| 0),
+        ["pair", code] => pair(code, None).await.map(|()| 0),
+        ["pair", code, port] => match port.parse() {
+            Ok(port) => pair(code, Some(port)).await.map(|()| 0),
+            Err(_) => Err(format!("{port} isn't a port")),
+        },
         ["run", command] => match find_port(Duration::from_secs(8)).await {
             Some(port) => run(port, command).await,
             None => Err("The TV isn't offering ADB yet".to_owned()),
         },
-        _ => Err("Usage: bridgecoil-agent find | pair <code> | run <command>".to_owned()),
+        _ => Err("Usage: bridgecoil-agent find | pair <code> [port] | run <command>".to_owned()),
     };
     match result {
         Ok(0) => ExitCode::SUCCESS,

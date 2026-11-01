@@ -108,7 +108,7 @@
     }
   }
   $effect(() => {
-    if (snapshot?.stage !== "pair" || snapshot.agent || agentTried) return;
+    if (!snapshot || snapshot.stage === "terminal" || snapshot.agent || agentTried) return;
     agentTried = true;
     void api
       .installAgent(device.id)

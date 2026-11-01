@@ -1,9 +1,9 @@
 //! Finds this TV's wireless ADB port. Termux's own adb can't, and nothing else there can read it.
 use std::{
-    net::{Ipv4Addr, SocketAddr},
+    net::{Ipv4Addr, SocketAddr, TcpListener},
     time::{Duration, Instant},
 };
-use tokio::net::{TcpStream, UdpSocket};
+use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
 pub const CONNECT_SERVICE: &str = "_adb-tls-connect._tcp.local";
@@ -70,8 +70,14 @@ pub fn ports(packet: &[u8]) -> Vec<u16> {
     found
 }
 
-/// The port of the TV's wireless ADB. A TV can advertise an old port too, so only a port that
-/// accepts a connection counts.
+/// Whether something on this TV is listening on `port`. Trying to take the port tells without
+/// touching what's there, and a connection to a pairing port would use up one of its attempts.
+fn listening(port: u16) -> bool {
+    TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_err()
+}
+
+/// The port of the TV's wireless ADB. A TV can advertise an old port too, so only a port that's
+/// listening counts.
 pub async fn find(service: &str, wait: Duration) -> Option<u16> {
     let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await.ok()?;
     socket.set_multicast_ttl_v4(255).ok()?;
@@ -85,11 +91,8 @@ pub async fn find(service: &str, wait: Duration) -> Option<u16> {
         else {
             continue;
         };
-        for port in ports(&packet[..size]) {
-            let attempt = TcpStream::connect((Ipv4Addr::LOCALHOST, port));
-            if matches!(timeout(Duration::from_millis(500), attempt).await, Ok(Ok(_))) {
-                return Some(port);
-            }
+        if let Some(port) = ports(&packet[..size]).into_iter().find(|port| listening(*port)) {
+            return Some(port);
         }
     }
     None
@@ -114,6 +117,15 @@ mod tests {
     #[test]
     fn reads_the_port_from_an_answer() {
         assert_eq!(ports(&answer(44121)), [44121]);
+    }
+
+    #[test]
+    fn a_port_counts_only_while_something_listens_on_it() {
+        let server = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = server.local_addr().unwrap().port();
+        assert!(listening(port));
+        drop(server);
+        assert!(!listening(port));
     }
 
     #[test]

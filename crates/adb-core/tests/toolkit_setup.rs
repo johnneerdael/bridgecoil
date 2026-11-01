@@ -392,10 +392,71 @@ fn the_agent_build_matches_the_cpu_and_refuses_a_bad_code() {
     assert_ne!(arm.len(), arm64.len());
     assert_eq!(arm[..4], [0x7f, b'E', b'L', b'F']);
     assert!(binary_for(&abis(&["mips"])).is_none());
-    assert!(pair_command("123456").unwrap().ends_with("pair 123456"));
+    assert!(pair_command("123456").unwrap().ends_with("pair 123456 $port"));
     for bad in ["12345", "1234567", "12345a", "123; rm", ""] {
         assert_eq!(pair_command(bad), None, "{bad}");
     }
+}
+
+/// Runs the real pairing command with stand-ins for the TV's tools, and returns what the agent was
+/// asked to do. `record` is what Android logged, and `open` is what's listening.
+fn pair_on_tv(record: &str, open: &str) -> String {
+    use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+    let dir = tempfile::tempdir().unwrap();
+    let bin = dir.path().join("bin");
+    fs::create_dir(&bin).unwrap();
+    let tool = |name: &str, body: String| {
+        let path = bin.join(name);
+        fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    let (record_file, open_file) = (dir.path().join("record"), dir.path().join("open"));
+    fs::write(&record_file, record).unwrap();
+    fs::write(&open_file, open).unwrap();
+    tool("dumpsys", format!("cat '{}'", record_file.display()));
+    tool("ss", format!("cat '{}'", open_file.display()));
+    let args = dir.path().join("args");
+    tool("run-as", format!("echo \"$@\" > '{}'", args.display()));
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let command = adb_core::toolkit::agent::pair_command("123456").unwrap();
+    let status = Command::new("sh")
+        .args(["-c", &command])
+        .env("PATH", path)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    fs::read_to_string(args).unwrap()
+}
+
+/// What a TCL on Android 14 logged. It announces the port once and then doesn't answer a search,
+/// so this record is the only place to read it from. Newest lines come first.
+const PAIRING_RECORD: &str = "\
+  [MdnsAdvertiser.wlan0] Probing finished for service 6
+  [MdnsAdvertiser] Adding service name: adb-1-a, type: _adb-tls-pairing._tcp, hostAddresses: , port: 45609, network: null
+  [MdnsAdvertiser] Removing service with ID 5
+  [MdnsAdvertiser] Adding service name: adb-1-a, type: _adb-tls-pairing._tcp, hostAddresses: , port: 35871, network: null
+  [MdnsAdvertiser] Adding service name: Tv, type: _androidtvremote2._tcp, hostAddresses: , port: 6466, network: null
+";
+
+#[test]
+fn pairing_reads_the_port_android_recorded() {
+    let open = "LISTEN 0 0 *:45609 *:*\nLISTEN 0 0 *:6466 *:*\n";
+    assert!(pair_on_tv(PAIRING_RECORD, open).ends_with("pair 123456 45609\n"));
+}
+
+/// Closing and reopening the pairing screen leaves the old session in Android's record.
+#[test]
+fn pairing_skips_a_session_that_has_closed() {
+    let open = "LISTEN 0 0 *:35871 *:*\n";
+    assert!(pair_on_tv(PAIRING_RECORD, open).ends_with("pair 123456 35871\n"));
+}
+
+/// Android 11 to 13 have no such record, and answer the agent's own search instead.
+#[test]
+fn pairing_leaves_the_search_to_the_agent_without_a_record() {
+    let open = "LISTEN 0 0 *:6466 *:*\n";
+    assert!(pair_on_tv("", open).ends_with("pair 123456\n"));
+    assert!(pair_on_tv(PAIRING_RECORD, open).ends_with("pair 123456\n"));
 }
 
 /// The boot script has to run the agent, because rish can be blocked while a helper is closed.
@@ -441,6 +502,40 @@ async fn stages_follow_what_is_actually_proven() {
             .unwrap();
         assert_eq!(snap.stage, stage, "{facts}");
     }
+}
+
+/// An app update has to reach a TV that already has an agent, or a fix there never arrives.
+#[tokio::test]
+async fn an_agent_from_an_older_app_gets_replaced_without_losing_setup() {
+    use adb_core::toolkit::agent::{current_sha256, is_current};
+    let tools = || {
+        vec![
+            (SHIZUKU, NEXT),
+            ("com.termux", TERMUX),
+            ("com.termux.boot", TERMUX),
+        ]
+    };
+    let ready = "runAs=1\nterminal=1\nagent=1\nagentReady=1\nmonitor=1\n";
+    let inspected = |sha: &str| format!("{ready}agentSha={sha}\n");
+    let shipped = current_sha256()[0].clone();
+    assert!(is_current(&shipped));
+
+    let old = inspect(&mut device(tools(), &inspected(&"0".repeat(64))), &target())
+        .await
+        .unwrap();
+    assert!(!old.agent);
+    assert!(old.agent_ready);
+    assert_eq!(old.stage, Stage::Done);
+
+    let current = inspect(&mut device(tools(), &inspected(&shipped)), &target())
+        .await
+        .unwrap();
+    assert!(current.agent);
+
+    let unknown = inspect(&mut device(tools(), &inspected("")), &target())
+        .await
+        .unwrap();
+    assert!(unknown.agent);
 }
 
 #[tokio::test]

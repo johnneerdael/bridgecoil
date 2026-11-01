@@ -234,8 +234,10 @@ pub async fn inspect(d: &mut dyn ShellDriver, t: &Target) -> Result<ToolkitSnaps
     let monitor = facts.flag("monitor");
     let boot_start = manager.is_some_and(|m| facts.flag(m.boot_fact()));
     let watchdog = facts.flag("watchdog");
-    let agent = facts.flag("agent");
-    let agent_ready = agent && facts.flag("agentReady");
+    let agent_present = facts.flag("agent");
+    let agent_ready = agent_present && facts.flag("agentReady");
+    // An agent from an older app counts as missing, so it gets replaced. Its pairing is kept.
+    let agent = agent_present && facts.value("agentSha").is_none_or(super::agent::is_current);
     let stage = if !terminal_ready {
         Stage::Terminal
     } else if !agent_ready {

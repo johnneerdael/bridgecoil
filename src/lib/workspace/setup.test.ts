@@ -74,6 +74,22 @@ it("puts the agent into Termux by itself", async () => {
   expect(api.installAgent).toHaveBeenCalledTimes(1);
 });
 
+it("replaces an agent from an older app, even after setup finished", async () => {
+  const api = platform(
+    snapshot({ ...termuxReady, agent: false, agentReady: true, monitor: true, stage: "done" }),
+  );
+  open(api);
+  await waitFor(() => expect(api.installAgent).toHaveBeenCalledTimes(1));
+});
+
+it("leaves the agent alone until Termux is ready", async () => {
+  const api = platform(snapshot({ stage: "terminal" }));
+  open(api);
+  await waitFor(() => expect(api.query).toHaveBeenCalled());
+  await new Promise((done) => setTimeout(done));
+  expect(api.installAgent).not.toHaveBeenCalled();
+});
+
 it("connects with only the code on the TV", async () => {
   const api = platform(snapshot(pairing));
   open(api);
