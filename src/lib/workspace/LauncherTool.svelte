@@ -36,6 +36,7 @@
     chosen?: string | null;
     roles?: boolean;
     catalog?: Listed[];
+    restorable?: { package: string; component: string | null }[];
   };
   let homes = $state<Homes | null>(null);
   let busy = $state(false);
@@ -47,6 +48,7 @@
   let refresh = $state(0);
   const packageOf = (component: string) => component.split("/")[0];
   const catalog = $derived(homes?.catalog ?? []);
+  const restorable = $derived(homes?.restorable ?? []);
   const nameOf = (component: string) =>
     catalog.find((c) => c.package === packageOf(component))?.name ??
     packageOf(component);
@@ -211,6 +213,23 @@
         }),
       );
     });
+  // Without a component, the launcher's own priority takes Home back once it's on.
+  const restore = (listed: { package: string; component: string | null }) =>
+    attempt(async () => {
+      try {
+        localStorage.removeItem(pickKey);
+      } catch {
+        // There's nothing to forget without storage.
+      }
+      onreview(
+        await api.prepare(
+          targetOf(device),
+          listed.component
+            ? { kind: "restoreHome", component: listed.component }
+            : { kind: "package", package: listed.package, action: "enable" },
+        ),
+      );
+    });
   const turnOff = (component: string) =>
     attempt(async () => {
       onreview(
@@ -223,16 +242,26 @@
     });
 </script>
 
+{#snippet restoreButtons()}
+  {#each restorable as listed (listed.package)}<button
+      class="secondary"
+      disabled={busy}
+      onclick={() => restore(listed)}
+      >Restore your TV's launcher{restorable.length > 1
+        ? ` (${listed.package})`
+        : ""}</button
+    >{/each}
+{/snippet}
 {#snippet wayBack()}
   {#each others as component (component)}<button
       class="secondary"
       disabled={busy}
       onclick={() => makeDefault(component)}
       >Use {nameOf(component)} instead</button
-    >{:else}<p class="subtle">
-      To go back, undo turning off the launcher your TV came with in History,
-      or turn it back on in Apps, under Disabled apps.
-    </p>{/each}
+    >{:else}{#if restorable.length}{@render restoreButtons()}{:else}<p class="subtle">
+        To go back, undo turning off the launcher your TV came with in History,
+        or turn it back on in Apps, under Disabled apps.
+      </p>{/if}{/each}
 {/snippet}
 
 {#if error}<p class="error-text" role="alert">{error}</p>{/if}
@@ -352,4 +381,5 @@
   <button class="secondary" disabled={busy} onclick={oninstall}
     >Install from a file</button
   >
+  {@render restoreButtons()}
 {/if}

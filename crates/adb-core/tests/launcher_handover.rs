@@ -23,11 +23,13 @@ const STOCK: &str = "com.vendor.home";
 struct Tv {
     role: Result<&'static str, ()>,
     homes: &'static str,
+    old_android: bool,
 }
 fn tv(role: &'static str) -> Tv {
     Tv {
         role: Ok(role),
         homes: "com.vendor.home/.Main\norg.fresh/.Home\ncom.android.tv.settings/.FallbackHome\n",
+        old_android: false,
     }
 }
 #[async_trait]
@@ -37,7 +39,16 @@ impl ShellDriver for Tv {
     }
     async fn shell(&mut self, _: &Target, c: &str) -> Result<ShellOutput, PocError> {
         let mut exit_code = Some(0);
-        let stdout = if c.starts_with("dumpsys package") {
+        let stdout = if c.contains("--query-flags") {
+            if self.old_android {
+                exit_code = Some(255);
+                String::new()
+            } else {
+                "com.google.setup/.Main\ncom.google.tvlauncher/.Home\ncom.google.tvlauncher/.Other\ncom.vendor.home/.Main\n".into()
+            }
+        } else if c.contains("pm list packages -d") {
+            "package:com.google.setup\npackage:com.google.tvlauncher\n".into()
+        } else if c.starts_with("dumpsys package") {
             STATE.into()
         } else if c.contains("resolve-activity") {
             "priority=2 preferredOrder=0\ncom.vendor.home/.Main\n".into()
@@ -129,6 +140,7 @@ async fn the_launcher_in_use_stays_protected_without_a_real_replacement() {
         Tv {
             role: Err(()),
             homes: "com.vendor.home/.Main\ncom.android.tv.settings/.FallbackHome\n",
+            old_android: false,
         },
     ] {
         let e = w
@@ -252,4 +264,68 @@ async fn lists_each_launcher_with_what_the_tv_has() {
     let absent = row("com.overdevs.at4k");
     assert_eq!(absent["installed"], false);
     assert!(absent["official"].is_null());
+}
+
+/// Setup wizards answer to Home too, and turning one back on could restart first-time setup.
+#[tokio::test]
+async fn offers_the_launcher_that_was_turned_off_and_never_a_setup_wizard() {
+    let mut d = tv("com.vendor.home\n");
+    let found = query(&mut d, &target(), Query::Launchers).await.unwrap();
+    assert_eq!(
+        found["restorable"],
+        json!([{"package": "com.google.tvlauncher", "component": "com.google.tvlauncher/.Home"}])
+    );
+}
+
+/// Android 9 refuses the flag, as an Ugoos does.
+#[tokio::test]
+async fn an_older_android_still_finds_the_launcher_by_name() {
+    let mut d = tv("com.vendor.home\n");
+    d.old_android = true;
+    let found = query(&mut d, &target(), Query::Launchers).await.unwrap();
+    assert_eq!(
+        found["restorable"],
+        json!([{"package": "com.google.tvlauncher", "component": null}])
+    );
+}
+
+/// Both steps have to be one review, or a failed default leaves the launcher on and unnoticed.
+#[tokio::test]
+async fn restoring_turns_the_launcher_on_and_makes_it_the_default() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    let review = w
+        .prepare(
+            &mut tv("org.fresh"),
+            &target(),
+            Action::RestoreHome {
+                component: "com.google.tvlauncher/.Home".into(),
+            },
+        )
+        .await
+        .unwrap();
+    let command = &review.commands[0];
+    let enable = command.find("pm enable --user 0 'com.google.tvlauncher'").unwrap();
+    let default = command
+        .find("set-home-activity --user 0 'com.google.tvlauncher/.Home'")
+        .unwrap();
+    assert!(enable < default);
+    assert!(command.contains("&&"), "a failed enable must stop here");
+    assert!(review.reversible);
+}
+
+#[tokio::test]
+async fn restoring_refuses_a_component_that_could_be_a_command() {
+    let dir = tempfile::tempdir().unwrap();
+    let w = workspace(&dir);
+    let refused = w
+        .prepare(
+            &mut tv("org.fresh"),
+            &target(),
+            Action::RestoreHome {
+                component: "com.good/.Home; reboot".into(),
+            },
+        )
+        .await;
+    assert!(refused.is_err());
 }

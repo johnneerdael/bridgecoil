@@ -63,6 +63,10 @@ pub enum Action {
     DefaultHome {
         component: String,
     },
+    /// Turns a disabled launcher back on and makes it the default, in one step.
+    RestoreHome {
+        component: String,
+    },
     Permission {
         package: String,
         permission: String,
@@ -317,8 +321,10 @@ impl Workspace {
                 grant: before == "granted",
             });
         }
-        if let Action::DefaultHome { .. } = &action
-            && component_arg(&before).is_ok()
+        if matches!(
+            action,
+            Action::DefaultHome { .. } | Action::RestoreHome { .. }
+        ) && component_arg(&before).is_ok()
         {
             recovery = Some(Action::DefaultHome {
                 component: before.clone(),
@@ -449,7 +455,9 @@ impl Workspace {
                             };
                             if row.status == OperationStatus::Unknown {
                                 row.error = Some(match &p.action {
-                                    Action::DefaultHome { .. } if !after.is_empty() => format!(
+                                    Action::DefaultHome { .. } | Action::RestoreHome { .. }
+                                        if !after.is_empty() =>
+                                    format!(
                                         "Android accepted this choice, but Home still opens {}.",
                                         after.split('/').next().unwrap_or_default()
                                     ),
@@ -571,7 +579,7 @@ fn kind(a: &Action) -> &str {
         Action::Package { .. } => "package",
         Action::Shell { .. } => "shell",
         Action::Setting { .. } => "setting",
-        Action::DefaultHome { .. } => "launcher",
+        Action::DefaultHome { .. } | Action::RestoreHome { .. } => "launcher",
         Action::Permission { .. } => "permission",
         Action::FileDelete { .. } | Action::FileMove { .. } | Action::FileCreateFolder { .. } => {
             "file"
@@ -701,7 +709,7 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
                 shell_quote(key)
             )
         }
-        Action::DefaultHome { .. } => home_query(t.profile_id),
+        Action::DefaultHome { .. } | Action::RestoreHome { .. } => home_query(t.profile_id),
         Action::Setup { .. } => facts_command().to_owned(),
         Action::Mappings { .. } => mappings::state_command(),
         Action::Shell { .. } => return Ok(String::new()),
@@ -730,7 +738,7 @@ async fn probe(d: &mut dyn ShellDriver, t: &Target, a: &Action) -> Result<String
             mappings::parse_state(&output.stdout),
         ))
         .map_err(internal),
-        Action::DefaultHome { .. } => Ok(output
+        Action::DefaultHome { .. } | Action::RestoreHome { .. } => Ok(output
             .stdout
             .lines()
             .find(|v| component_arg(v.trim()).is_ok())
@@ -759,7 +767,9 @@ fn verified(a: &Action, after: &str) -> bool {
             }
         }
         Action::Setting { value, .. } => after == value.as_deref().unwrap_or("null"),
-        Action::DefaultHome { component } => after == component,
+        Action::DefaultHome { component } | Action::RestoreHome { component } => {
+            after == component
+        }
         Action::Shell { .. } => false,
         Action::Permission { grant, .. } => after == if *grant { "granted" } else { "denied" },
         Action::FileDelete { path } | Action::FileCreateFolder { path } => {
@@ -972,6 +982,16 @@ fn describe(a: &Action, user: u32) -> Result<(String, String, Vec<String>, Strin
             let plan = setup::plan(*step);
             losses.extend(plan.losses);
             (plan.title, plan.effect, plan.command)
+        }
+        Action::RestoreHome { component } => {
+            let c = component_arg(component)?;
+            let package = component.split('/').next().unwrap_or_default();
+            let p = package_arg(package)?;
+            (
+                format!("Restore your TV's launcher · {package}"),
+                "Turn the launcher your TV came with back on and make it the default for this profile. Test the physical Home button afterwards.".into(),
+                format!("pm enable --user {user} {p} && cmd package set-home-activity --user {user} {c}"),
+            )
         }
         Action::Mappings { change } => {
             let plan = mappings::plan(change)?;

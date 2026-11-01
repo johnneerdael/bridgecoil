@@ -138,6 +138,55 @@ it("shows a listed launcher's name rather than its package", async () => {
   expect(await screen.findByText("In use: Projectivy")).toBeTruthy();
 });
 
+const google = "com.google.tv.launcher/.Home";
+function onLauncherWithStockOff(component: string | null) {
+  const api = onProjectivy();
+  (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+    homes: [projectivy],
+    current: projectivy,
+    stock: [],
+    catalog: [listed({})],
+    restorable: [{ package: "com.google.tv.launcher", component }],
+  });
+  localStorage.setItem("bridgecoil.home.proven.device", "com.spocky.projengmenu");
+  return api;
+}
+
+it("restores the TV's own launcher in one reviewed step", async () => {
+  const api = onLauncherWithStockOff(google);
+  const onreview = vi.fn();
+  open(api, onreview);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Restore your TV's launcher" }),
+  );
+  await waitFor(() => expect(onreview).toHaveBeenCalled());
+  expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+    kind: "restoreHome",
+    component: google,
+  });
+});
+
+it("just turns it back on where Android can't name its activity", async () => {
+  const api = onLauncherWithStockOff(null);
+  open(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Restore your TV's launcher" }),
+  );
+  await waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "package",
+      package: "com.google.tv.launcher",
+      action: "enable",
+    }),
+  );
+});
+
+it("offers no restore when the TV's launcher is still on", async () => {
+  open(withCatalog(platform(stock), listed({})));
+  await screen.findByRole("button", { name: "Install from a file" });
+  expect(screen.queryByRole("button", { name: /Restore/ })).toBeNull();
+});
+
 function onProjectivy() {
   const api = platform(projectivy);
   (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({

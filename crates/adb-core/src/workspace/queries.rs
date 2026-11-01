@@ -238,6 +238,39 @@ fn homes_command(user: u32) -> String {
         "cmd package query-activities --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME"
     )
 }
+/// Parts of Android that answer to Home during first-time setup. They're no launcher to go back to.
+fn is_setup(package: &str) -> bool {
+    package == "android" || ["setup", "provisioning"].iter().any(|n| package.contains(n))
+}
+/// Launchers that came with the TV and have been turned off. Android 12 and later can name them.
+/// Older versions refuse the flag, so the name is all there is, and the component stays unknown.
+async fn disabled_homes(d: &mut dyn ShellDriver, t: &Target, user: u32) -> Result<Vec<Value>> {
+    let disabled = parse_packages(&checked(d, t, &format!("pm list packages -d -s --user {user}")).await?);
+    let listed = d
+        .shell(
+            t,
+            &format!(
+                "cmd package query-activities --brief --user {user} --query-flags 0x200 -a android.intent.action.MAIN -c android.intent.category.HOME"
+            ),
+        )
+        .await?;
+    if !listed.success() {
+        return Ok(disabled
+            .iter()
+            .filter(|p| !is_setup(p) && (p.contains("launcher") || p.contains("home")))
+            .map(|p| json!({"package": p, "component": null}))
+            .collect());
+    }
+    let mut found: Vec<Value> = Vec::new();
+    for component in eligible_homes(parse_components(&listed.stdout)) {
+        let package = component.split('/').next().unwrap_or_default();
+        let known = found.iter().any(|f| f["package"] == package);
+        if !known && !is_setup(package) && disabled.iter().any(|p| p == package) {
+            found.push(json!({"package": package, "component": component}));
+        }
+    }
+    Ok(found)
+}
 /// Each launcher Bridgecoil offers, and what's on this TV. `official` is false for a build signed
 /// by someone else, which an update can't replace, and null when the TV didn't say.
 async fn launcher_catalog(d: &mut dyn ShellDriver, t: &Target, user: u32) -> Result<Vec<Value>> {
@@ -591,7 +624,8 @@ pub async fn query_rated(
                 .cloned()
                 .collect();
             let catalog = launcher_catalog(d, t, user).await?;
-            Ok(json!({"catalog":catalog,"homes":homes,"stock":stock,"chosen":chosen,"roles":roles.is_some(),"current":parse_components(&current).first()}))
+            let restorable = disabled_homes(d, t, user).await?;
+            Ok(json!({"catalog":catalog,"restorable":restorable,"homes":homes,"stock":stock,"chosen":chosen,"roles":roles.is_some(),"current":parse_components(&current).first()}))
         }
         Query::Screenshot => {
             let raw = d.shell_large(t, screenshot_command()).await?;
