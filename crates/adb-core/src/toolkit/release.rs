@@ -1,4 +1,4 @@
-use super::catalog::{ToolId, select_asset, spec};
+use super::catalog::{LAUNCHERS, ToolId, select_asset, spec};
 use crate::{
     apk::{self, ApkInfo},
     backend::PocError,
@@ -44,6 +44,30 @@ pub struct FetchedTool {
     pub path: PathBuf,
     pub info: ApkInfo,
     pub signer: String,
+}
+
+/// The newest published version of a launcher.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LatestLauncher {
+    pub tool: ToolId,
+    pub version: String,
+}
+
+/// What each launcher has published. One that can't be reached or has no build is left out, so a
+/// problem with one repository doesn't hide the others.
+pub fn latest_launchers(source: &dyn ReleaseSource) -> Vec<LatestLauncher> {
+    LAUNCHERS
+        .iter()
+        .filter_map(|&tool| {
+            let release = source.latest(spec(tool).repo).ok()?;
+            select_asset(tool, &release.assets, &[]).ok()?;
+            Some(LatestLauncher {
+                tool,
+                version: release.tag.trim_start_matches('v').to_owned(),
+            })
+        })
+        .collect()
 }
 
 fn network_error() -> PocError {

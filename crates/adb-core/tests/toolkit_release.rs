@@ -1,8 +1,11 @@
 use adb_core::{
     backend::PocError,
     toolkit::{
-        catalog::{ToolId, select_asset, spec},
-        release::{Asset, Release, ReleaseSource, fetch_tool, parse_release},
+        catalog::{LAUNCHERS, ToolId, select_asset, spec},
+        release::{
+            Asset, LatestLauncher, Release, ReleaseSource, fetch_tool, latest_launchers,
+            parse_release,
+        },
     },
 };
 use sha2::{Digest, Sha256};
@@ -222,4 +225,92 @@ fn a_correct_digest_still_needs_the_right_signer() {
     };
     let e = fetch_tool(&source, ToolId::Porter, &abis(&["arm64-v8a"]), dir.path()).unwrap_err();
     assert_eq!(e.kind, "toolIdentity");
+}
+
+/// The files each launcher really published on 2026-11-01.
+#[test]
+fn each_launcher_picks_its_complete_build() {
+    let backdrop = names(&[
+        "backdrop-launcher-1.4.10-arm64-v8a.apk",
+        "backdrop-launcher-1.4.10-armeabi-v7a.apk",
+        "backdrop-launcher-1.4.10-source.tar.gz",
+        "backdrop-launcher-1.4.10.apk",
+        "CREDITS.md",
+        "SHA256SUMS",
+    ]);
+    let projectivy = names(&["ProjectivyLauncher-4.73-c98-xda-release.apk"]);
+    let monet = names(&["monet-1.1.0.apk", "monet-launcher.apk"]);
+    let at4k = names(&["app-release.apk"]);
+    for (tool, assets, expected) in [
+        (ToolId::Backdrop, &backdrop, "backdrop-launcher-1.4.10.apk"),
+        (
+            ToolId::Projectivy,
+            &projectivy,
+            "ProjectivyLauncher-4.73-c98-xda-release.apk",
+        ),
+        (ToolId::Monet, &monet, "monet-launcher.apk"),
+        (ToolId::At4k, &at4k, "app-release.apk"),
+    ] {
+        let picked = select_asset(tool, assets, &abis(&["armeabi-v7a"])).unwrap();
+        assert_eq!(picked.name, expected);
+    }
+}
+
+#[test]
+fn a_launcher_release_without_its_build_is_refused() {
+    let only_parts = names(&["backdrop-launcher-1.4.10-arm64-v8a.apk"]);
+    assert!(select_asset(ToolId::Backdrop, &only_parts, &[]).is_err());
+}
+
+#[test]
+fn every_launcher_has_its_own_identity() {
+    for (i, a) in LAUNCHERS.iter().enumerate() {
+        let tool = spec(*a);
+        assert_eq!(tool.signer_sha256.len(), 64, "{}", tool.name);
+        for b in &LAUNCHERS[i + 1..] {
+            assert_ne!(tool.package, spec(*b).package);
+            assert_ne!(tool.signer_sha256, spec(*b).signer_sha256);
+        }
+    }
+}
+
+struct Published;
+impl ReleaseSource for Published {
+    fn latest(&self, repo: &str) -> Result<Release, PocError> {
+        match repo {
+            "spocky/miproja1" => Ok(Release {
+                tag: "4.73".into(),
+                assets: names(&["ProjectivyLauncher-4.73-c98-xda-release.apk"]),
+            }),
+            "Klevico/Monet-Launcher" => Ok(Release {
+                tag: "v1.1.0".into(),
+                assets: names(&["monet-launcher.apk"]),
+            }),
+            "avadhesh18/at4k" => Ok(Release {
+                tag: "v1.2".into(),
+                assets: names(&["notes.txt"]),
+            }),
+            _ => Err(PocError::new("toolNetwork", "offline")),
+        }
+    }
+    fn download(&self, _: &Asset, _: &Path, _: u64) -> Result<(), PocError> {
+        panic!("checking for updates must not download anything");
+    }
+}
+
+#[test]
+fn one_unreachable_launcher_does_not_hide_the_others() {
+    assert_eq!(
+        latest_launchers(&Published),
+        [
+            LatestLauncher {
+                tool: ToolId::Projectivy,
+                version: "4.73".into(),
+            },
+            LatestLauncher {
+                tool: ToolId::Monet,
+                version: "1.1.0".into(),
+            },
+        ]
+    );
 }

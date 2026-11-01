@@ -102,7 +102,16 @@ export type Action =
   | { kind: "mappings"; change: MappingChange };
 export type Manager = "shizukuNext" | "porter" | "existing";
 export type ToolId =
-  "shizukuNext" | "porter" | "porterCompat" | "termux" | "termuxBoot";
+  | "shizukuNext"
+  | "porter"
+  | "porterCompat"
+  | "termux"
+  | "termuxBoot"
+  | "backdrop"
+  | "projectivy"
+  | "monet"
+  | "at4k";
+export type LatestLauncher = { tool: ToolId; version: string };
 /** What a mapped button's press opened, kept above the pages because they rebuild after a change. */
 export type ButtonFollowUp = {
   key: KeyIdentity;
@@ -270,6 +279,7 @@ export type Platform = {
     onprogress: (progress: InstallProgress) => void,
   ): Promise<string>;
   installAgent(sessionId: string): Promise<void>;
+  latestLaunchers(): Promise<LatestLauncher[]>;
   chooseUpload(sessionId: string): Promise<UploadChoice | null>;
   upload(
     sessionId: string,
@@ -341,6 +351,7 @@ export function nativePlatform(
       return call("install_tool", { sessionId, tool, onProgress });
     },
     installAgent: (sessionId) => call("install_agent", { sessionId }),
+    latestLaunchers: () => call("latest_launchers"),
     chooseUpload: (sessionId) => call("choose_upload", { sessionId }),
     upload: (sessionId, uploadId, folder, name, onprogress) => {
       const onProgress = new Channel<number>();

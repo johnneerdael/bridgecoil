@@ -45,66 +45,55 @@
     {
       id: "toolkit",
       name: "TV setup",
-      note: "Get everything your TV needs",
       icon: "shield",
     },
     {
       id: "buttons",
       name: "Buttons",
-      note: "Change what any button does",
       icon: "remap",
     },
     {
       id: "cleanup",
       name: "Clean up",
-      note: "Turn off the apps you don't need",
       icon: "check",
     },
     {
       id: "commands",
       name: "Commands",
-      note: "Advanced actions, no typing",
       icon: "terminal",
     },
     {
       id: "launcher",
       name: "Home app",
-      note: "Replace the launcher your TV came with",
       icon: "home",
     },
     {
       id: "capture",
       name: "Screen capture",
-      note: "Screenshots and recordings",
       icon: "device",
     },
-    { id: "files", name: "Files", note: "Browse TV storage", icon: "device" },
+    { id: "files", name: "Files", icon: "device" },
     {
       id: "diagnostics",
       name: "Diagnostics",
-      note: "Logs, processes and device reports",
       icon: "info",
     },
     {
       id: "settings",
       name: "Settings",
-      note: "Animations, brightness and audio",
       icon: "settings",
     },
     {
       id: "network",
       name: "Network",
-      note: "Addresses and routing",
       icon: "wifi",
     },
     {
       id: "shell",
       name: "Shell",
-      note: "Review an advanced command",
       icon: "terminal",
     },
   ];
-  let page = $state(0);
   let busy = $state(false);
   let error = $state("");
   let output = $state("");
@@ -195,15 +184,12 @@
 
 <section class="feature-page">
   {#if !tool}<div class="tool-grid catalog">
-      {#each tools.slice(page * 4, page * 4 + 4) as item}<button
+      {#each tools as item}<button
           class="tool-tile"
           onclick={() => (tool = item.id)}
-          ><Icon name={item.icon} /><strong>{item.name}</strong><small
-            >{item.note}</small
-          ></button
+          ><Icon name={item.icon} /><strong>{item.name}</strong></button
         >{/each}
     </div>
-    <Pager {page} total={tools.length} size={4} onpage={(n) => (page = n)} />
   {:else}<div class="toolbar">
       <button class="secondary" onclick={() => (tool = "")}
         ><Icon name="arrow-left" />All tools</button
@@ -217,7 +203,7 @@
     {#if busy}<p class="subtle" role="status">
         Inspecting TV…
       </p>{/if}{#if error}<p class="error-text" role="alert">{error}</p>{/if}
-    {#if tool === "launcher"}<LauncherTool {device} {api} {reload} {onreview} />
+    {#if tool === "launcher"}<LauncherTool {device} {api} {reload} {onreview} {oninstall} />
     {:else if tool === "capture"}<ScreenshotTool {device} {api} />
     {:else if tool === "toolkit"}<SetupTool
         {device}

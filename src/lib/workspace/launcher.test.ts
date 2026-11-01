@@ -29,26 +29,158 @@ function platform(current: string, launch = { status: "sent" }) {
     query: vi.fn(async () => ({ homes: [stock, fresh], current, stock: [stock] })),
     prepare: vi.fn(async () => ({ id: "review" })),
     remote: vi.fn(async () => launch),
+    latestLaunchers: vi.fn(async () => []),
+    installTool: vi.fn(async () => "v1"),
   } as unknown as Platform;
 }
-const open = (api: Platform, onreview = vi.fn()) =>
-  render(LauncherTool, { device, api, reload: 0, onreview });
+const open = (api: Platform, onreview = vi.fn(), oninstall = vi.fn()) =>
+  render(LauncherTool, { device, api, reload: 0, onreview, oninstall });
+const projectivy = "com.spocky.projengmenu/.Main";
+const listed = (over: object) => ({
+  tool: "projectivy",
+  name: "Projectivy",
+  package: "com.spocky.projengmenu",
+  installed: true,
+  version: "4.72",
+  official: true,
+  ...over,
+});
+function withCatalog(api: Platform, row: object, latest = "4.73") {
+  (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+    homes: [stock, projectivy],
+    current: stock,
+    stock: [stock],
+    catalog: [row],
+  });
+  (api.latestLaunchers as ReturnType<typeof vi.fn>).mockResolvedValue([
+    { tool: "projectivy", version: latest },
+  ]);
+  return api;
+}
+
+it("installs a listed launcher and lists it afterwards", async () => {
+  const api = withCatalog(
+    platform(stock),
+    listed({ installed: false, version: null, official: null }),
+  );
+  open(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Install Projectivy" }),
+  );
+  await waitFor(() =>
+    expect(api.installTool).toHaveBeenCalledWith(
+      "session",
+      "projectivy",
+      expect.any(Function),
+    ),
+  );
+  await waitFor(() => expect(api.query).toHaveBeenCalledTimes(2));
+});
+
+it("offers an update when a newer version is out", async () => {
+  const api = withCatalog(platform(stock), listed({}));
+  open(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Update Projectivy" }),
+  );
+  expect(screen.getByText("4.72 → 4.73")).toBeTruthy();
+  await waitFor(() => expect(api.installTool).toHaveBeenCalled());
+});
+
+it("compares versions as numbers", async () => {
+  const api = withCatalog(platform(stock), listed({ version: "4.9" }), "4.73");
+  open(api);
+  expect(await screen.findByRole("button", { name: "Update Projectivy" })).toBeTruthy();
+});
+
+it("offers no update when the TV is up to date or ahead", async () => {
+  const api = withCatalog(platform(stock), listed({ version: "4.74" }));
+  open(api);
+  expect(await screen.findByText("4.74")).toBeTruthy();
+  await waitFor(() => expect(api.latestLaunchers).toHaveBeenCalled());
+  await Promise.resolve();
+  expect(screen.queryByRole("button", { name: "Update Projectivy" })).toBeNull();
+});
+
+it("leaves a build signed by someone else alone", async () => {
+  const api = withCatalog(platform(stock), listed({ official: false }));
+  open(api);
+  expect(await screen.findByText("Your own build")).toBeTruthy();
+  await waitFor(() => expect(api.latestLaunchers).toHaveBeenCalled());
+  await Promise.resolve();
+  expect(screen.queryByRole("button", { name: "Update Projectivy" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Try Projectivy" })).toBeTruthy();
+});
+
+it("still lists launchers when GitHub can't be reached", async () => {
+  const api = withCatalog(
+    platform(stock),
+    listed({ installed: false, version: null, official: null }),
+  );
+  (api.latestLaunchers as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("offline"));
+  open(api);
+  expect(await screen.findByRole("button", { name: "Install Projectivy" })).toBeTruthy();
+  expect(screen.getByText("Not installed")).toBeTruthy();
+});
+
+it("takes a launcher from a file", async () => {
+  const oninstall = vi.fn();
+  open(platform(stock), vi.fn(), oninstall);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Install from a file" }),
+  );
+  expect(oninstall).toHaveBeenCalled();
+});
+
+it("shows a listed launcher's name rather than its package", async () => {
+  open(onProjectivy());
+  await fireEvent.click(await screen.findByRole("button", { name: "Home opened it" }));
+  expect(await screen.findByText("In use: Projectivy")).toBeTruthy();
+});
+
+function onProjectivy() {
+  const api = platform(projectivy);
+  (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
+    homes: [projectivy],
+    current: projectivy,
+    stock: [],
+    catalog: [listed({})],
+  });
+  (api.latestLaunchers as ReturnType<typeof vi.fn>).mockResolvedValue([
+    { tool: "projectivy", version: "4.73" },
+  ]);
+  return api;
+}
+
+// A TV already on its own launcher would otherwise never reach the list.
+it("asks about the Home button once, then goes straight to the list", async () => {
+  open(onProjectivy());
+  await fireEvent.click(await screen.findByRole("button", { name: "Home opened it" }));
+  cleanup();
+  open(onProjectivy());
+  expect(await screen.findByRole("button", { name: "Update Projectivy" })).toBeTruthy();
+  expect(screen.queryByText(/Press Home/)).toBeNull();
+  expect(screen.queryByText(/in charge/)).toBeNull();
+});
+
+it("asks again after the launcher changes", async () => {
+  localStorage.setItem("bridgecoil.home.proven.device", "org.other.launcher");
+  open(onProjectivy());
+  expect(await screen.findByText(/Press Home/)).toBeTruthy();
+});
+
+it("keeps offering to turn stock off after the Home button was proven", async () => {
+  localStorage.setItem("bridgecoil.home.proven.device", "org.fresh.launcher");
+  open(platform(fresh));
+  expect(
+    await screen.findByRole("button", { name: "Turn off com.vendor.home" }),
+  ).toBeTruthy();
+});
 
 it("shows the current launcher and the alternatives", async () => {
   open(platform(stock));
   expect(await screen.findByText(/org\.fresh\.launcher/)).toBeTruthy();
   expect(screen.getByText(/In use/)).toBeTruthy();
-});
-
-it("says when a TV only has its own launcher", async () => {
-  const api = platform(stock);
-  (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
-    homes: [stock],
-    current: stock,
-    stock: [stock],
-  });
-  open(api);
-  expect(await screen.findByText(/only launcher/)).toBeTruthy();
 });
 
 it("tries a launcher before anything is changed", async () => {

@@ -10,7 +10,11 @@ use crate::{
         capture::{capture_command, parse_capture, parse_started},
         mappings,
     },
-    toolkit::{agent, inventory, setup},
+    toolkit::{
+        agent,
+        catalog::{LAUNCHERS, spec},
+        inventory, setup,
+    },
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -233,6 +237,43 @@ fn homes_command(user: u32) -> String {
     format!(
         "cmd package query-activities --brief --user {user} -a android.intent.action.MAIN -c android.intent.category.HOME"
     )
+}
+/// Each launcher Bridgecoil offers, and what's on this TV. `official` is false for a build signed
+/// by someone else, which an update can't replace, and null when the TV didn't say.
+async fn launcher_catalog(d: &mut dyn ShellDriver, t: &Target, user: u32) -> Result<Vec<Value>> {
+    let installed = parse_packages(&checked(d, t, &format!("pm list packages --user {user}")).await?);
+    let wanted: Vec<String> = LAUNCHERS
+        .iter()
+        .map(|id| spec(*id).package.to_owned())
+        .filter(|package| installed.contains(package))
+        .collect();
+    let rows = match d.metadata(t, &wanted).await {
+        Ok(Some(rows)) => rows,
+        _ => {
+            validate_target(d.current_target().as_ref(), t)?;
+            Vec::new()
+        }
+    };
+    Ok(LAUNCHERS
+        .iter()
+        .map(|id| {
+            let tool = spec(*id);
+            let row = rows.iter().find(|m| m.package == tool.package);
+            let official = row.map(|m| {
+                m.signers
+                    .iter()
+                    .any(|s| s.eq_ignore_ascii_case(tool.signer_sha256))
+            });
+            json!({
+                "tool": id,
+                "name": tool.name,
+                "package": tool.package,
+                "installed": wanted.iter().any(|p| p == tool.package),
+                "version": row.and_then(|m| m.version_name.clone()),
+                "official": official,
+            })
+        })
+        .collect())
 }
 /// What holds the Home role, or None on a TV with no role service, such as Android 9.
 async fn home_role(d: &mut dyn ShellDriver, t: &Target) -> Result<Option<String>> {
@@ -549,7 +590,8 @@ pub async fn query_rated(
                 .filter(|c| c.split('/').next().is_some_and(|p| system.iter().any(|s| s == p)))
                 .cloned()
                 .collect();
-            Ok(json!({"homes":homes,"stock":stock,"chosen":chosen,"roles":roles.is_some(),"current":parse_components(&current).first()}))
+            let catalog = launcher_catalog(d, t, user).await?;
+            Ok(json!({"catalog":catalog,"homes":homes,"stock":stock,"chosen":chosen,"roles":roles.is_some(),"current":parse_components(&current).first()}))
         }
         Query::Screenshot => {
             let raw = d.shell_large(t, screenshot_command()).await?;

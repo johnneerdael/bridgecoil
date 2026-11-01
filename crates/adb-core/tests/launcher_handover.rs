@@ -10,6 +10,10 @@ use adb_core::{
         types::Target,
     },
 };
+use adb_core::{
+    toolkit::catalog::{ToolId, spec},
+    workspace::metadata::Metadata,
+};
 use async_trait::async_trait;
 use serde_json::json;
 
@@ -48,7 +52,8 @@ impl ShellDriver for Tv {
                 }
             }
         } else if c.contains("pm list packages") {
-            "package:com.vendor.home\n".into()
+            "package:com.vendor.home\npackage:com.spocky.projengmenu\npackage:com.klevico.monet\n"
+                .into()
         } else {
             String::new()
         };
@@ -57,6 +62,27 @@ impl ShellDriver for Tv {
             stderr: String::new(),
             exit_code,
         })
+    }
+    async fn metadata(
+        &mut self,
+        _: &Target,
+        packages: &[String],
+    ) -> Result<Option<Vec<Metadata>>, PocError> {
+        let signed = |package: &str, signer: &str, version: &str| Metadata {
+            package: package.into(),
+            version_name: Some(version.into()),
+            signers: vec![signer.into()],
+            ..Default::default()
+        };
+        assert_eq!(packages, ["com.spocky.projengmenu", "com.klevico.monet"]);
+        Ok(Some(vec![
+            signed(
+                "com.spocky.projengmenu",
+                &spec(ToolId::Projectivy).signer_sha256.to_uppercase(),
+                "4.72",
+            ),
+            signed("com.klevico.monet", "patched", "1.1.0"),
+        ]))
     }
 }
 fn target() -> Target {
@@ -201,4 +227,29 @@ async fn launchers_report_which_one_was_chosen() {
         .unwrap();
     assert_eq!(r["chosen"], json!(null));
     assert_eq!(r["roles"], json!(false));
+}
+
+/// What the app needs to offer Install, Update or nothing for each launcher.
+#[tokio::test]
+async fn lists_each_launcher_with_what_the_tv_has() {
+    let mut d = tv("com.vendor.home\n");
+    let found = query(&mut d, &target(), Query::Launchers).await.unwrap();
+    let row = |package: &str| {
+        found["catalog"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["package"] == package)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(found["catalog"].as_array().unwrap().len(), 4);
+    let projectivy = row("com.spocky.projengmenu");
+    assert_eq!(projectivy["tool"], "projectivy");
+    assert_eq!(projectivy["version"], "4.72");
+    assert_eq!(projectivy["official"], true);
+    assert_eq!(row("com.klevico.monet")["official"], false);
+    let absent = row("com.overdevs.at4k");
+    assert_eq!(absent["installed"], false);
+    assert!(absent["official"].is_null());
 }

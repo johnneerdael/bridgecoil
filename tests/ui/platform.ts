@@ -255,6 +255,40 @@ async function query<T>(t: Target, q: Query): Promise<T> {
         ],
         stock: ["org.bridgecoil.fixture.home/.MainActivity"],
         current: "org.bridgecoil.fixture.home/.MainActivity",
+        catalog: [
+          {
+            tool: "backdrop",
+            name: "Backdrop",
+            package: "nl.neerdael.backdrop_launcher",
+            installed: true,
+            version: "1.4.10",
+            official: true,
+          },
+          {
+            tool: "projectivy",
+            name: "Projectivy",
+            package: "com.spocky.projengmenu",
+            installed: true,
+            version: "4.72",
+            official: true,
+          },
+          {
+            tool: "monet",
+            name: "Monet",
+            package: "com.klevico.monet",
+            installed: false,
+            version: null,
+            official: null,
+          },
+          {
+            tool: "at4k",
+            name: "AT4K",
+            package: "com.overdevs.at4k",
+            installed: false,
+            version: null,
+            official: null,
+          },
+        ],
       };
       break;
     case "toolkit":
@@ -396,6 +430,12 @@ export const api: Platform = {
   ratingsUpdateIfDue: async () => false,
   ratingsRemove: async () => {},
   installAgent: async () => {},
+  latestLaunchers: async () => [
+    { tool: "backdrop", version: "1.4.10" },
+    { tool: "projectivy", version: "4.73" },
+    { tool: "monet", version: "1.1.0" },
+    { tool: "at4k", version: "1.2" },
+  ],
   installTool: async (_session, _tool, onprogress) => {
     onprogress({ stage: "uploading", sent: 1, total: 2 });
     return "v1";

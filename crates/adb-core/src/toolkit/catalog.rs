@@ -10,7 +10,19 @@ pub enum ToolId {
     PorterCompat,
     Termux,
     TermuxBoot,
+    Backdrop,
+    Projectivy,
+    Monet,
+    At4k,
 }
+
+/// The launchers Bridgecoil offers, in the order it lists them.
+pub const LAUNCHERS: [ToolId; 4] = [
+    ToolId::Backdrop,
+    ToolId::Projectivy,
+    ToolId::Monet,
+    ToolId::At4k,
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ToolSpec {
@@ -26,6 +38,10 @@ pub const SHIZUKU_PACKAGE: &str = "moe.shizuku.privileged.api";
 const NEXT_SIGNER: &str = "06360bb800d1a117c3a22c91a58e638bcd37281cb4d644fcfac5d7238c654293";
 const PORTER_SIGNER: &str = "c6302c2b163c7f42f6d8bd658e53387880511020136a083f0a6a4bdc20b4bfa0";
 const TERMUX_SIGNER: &str = "b6da01480eefd5fbf2cd3771b8d1021ec791304bdd6c4bf41d3faabad48ee5e1";
+const BACKDROP_SIGNER: &str = "18a076c8f5666fb103184caf1a98c753a044cc54ffc8ddc54cdd13ccc339f93d";
+const PROJECTIVY_SIGNER: &str = "f6697bf4082ee97511e4de07863193884a015b7ab5860430321bda1042b0aadd";
+const MONET_SIGNER: &str = "4bec386a6baae56f0694d3be54f67e0625b973109e0dbb947df2a5d0254975e0";
+const AT4K_SIGNER: &str = "bfc84ab1296c72653ebca20a2f4cd293bc342a67dd4c61df931edfbad5271685";
 
 pub fn spec(id: ToolId) -> ToolSpec {
     let (name, repo, package, signer_sha256) = match id {
@@ -54,6 +70,25 @@ pub fn spec(id: ToolId) -> ToolSpec {
             "com.termux.boot",
             TERMUX_SIGNER,
         ),
+        ToolId::Backdrop => (
+            "Backdrop",
+            "johnneerdael/backdrop-launcher",
+            "nl.neerdael.backdrop_launcher",
+            BACKDROP_SIGNER,
+        ),
+        ToolId::Projectivy => (
+            "Projectivy",
+            "spocky/miproja1",
+            "com.spocky.projengmenu",
+            PROJECTIVY_SIGNER,
+        ),
+        ToolId::Monet => (
+            "Monet",
+            "Klevico/Monet-Launcher",
+            "com.klevico.monet",
+            MONET_SIGNER,
+        ),
+        ToolId::At4k => ("AT4K", "avadhesh18/at4k", "com.overdevs.at4k", AT4K_SIGNER),
     };
     ToolSpec {
         id,
@@ -73,6 +108,16 @@ fn matches(id: ToolId, name: &str) -> bool {
         }
         ToolId::Termux => name.starts_with("termux-app_v") && name.ends_with(".apk"),
         ToolId::TermuxBoot => name.starts_with("termux-boot-app_v") && name.ends_with(".apk"),
+        // Backdrop also publishes a build per ABI. The one with no ABI in its name has them all.
+        ToolId::Backdrop => name
+            .strip_prefix("backdrop-launcher-")
+            .and_then(|rest| rest.strip_suffix(".apk"))
+            .is_some_and(|version| !version.contains('-')),
+        ToolId::Projectivy => {
+            name.starts_with("ProjectivyLauncher-") && name.ends_with("-release.apk")
+        }
+        ToolId::Monet => name == "monet-launcher.apk",
+        ToolId::At4k => name == "app-release.apk",
     }
 }
 

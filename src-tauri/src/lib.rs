@@ -5,7 +5,7 @@ use adb_core::{
     backend::{Client, DeviceInfo, InstallProgress, PocError},
     toolkit::{
         catalog::ToolId,
-        release::{GithubReleases, fetch_tool},
+        release::{GithubReleases, LatestLauncher, fetch_tool, latest_launchers as newest_launchers},
     },
     workspace::files,
 };
@@ -522,6 +522,13 @@ async fn save_file(app: tauri::AppHandle, name: String, content: SaveContent) ->
         .map_err(err)?;
     Ok(true)
 }
+/// What each launcher has published, so the app can offer an update.
+#[tauri::command]
+async fn latest_launchers() -> Result<Vec<LatestLauncher>> {
+    tauri::async_runtime::spawn_blocking(|| newest_launchers(&GithubReleases::default()))
+        .await
+        .map_err(err)
+}
 /// Downloads the newest verified release of a tool and installs it on the connected TV.
 #[tauri::command]
 async fn install_tool(
@@ -648,6 +655,7 @@ pub fn run() {
             save_tv_file,
             save_file,
             install_tool,
+            latest_launchers,
             install_agent,
             ratings_status,
             ratings_update,

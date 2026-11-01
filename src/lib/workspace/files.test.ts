@@ -461,8 +461,6 @@ it("shows the TV's current setting in its selector", async () => {
     onbulk: () => {},
     oninstall: () => {},
   });
-  await fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  await fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await fireEvent.click(await screen.findByRole("button", { name: /^Settings/ }));
   const select = (await screen.findByLabelText(
     /Window animation/,
