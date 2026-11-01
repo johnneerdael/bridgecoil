@@ -1,6 +1,6 @@
 # How a change is reviewed and undone
 
-<p class="lead">Nothing that changes your TV runs without you seeing it first.</p>
+<p class="lead">Changes to apps, settings, launchers and files open a review, so you can read what will happen before it runs.</p>
 
 ## The review
 
@@ -20,6 +20,24 @@ Tick **Apply this change to the reviewed target**, then tap **Apply change**. Th
 
 !!! screenshot "review-commands.png"
     Review change on the Commands tab, showing the exact command.
+
+## What skips the review
+
+These run as soon as you tap them, or by themselves during setup:
+
+| Action | Recorded in History? |
+|---|---|
+| **Install** and **Update** for Termux, Termux:Boot, Shizuku and launchers | No |
+| **Install app** from a file, which has its own confirm box | No |
+| Putting the agent into Termux, and replacing it after an app update | No |
+| After pairing: background permissions, `boot.sh` and `00-bridgecoil` | No |
+| **Try it** and **Open app**, which open an app | Yes |
+| [Remote](../remote/use-your-phone-as-a-remote.md) presses and text | Yes |
+| **Upload file** and **Save to this device** | No |
+| Screenshots and recordings | No |
+| **Listen**, which reads key presses for 8 seconds | No |
+
+[What Bridgecoil installs on your TV](../how-it-works/what-gets-installed.md) explains the setup changes.
 
 ## Why a review can stop working
 

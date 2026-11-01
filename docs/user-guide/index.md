@@ -15,7 +15,7 @@ hide:
 
 ## Take back control of your TV
 
-Bridgecoil runs on your phone and manages your Android TV over your home network. Remap your remote, replace the home screen and turn off what you don't use. Every change is shown to you before it runs, and you don't need a computer.
+Bridgecoil runs on your phone and manages your Android TV over your home network. Remap your remote, replace the home screen and turn off what you don't use. You review changes to your apps and settings before they run, and you don't need a computer.
 
 [Get started](get-started/index.md){ .md-button .md-button--primary }
 [Download Bridgecoil](https://github.com/johnneerdael/bridgecoil/releases/latest){ .md-button }

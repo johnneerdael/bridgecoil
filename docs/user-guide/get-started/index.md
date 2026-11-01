@@ -10,6 +10,6 @@ Work through them in this order the first time:
 4. [Find your way around the app](find-your-way-around.md).
 5. [Set up your TV](set-up-your-tv.md), so that button changes survive a restart.
 
-You can look around the app after step 3 without changing anything. Bridgecoil shows you every change before it runs, and nothing happens until you apply it.
+You can look around the app after step 3 without changing anything. Changes to apps and settings open a review first, and [a few things skip it](../history/reviews.md#what-skips-the-review).
 
 If you already know what you want, go to [Pick a guide for your goal](choose-your-path.md).

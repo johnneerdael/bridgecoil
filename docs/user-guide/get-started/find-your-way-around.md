@@ -1,6 +1,6 @@
 # Find your way around the app
 
-<p class="lead">Bridgecoil has five main sections, and every change goes through the same review step.</p>
+<p class="lead">Bridgecoil has five main sections, and most changes go through the same review step.</p>
 
 Tap the menu icon at the top left to open **Navigation**.
 
@@ -43,7 +43,7 @@ Apps, Remote and Tools show **Connect your device** until you connect, with **Op
 
 ## How changes work
 
-Anything that changes the TV opens a review first. The review shows what will happen, what you could lose and, on the **Commands** tab, the exact command that will run. Nothing runs until you tick the box and tap **Apply change**. Read [How a change is reviewed and undone](../history/reviews.md) for the details.
+Most changes open a review first. The review shows what will happen, what you could lose and, on the **Commands** tab, the exact command that will run. It runs only when you tick the box and tap **Apply change**. [How a change is reviewed and undone](../history/reviews.md) has the details, including what skips the review.
 
 ## Light and dark
 

@@ -78,7 +78,7 @@ When the agent proves it has access, Bridgecoil makes these changes without a se
 
 The Termux:Boot page may flash on the TV for about two seconds. A TV without some of these settings skips them.
 
-Everything else you see Bridgecoil do goes through a [review](../history/reviews.md) first.
+[What skips the review](../history/reviews.md#what-skips-the-review) lists these along with everything else that runs without one.
 
 ## On your phone
 
