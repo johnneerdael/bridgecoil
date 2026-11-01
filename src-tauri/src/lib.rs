@@ -273,6 +273,9 @@ async fn choose_apk(
             let rejected = |e: String| PocError::new("apk", e);
             if !adb_core::bundle::is_bundle(file.path()).map_err(rejected)? {
                 let info = apk::inspect(file.path()).map_err(err)?;
+                if let Some(problem) = apk::unfit(&info, profile.sdk, &profile.abis) {
+                    return Err(PocError::new("incompatible", problem));
+                }
                 return Ok(Some((Payload::Single(file), info)));
             }
             let folder = tempfile::tempdir_in(cache).map_err(err)?;

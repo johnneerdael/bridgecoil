@@ -527,25 +527,9 @@ impl Client {
             .active
             .take()
             .ok_or_else(|| PocError::new("staleSession", "Device disconnected."))?;
-        if actual
-            .min_sdk
-            .is_some_and(|min| active.info.sdk != 0 && min > active.info.sdk)
-        {
+        if let Some(problem) = apk::unfit(&actual, active.info.sdk, &active.info.abis) {
             self.active = Some(active);
-            return Err(PocError::new(
-                "incompatible",
-                "APK requires a newer Android version than this TV.",
-            ));
-        }
-        if !actual.abis.is_empty()
-            && !active.info.abis.is_empty()
-            && !actual.abis.iter().any(|v| active.info.abis.contains(v))
-        {
-            self.active = Some(active);
-            return Err(PocError::new(
-                "incompatible",
-                "APK contains no native libraries compatible with this TV.",
-            ));
+            return Err(PocError::new("incompatible", problem));
         }
         let remote = format!("/data/local/tmp/adb-studio-{}.apk", Uuid::new_v4());
         let mut installer_started = false;
@@ -1015,6 +999,18 @@ pub fn install_rejection(output: &str) -> String {
     if output.contains("INSTALL_FAILED_VERIFICATION_FAILURE") {
         return "Google Play Protect stopped this install on the TV. Try again, and on the TV \
                 choose More details, then Install anyway."
+            .into();
+    }
+    if output.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE") {
+        return "This app is already on the TV, signed by someone else, so Android won't update \
+                it. Uninstall the one on the TV first, which also removes its data, then install \
+                this file."
+            .into();
+    }
+    if output.contains("INSTALL_FAILED_VERSION_DOWNGRADE") {
+        return "A newer version of this app is already on the TV, and Android won't replace it \
+                with an older one. Uninstall the one on the TV first, which also removes its \
+                data, then install this file."
             .into();
     }
     format!("Android rejected the installation: {}", output.trim())

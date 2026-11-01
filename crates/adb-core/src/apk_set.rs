@@ -79,15 +79,8 @@ pub fn assemble_set(
             .checked_add(info.bytes)
             .filter(|v| *v <= apk::MAX_APK_BYTES)
             .ok_or("The complete APK set must be no larger than 1 GiB.")?;
-        if info.min_sdk.is_some_and(|min| sdk != 0 && min > sdk) {
-            return Err("One of these APKs requires a newer Android version than the TV.".into());
-        }
-        if !info.abis.is_empty() && !abis.is_empty() && !info.abis.iter().any(|a| abis.contains(a))
-        {
-            return Err(
-                "One of these APKs contains native libraries for a different TV architecture."
-                    .into(),
-            );
+        if let Some(problem) = apk::unfit(info, sdk, abis) {
+            return Err(problem);
         }
         match file.signing.state{
    SignatureState::Verified=>{let signers:BTreeSet<_>=file.signing.signers.iter().map(|s|s.sha256.to_lowercase()).collect();if signers.is_empty(){return Err("No signing certificate was verified.".into());}if expected_signers.as_ref().is_some_and(|old|old!=&signers){return Err("The selected APKs are signed by different certificates.".into());}expected_signers=Some(signers);}

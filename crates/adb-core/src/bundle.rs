@@ -141,10 +141,16 @@ pub fn choose(splits: &[Option<String>], profile: &DeviceProfile) -> Result<Vec<
             None if abis.is_empty() => {}
             None if profile.abis.is_empty() => keep.extend(abis.iter().map(|(i, _)| *i)),
             None => {
-                return Err(format!(
-                    "This file has no version for this TV's processor ({}). Look for a build that includes it.",
-                    profile.abis.join(", ")
-                ));
+                let built_for: Vec<String> = abis
+                    .iter()
+                    .filter_map(|(_, c)| match c {
+                        Config::Abi(a) => Some((*a).to_string()),
+                        _ => None,
+                    })
+                    .collect();
+                if let Some(problem) = crate::apk::wrong_processor(&built_for, &profile.abis) {
+                    return Err(problem);
+                }
             }
         }
         let dpis: Vec<_> = parts
@@ -457,7 +463,8 @@ mod tests {
         let mut profile = tv();
         profile.abis = vec!["armeabi-v7a".into()];
         let error = choose(&[None, Some("config.arm64_v8a".into())], &profile).unwrap_err();
-        assert!(error.contains("armeabi-v7a"), "{error}");
+        assert!(error.contains("built for 64-bit ARM (arm64-v8a)"), "{error}");
+        assert!(error.contains("32-bit ARM (armeabi-v7a)"), "{error}");
     }
 
     #[test]

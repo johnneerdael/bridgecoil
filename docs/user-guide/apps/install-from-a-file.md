@@ -5,7 +5,7 @@
 You can start from **Install APK** on the Apps page, or **Install from a file** in [Home app](../home-screen/install-a-launcher.md).
 
 1. Tap **Choose file ＋** and pick the file.
-2. Check the name, version and size. **File details & fingerprint ↗** shows more.
+2. Check the name, version and size. **File details & fingerprint ↗** shows more. If the file can't run on this TV, Bridgecoil says why as soon as you pick it.
 3. Tick **Install this app on this device**.
 4. Tap **Install app ↑**, and keep the app open while it transfers.
 
@@ -47,15 +47,15 @@ Bridgecoil shows the file's details, but those don't prove who made it. An insta
 | Message | What to do |
 |---|---|
 | "Google Play Protect stopped this install on the TV." | Try again. On the TV, choose **More details**, then **Install anyway** |
-| "APK requires a newer Android version than this TV." | Find a build for your TV's Android version |
-| "APK contains no native libraries compatible with this TV." | Find a build for your TV's processor. **Device details** shows it as ABI |
+| "This app needs Android 12 or newer, and this TV has Android 9." | Find an older version of the app |
+| "This file is built for 64-bit ARM (arm64-v8a), but Android on this TV is 32-bit ARM (armeabi-v7a, armeabi)." | Find the version the message names. Many TVs have a 64-bit chip but run 32-bit Android, and it's Android that decides |
 | "This POC installs standalone APKs, not individual split APKs." | This file is one part of a split app. Find the whole set, as an APKS, XAPK or APKM |
-| "This file has no version for this TV's processor" | The set leaves out your TV's processor, which is common for 32-bit TVs. Find a build that includes it |
 | "This file is password protected" | Download a version without a password |
 | "This is an Android App Bundle (.aab)" | Android can't install these directly. Find an APK, APKS, XAPK or APKM |
 | "This file has no base APK" | This is only part of an app. Find the whole set |
 | "The app is installed, but its game data couldn't be copied." | The TV may be out of space. Free some, then install the file again |
-| Android rejected the installation, with a signature error | A version signed by someone else is already installed. Remove it first |
+| "This app is already on the TV, signed by someone else" | [Uninstall](turn-off-or-remove-an-app.md) the one on the TV first, which also removes its data |
+| "A newer version of this app is already on the TV" | [Uninstall](turn-off-or-remove-an-app.md) the one on the TV first, which also removes its data |
 
 ## Limits
 

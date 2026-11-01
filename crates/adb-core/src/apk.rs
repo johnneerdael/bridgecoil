@@ -36,6 +36,74 @@ pub fn valid_split_name(value: &str) -> bool {
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
 }
+/// The everyday name for a processor type. Android's own name stays beside it in messages,
+/// because that's what download pages list.
+fn processor_name(abi: &str) -> &str {
+    match abi {
+        "arm64-v8a" => "64-bit ARM",
+        "armeabi-v7a" | "armeabi" => "32-bit ARM",
+        "x86_64" => "64-bit Intel",
+        "x86" => "32-bit Intel",
+        other => other,
+    }
+}
+fn processors(abis: &[String]) -> String {
+    let mut names: Vec<&str> = Vec::new();
+    for abi in abis {
+        let name = processor_name(abi);
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    format!("{} ({})", names.join(" and "), abis.join(", "))
+}
+/// A file with native code runs only if Android has one of its processor types. A 64-bit chip
+/// often runs 32-bit Android, and only Android's side counts, so the message says which it is.
+pub fn wrong_processor(file: &[String], tv: &[String]) -> Option<String> {
+    let first = tv.first()?;
+    if file.is_empty() || file.iter().any(|abi| tv.contains(abi)) {
+        return None;
+    }
+    Some(format!(
+        "This file is built for {}, but Android on this TV is {}. Look for the {first} version of this app.",
+        processors(file),
+        processors(tv),
+    ))
+}
+fn android_name(sdk: u32) -> String {
+    let name = match sdk {
+        21 => "5.0",
+        22 => "5.1",
+        23 => "6",
+        24 => "7.0",
+        25 => "7.1",
+        26 => "8.0",
+        27 => "8.1",
+        28 => "9",
+        29 => "10",
+        30 => "11",
+        31 => "12",
+        32 => "12L",
+        33 => "13",
+        34 => "14",
+        35 => "15",
+        36 => "16",
+        other => return format!("Android API level {other}"),
+    };
+    format!("Android {name}")
+}
+/// Why Android would refuse this file on this TV, if it would. A TV that couldn't be read reports
+/// 0 and no processors, which leaves the decision to Android.
+pub fn unfit(info: &ApkInfo, sdk: u32, abis: &[String]) -> Option<String> {
+    if let Some(needed) = info.min_sdk.filter(|min| sdk != 0 && *min > sdk) {
+        return Some(format!(
+            "This app needs {} or newer, and this TV has {}. Look for an older version of this app.",
+            android_name(needed),
+            android_name(sdk),
+        ));
+    }
+    wrong_processor(&info.abis, abis)
+}
 pub fn inspect(path: &Path) -> Result<ApkInfo, String> {
     inspect_inner(path, false)
 }

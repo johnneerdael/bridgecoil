@@ -56,3 +56,17 @@ fn a_play_protect_block_says_how_to_continue() {
     let other = adb_core::backend::install_rejection("Failure [INSTALL_FAILED_OLDER_SDK]");
     assert!(other.contains("INSTALL_FAILED_OLDER_SDK"));
 }
+
+#[test]
+fn an_app_already_on_the_tv_says_why_it_blocks_the_install() {
+    let signed = adb_core::backend::install_rejection(
+        "Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package a.b signatures do not match previously installed version; ignoring!]",
+    );
+    assert!(signed.contains("signed by someone else"), "{signed}");
+    assert!(signed.contains("removes its data"), "{signed}");
+    let older = adb_core::backend::install_rejection(
+        "Failure [INSTALL_FAILED_VERSION_DOWNGRADE: Downgrade detected: Update version code 1 is older than current 2]",
+    );
+    assert!(older.contains("newer version"), "{older}");
+    assert!(older.contains("removes its data"), "{older}");
+}
