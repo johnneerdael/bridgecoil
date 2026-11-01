@@ -8,8 +8,7 @@
 4. Tick or untick what you want.
 5. Tap **Review**, go through the apps, tick the box to apply and tap **Apply**.
 
-!!! screenshot "cleanup-list.png"
-    Clean up with the ticked apps and the Apps you can open section.
+![Clean up with the ticked apps and the Apps you can open section.](../assets/shots/cleanup-list.png){ .bc-shot loading=lazy }
 
 !!! screenshot "cleanup-result.png"
     Operation result listing Done for each app.

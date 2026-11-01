@@ -29,14 +29,11 @@ Pairing and connecting use different ports on the TV, which is where most first-
 
     Bridgecoil only offers its key to the TV when that box is ticked. Selecting a legacy TV from the search results doesn't tick it for you.
 
-!!! screenshot "connect-add-device.png"
-    Add device on step 1, with a pairing address and code filled in.
+![Add device on step 1, Pair TV.](../assets/shots/connect-add-device.png){ .bc-shot loading=lazy }
 
-!!! screenshot "connect-nearby-devices.png"
-    Nearby ADB devices showing a Pairing port row and a Wireless connection row.
+![Nearby ADB devices with a Wireless connection row and a Legacy ADB row.](../assets/shots/connect-nearby-devices.png){ .bc-shot loading=lazy }
 
-!!! screenshot "connect-progress.png"
-    The Connecting to TV progress screen with Cancel attempt.
+![Quick connect finding the TV on the network, with Cancel attempt.](../assets/shots/connect-progress.png){ .bc-shot loading=lazy }
 
 When it works, you land on the [Device page](find-your-way-around.md) with a green **Connected** badge.
 

@@ -8,11 +8,9 @@
 4. Tap **Review**, then go through the apps one at a time.
 5. Tick the box to apply, then tap **Apply**.
 
-!!! screenshot "apps-bulk-select.png"
-    Apps in Select mode with several apps ticked.
+![Apps in Select mode with several apps ticked.](../assets/shots/apps-bulk-select.png){ .bc-shot loading=lazy }
 
-!!! screenshot "apps-bulk-review.png"
-    Review app changes, showing an included app and the Stop after the first failed box.
+![Review app changes, showing an included app and the Stop after the first failed box.](../assets/shots/apps-bulk-review.png){ .bc-shot loading=lazy }
 
 The review shows each app as **Included** or **Excluded · will not run**. An app is left out, with the reason, if it's rated Unsafe, it's protected, it's your launcher, or the TV didn't report its state. **Inspect this item's impact** shows what the change does to that app.
 
