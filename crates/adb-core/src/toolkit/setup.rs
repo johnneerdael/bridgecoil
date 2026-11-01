@@ -1,5 +1,5 @@
 use super::inventory::{Facts, Manager};
-use crate::shell_quote;
+use crate::{remote::mappings::write_boot_command, shell_quote};
 use serde::{Deserialize, Serialize};
 
 const TERMUX_SHELL: &str = "/data/data/com.termux/files/home/.bridgecoil/shell";
@@ -94,8 +94,9 @@ exit 0";
 /// Keeps Termux allowed to run, and adds the boot script that brings mappings back.
 pub fn keep_mappings_command() -> String {
     format!(
-        "{}\n{}",
+        "{}\n{}{}",
         BACKGROUND.trim_end_matches("exit 0").replace("\"$1\" ", ""),
+        write_boot_command(),
         monitor_command()
     )
 }

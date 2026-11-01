@@ -466,6 +466,8 @@ fn mappings_come_back_without_a_helper() {
     assert!(command.contains("\"$home/agent\" run"));
     assert!(!command.contains("$home/shell"));
     assert!(command.trim_end().ends_with("MONITOR"));
+    // A TV can have mappings from before setup, so setup can't leave this to saving a mapping.
+    assert!(command.contains("/data/local/tmp/bridgecoil/boot.sh <<"));
     assert!(command.contains("00-bridgecoil"));
     assert!(command.contains("deviceidle whitelist"));
 }

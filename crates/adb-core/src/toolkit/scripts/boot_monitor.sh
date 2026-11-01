@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/sh
-# Written by Bridgecoil, which can remove it. Brings button mappings back after a restart.
+# Written by Bridgecoil, which can remove it. Runs Bridgecoil's boot jobs after a restart.
 home=/data/data/com.termux/files/home/.bridgecoil
 log=$home/monitor.log
 if [ -r "$home/monitor.pid" ]; then
@@ -14,12 +14,13 @@ if [ -r "$home/monitor.pid" ]; then
   esac
 fi
 echo $$ > "$home/monitor.pid"
-listener=/data/local/tmp/bridgecoil/listener.sh
+boot=/data/local/tmp/bridgecoil/boot.sh
 # Wireless ADB can take a couple of minutes after a restart, so keep asking until it answers.
-# After that this is the watchdog: starting a listener that's already running does nothing.
+# After that this is the watchdog. The jobs live in boot.sh, which Bridgecoil can update over ADB
+# without touching Termux, and they do nothing when there's nothing to do.
 while :; do
   [ "$(wc -c < "$log" 2>/dev/null || echo 0)" -gt 100000 ] && : > "$log"
-  if "$home/agent" run "[ ! -f $listener ] || sh $listener --start" >> "$log" 2>&1; then
+  if "$home/agent" run "[ ! -f $boot ] || sh $boot" >> "$log" 2>&1; then
     sleep 60
   else
     sleep 3

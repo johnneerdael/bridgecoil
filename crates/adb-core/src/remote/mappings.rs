@@ -6,6 +6,8 @@ use std::collections::HashSet;
 pub const RUNTIME_DIR: &str = "/data/local/tmp/bridgecoil";
 const MAX_MAPPINGS: usize = 64;
 const END: &str = "BRIDGECOIL_END_OF_FILE";
+/// What Termux runs at boot. It lives here so that an app update can change it over ADB.
+pub const BOOT_SCRIPT: &str = include_str!("scripts/boot.sh");
 const BOOT_ID: &str = "/proc/sys/kernel/random/boot_id";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -231,13 +233,21 @@ pub fn listener_script(mappings: &[Mapping]) -> Result<String, PocError> {
         .replace("@@KEYS@@", &key_arms.join("\n")))
 }
 
+/// Creates the folder, and writes this app's `boot.sh` into it.
+pub fn write_boot_command() -> String {
+    format!(
+        "mkdir -p {RUNTIME_DIR} || exit 1\n\
+         chmod 700 {RUNTIME_DIR}\n\
+         cat > {RUNTIME_DIR}/boot.sh <<'{END}'\n{BOOT_SCRIPT}{END}\n\
+         chmod 700 {RUNTIME_DIR}/boot.sh\n"
+    )
+}
 pub fn apply_command(mappings: &[Mapping]) -> Result<String, PocError> {
     let script = listener_script(mappings)?;
     let stored =
         serde_json::to_string(mappings).map_err(|e| PocError::new("mapping", e.to_string()))?;
     Ok(format!(
-        "mkdir -p {RUNTIME_DIR} || exit 1\n\
-         chmod 700 {RUNTIME_DIR}\n\
+        "{}\
          [ -f {RUNTIME_DIR}/listener.sh ] && sh {RUNTIME_DIR}/listener.sh --stop\n\
          cat > {RUNTIME_DIR}/listener.sh <<'{END}'\n{script}{END}\n\
          cat > {RUNTIME_DIR}/mappings.json <<'{END}'\n{stored}\n{END}\n\
@@ -245,7 +255,8 @@ pub fn apply_command(mappings: &[Mapping]) -> Result<String, PocError> {
          cat {BOOT_ID} > {RUNTIME_DIR}/saved_boot 2>/dev/null\n\
          sh {RUNTIME_DIR}/listener.sh --start\n\
          sleep 1\n\
-         exit 0"
+         exit 0",
+        write_boot_command()
     ))
 }
 pub fn pause_command(paused: bool) -> String {

@@ -574,6 +574,10 @@ fn apply_stores_the_set_on_the_tv() {
     assert!(command.contains("/data/local/tmp/bridgecoil/mappings.json"));
     assert!(command.contains("listener.sh --start"));
     assert!(
+        command.find("/data/local/tmp/bridgecoil/boot.sh <<") < command.find("listener.sh --start"),
+        "saving a mapping brings this app's boot.sh to the TV"
+    );
+    assert!(
         command.contains("chmod 700 /data/local/tmp/bridgecoil"),
         "no other app may edit what runs as the shell user"
     );
