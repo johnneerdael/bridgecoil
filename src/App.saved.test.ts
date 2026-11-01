@@ -446,3 +446,35 @@ it("says History stays when a TV has no ID to match its records", async () => {
     invoke.mock.calls.some(([command]) => command === "delete_tv_history"),
   ).toBe(false);
 });
+it("doesn't carry a deleted TV's legacy choice over to the next connection", async () => {
+  backend();
+  localStorage.setItem(
+    savedDevicesKey,
+    JSON.stringify([{ ...stored, legacy: true }]),
+  );
+  render(App);
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole("button", {
+          name: `Quick connect to ${tv.model}`,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false),
+  );
+  await fireEvent.click(
+    screen.getByRole("button", { name: "Update connection address" }),
+  );
+  await fireEvent.click(
+    screen.getByRole("button", { name: "← Saved devices" }),
+  );
+  await openWarning();
+  await fireEvent.click(screen.getByRole("button", { name: "Delete TV" }));
+  const box = (await screen.findByLabelText(
+    /Allow legacy/,
+  )) as HTMLInputElement;
+  expect(box.checked).toBe(false);
+  expect(
+    (screen.getByLabelText(/Connection address/) as HTMLInputElement).value,
+  ).toBe("");
+});

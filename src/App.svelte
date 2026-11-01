@@ -427,6 +427,7 @@
       pairs = left.pairs;
       connectionChoice = null;
       selectedAdvertisement = null;
+      legacy = false;
       if (endpointHost(endpoint) === saved.host) endpoint = "";
       if (endpointHost(pairEndpoint) === saved.host) {
         pairEndpoint = "";
@@ -1048,7 +1049,9 @@
 >
   {#if deleting}
     <h3 class="break-word">{label(deleting.name, 120)}</h3>
-    <p>This removes the following from your phone, and it can't be undone:</p>
+    <p class="delete-lead">
+      This removes the following from your phone, and it can't be undone:
+    </p>
     <ul class="delete-list">
       <li>Its address and pairing record</li>
       {#if deleting.deviceId}
