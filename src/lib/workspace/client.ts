@@ -214,7 +214,8 @@ export type Query =
   | { kind: "captureKeys"; seconds: number }
   | { kind: "mappings" }
   | { kind: "launchableApps" }
-  | { kind: "screenshot" };
+  | { kind: "screenshot" }
+  | { kind: "shellList"; source: string; argument: string | null };
 export type RemoteAction =
   | { kind: "key"; key: string; longPress: boolean }
   | { kind: "text"; text: string }

@@ -166,7 +166,7 @@ nav:
       - Change hidden settings: tools/settings.md
       - See your TV's network details: tools/network.md
       - Run a command without typing: tools/commands.md
-      - Run your own command: tools/shell.md
+      - Run a command on the TV: tools/shell.md
       - History and undo:
           - history/index.md
           - How a change is reviewed and undone: history/reviews.md

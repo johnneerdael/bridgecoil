@@ -257,13 +257,15 @@ impl Client {
         target: &crate::workspace::types::Target,
         cmd: &str,
     ) -> Result<crate::workspace::driver::ShellOutput> {
-        self.execute_limited(target, cmd, SHELL_OUTPUT_LIMIT).await
+        self.execute_limited(target, cmd, SHELL_OUTPUT_LIMIT, Overflow::Refuse)
+            .await
     }
     async fn execute_limited(
         &mut self,
         target: &crate::workspace::types::Target,
         cmd: &str,
         limit: usize,
+        overflow: Overflow,
     ) -> Result<crate::workspace::driver::ShellOutput> {
         crate::workspace::types::validate_target(self.current_target().as_ref(), target)?;
         if cmd.contains('\0') || cmd.len() > 65536 {
@@ -278,7 +280,7 @@ impl Client {
             .ok_or_else(|| PocError::new("staleTarget", "Device disconnected."))?;
         match timeout(
             Duration::from_secs(30),
-            command_output_limited(&mut active.wire, cmd, limit),
+            command_output_limited(&mut active.wire, cmd, limit, overflow),
         )
         .await
         {
@@ -743,6 +745,7 @@ impl Client {
 }
 const UPLOAD_STALL: Duration = Duration::from_secs(60);
 const SHELL_OUTPUT_LIMIT: usize = 1024 * 1024;
+const CUT_NOTE: &str = "\n\nBridgecoil stopped showing this at 1 MB. The command ran to the end.\n";
 /// A busy 1080p screen is several megabytes as PNG, and base64 adds a third.
 const LARGE_OUTPUT_LIMIT: usize = 24 * 1024 * 1024;
 fn connection_error(e: impl std::fmt::Display) -> PocError {
@@ -774,12 +777,20 @@ async fn command_output(
     wire: &mut Wire,
     cmd: &str,
 ) -> Result<crate::workspace::driver::ShellOutput> {
-    command_output_limited(wire, cmd, SHELL_OUTPUT_LIMIT).await
+    command_output_limited(wire, cmd, SHELL_OUTPUT_LIMIT, Overflow::Refuse).await
+}
+/// What to do when a command says more than its limit. A command Bridgecoil runs for itself can't
+/// be trusted past the limit, but someone reading a log still wants the part that fits.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Overflow {
+    Refuse,
+    Cut,
 }
 async fn command_output_limited(
     wire: &mut Wire,
     cmd: &str,
     limit: usize,
+    overflow: Overflow,
 ) -> Result<crate::workspace::driver::ShellOutput> {
     use libadb::shell::v2::{self, Frame};
     let mut rx = vec![0u8; 65536];
@@ -789,31 +800,36 @@ async fn command_output_limited(
     shell.close_stdin().await.map_err(connection_error)?;
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
+    let mut cut = false;
     let exit = loop {
-        match shell.read_frame().await.map_err(connection_error)? {
-            Frame::Stdout(b) => {
-                if stdout.len() + stderr.len() + b.len() > limit {
-                    return Err(PocError::new(
-                        "outputLimit",
-                        "The TV returned more output than this command allows.",
-                    ));
-                }
-                stdout.extend_from_slice(&b);
+        let frame = shell.read_frame().await.map_err(connection_error)?;
+        let (Frame::Stdout(b) | Frame::Stderr(b)) = &frame else {
+            if let Frame::Exit(code) = frame {
+                break code;
             }
-            Frame::Stderr(b) => {
-                if stdout.len() + stderr.len() + b.len() > limit {
-                    return Err(PocError::new(
-                        "outputLimit",
-                        "The TV returned more output than this command allows.",
-                    ));
-                }
-                stderr.extend_from_slice(&b);
+            continue;
+        };
+        if stdout.len() + stderr.len() + b.len() > limit {
+            if overflow == Overflow::Refuse {
+                return Err(PocError::new(
+                    "outputLimit",
+                    "The TV returned more output than this command allows.",
+                ));
             }
-            Frame::Exit(code) => break code,
-            _ => {}
+            // Keep reading to the end: the stream has to finish for the connection to stay usable.
+            cut = true;
+            continue;
+        }
+        if matches!(frame, Frame::Stdout(_)) {
+            stdout.extend_from_slice(b);
+        } else {
+            stderr.extend_from_slice(b);
         }
     };
     shell.close().await.map_err(connection_error)?;
+    if cut {
+        stderr.extend_from_slice(CUT_NOTE.as_bytes());
+    }
     Ok(crate::workspace::driver::ShellOutput {
         exit_code: Some(exit),
         stdout: String::from_utf8_lossy(&stdout).into_owned(),
@@ -852,6 +868,14 @@ impl crate::workspace::driver::ShellDriver for Client {
     fn current_target(&self) -> Option<crate::workspace::types::Target> {
         Client::current_target(self)
     }
+    async fn shell_for_person(
+        &mut self,
+        target: &crate::workspace::types::Target,
+        command: &str,
+    ) -> Result<crate::workspace::driver::ShellOutput> {
+        self.execute_limited(target, command, SHELL_OUTPUT_LIMIT, Overflow::Cut)
+            .await
+    }
     async fn shell(
         &mut self,
         target: &crate::workspace::types::Target,
@@ -864,6 +888,7 @@ impl crate::workspace::driver::ShellDriver for Client {
         target: &crate::workspace::types::Target,
         command: &str,
     ) -> Result<crate::workspace::driver::ShellOutput> {
-        self.execute_limited(target, command, LARGE_OUTPUT_LIMIT).await
+        self.execute_limited(target, command, LARGE_OUTPUT_LIMIT, Overflow::Refuse)
+            .await
     }
 }

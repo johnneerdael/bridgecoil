@@ -226,6 +226,19 @@ async function query<T>(t: Target, q: Query): Promise<T> {
         },
       } satisfies PackageDetail;
       break;
+    case "shellList":
+      value =
+        q.source === "commands"
+          ? ["pm", "am", "appops", "monkey", "settings", "getprop", "setprop", "wm", "input", "ime", "screencap", "screenrecord", "getevent", "dumpsys", "logcat", "dmesg", "ps", "top", "cmd", "pgrep", "pidof", "uname", "uptime", "date", "id", "ip", "ping", "ls", "cat", "rm", "reboot", "termux"].map((value) => ({ value, about: "" }))
+          : q.source === "permissions"
+            ? [
+                { value: "android.permission.CAMERA", about: "Not granted" },
+                { value: "android.permission.RECORD_AUDIO", about: "Granted" },
+              ]
+            : q.source === "services"
+              ? ["battery", "wifi", "window"].map((value) => ({ value, about: "" }))
+              : apps.slice(0, 40).map((a) => ({ value: a.package, about: "" }));
+      break;
     case "appOps":
       value = [
         {

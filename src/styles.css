@@ -1264,20 +1264,6 @@ textarea {
   font-size: 10px;
   font-weight: 400;
 }
-.shell-form {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  gap: 10px;
-}
-.shell-form textarea {
-  flex: 1;
-  min-height: 80px;
-}
-.shell-form button {
-  flex-shrink: 0;
-}
 .drawer-menu {
   grid-template-columns: minmax(0, 1fr);
   gap: 4px;
@@ -1738,4 +1724,248 @@ textarea {
 
 .danger-text {
   color: var(--bc-danger);
+}
+/* Shell: one line on top, a fixed window below. The dropdown lies over the window. */
+.shell-tool {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+}
+.shell-tool > * {
+  flex-shrink: 0;
+}
+.shell-modes {
+  margin-block: 0;
+}
+.shell-modes button {
+  min-height: 36px;
+}
+.shell-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+.shell-field {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+  text-align: left;
+  font-family: var(--bc-font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--bc-text, inherit);
+  background: var(--bc-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.shell-words {
+  flex-shrink: 0;
+}
+.shell-placeholder {
+  color: var(--muted);
+  font-family: inherit;
+}
+input.shell-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  font-family: var(--bc-font-mono);
+  font-size: 12px;
+}
+.shell-field input.shell-input {
+  min-width: 120px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.shell-run {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 64px;
+  padding-inline: 14px;
+}
+.shell-bar .icon-button {
+  flex: 0 0 auto;
+}
+.shell-tool .risk-note {
+  margin: 0;
+}
+.shell-helper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  background: var(--bc-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.shell-helper p {
+  margin: 0;
+}
+.shell-helper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.shell-helper-actions button {
+  flex: 1 1 auto;
+  width: auto;
+  min-height: 40px;
+}
+.shell-tool > .shell-stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 120px;
+}
+.shell-menu {
+  position: absolute;
+  z-index: 5;
+  inset: 0 0 auto;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 8px;
+  background: var(--bc-surface, var(--bc-raised));
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+.shell-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  font-size: 12px;
+}
+.shell-menu-head button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 36px;
+  padding-inline: 12px;
+}
+.shell-rows {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.shell-row {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  padding: 7px 8px;
+  text-align: left;
+  font-weight: 400;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.shell-row code {
+  font-family: var(--bc-font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.shell-row small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.shell-tag {
+  font-size: 10px;
+  font-style: normal;
+  color: var(--muted);
+}
+.shell-group {
+  margin: 8px 0 2px;
+  padding-inline: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.shell-window {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  background: var(--bc-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.shell-window-actions {
+  position: absolute;
+  z-index: 1;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+}
+.shell-window-actions .icon-button {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+}
+.shell-output {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  font-family: var(--bc-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.shell-output pre {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.shell-output p {
+  margin: 0 0 10px;
+  font-size: 11px;
+}
+.shell-empty {
+  color: var(--muted);
+}
+.shell-prompt {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 2px 64px 4px 0;
+  text-align: left;
+  font: inherit;
+  font-weight: 600;
+  color: var(--bc-primary);
+  background: transparent;
+  border: 0;
+  overflow-wrap: anywhere;
+}
+.workspace.keyboard .shell-tool .shell-modes,
+.workspace.keyboard .shell-tool .risk-note {
+  display: none;
 }

@@ -141,16 +141,6 @@ export const catalog: CommandGroup[] = [
         options: [app("The app to reset.")],
         build: (v) => `pm clear --user ${v.profile} ${q(v.app)}`,
       },
-      {
-        id: "uninstall-app",
-        title: "Remove an app",
-        about: "Removes the app for this profile.",
-        effect: "danger",
-        warning:
-          "Its data is deleted. Removing a system app can break the TV, so check Apps for its rating first.",
-        options: [app("The app to remove.")],
-        build: (v) => `pm uninstall --user ${v.profile} ${q(v.app)}`,
-      },
     ],
   },
   {

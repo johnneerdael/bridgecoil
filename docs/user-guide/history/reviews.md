@@ -34,6 +34,7 @@ These run as soon as you tap them, or by themselves during setup:
 | **Upload file** and **Save to this device** | No |
 | Screenshots and recordings | No |
 | **Listen**, which reads key presses for 8 seconds | No |
+| [Shell](../tools/shell.md#what-runs-straight-away) commands that only read | Yes |
 
 [What Bridgecoil installs on your TV](../how-it-works/what-gets-installed.md) explains the setup changes.
 

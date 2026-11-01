@@ -14,7 +14,7 @@
 | **Diagnostics** | Logs and system reports | [Find out why something isn't working](diagnostics.md) |
 | **Settings** | Five Android settings | [Change hidden settings](settings.md) |
 | **Network** | The TV's addresses and routes | [See your TV's network details](network.md) |
-| **Shell** | Run a command you type | [Run your own command](shell.md) |
+| **Shell** | Build a command word by word, or type your own | [Run a command on the TV](shell.md) |
 
 ![Tools on a connected TV, with all 11 tools on one page.](../assets/shots/tools-overview.png){ .bc-shot loading=lazy }
 

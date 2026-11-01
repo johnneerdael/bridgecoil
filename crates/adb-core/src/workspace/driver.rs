@@ -38,6 +38,14 @@ pub trait ShellDriver: Send {
         Ok(None)
     }
     async fn shell(&mut self, target: &Target, command: &str) -> Result<ShellOutput, PocError>;
+    /// For a command someone asked for: too much output is cut off rather than refused.
+    async fn shell_for_person(
+        &mut self,
+        target: &Target,
+        command: &str,
+    ) -> Result<ShellOutput, PocError> {
+        self.shell(target, command).await
+    }
     /// For the few commands that return files, such as a screenshot.
     async fn shell_large(
         &mut self,

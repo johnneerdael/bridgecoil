@@ -3,7 +3,13 @@ use crate::ratings::{
     RatingList,
     groups::{Group, group_for},
 };
-use super::{commands::*, driver::*, engine::{is_system_app, parse_package_state}, files, types::*};
+use super::{
+    commands::*,
+    driver::*,
+    engine::{is_system_app, parse_package_state},
+    files, shell_lists,
+    types::*,
+};
 use crate::{
     backend::PocError,
     remote::{
@@ -108,6 +114,10 @@ pub enum Query {
     Network,
     Files {
         path: String,
+    },
+    ShellList {
+        source: String,
+        argument: Option<String>,
     },
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -622,6 +632,17 @@ pub async fn query_rated(
                     .collect();
             }
             Ok(detail)
+        }
+
+        Query::ShellList { source, argument } => {
+            let command = shell_lists::list_command(&source, argument.as_deref(), user)?;
+            // Part of a report is still useful, and `ls` over folders a TV lacks exits non-zero.
+            let output = d.shell(t, &command).await?;
+            Ok(json!(shell_lists::parse_list(
+                &source,
+                argument.as_deref(),
+                &output.stdout,
+            )))
         }
 
         Query::Launchers => {

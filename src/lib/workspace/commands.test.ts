@@ -87,7 +87,7 @@ it("marks anything that changes the TV", () => {
 
 it("flags commands that can lose data or lock someone out", () => {
   const danger = all.filter((c) => c.effect === "danger").map((c) => c.id);
-  expect(danger).toEqual(expect.arrayContaining(["clear-app", "uninstall-app"]));
+  expect(danger).toEqual(expect.arrayContaining(["clear-app", "reboot"]));
   for (const command of all.filter((c) => c.effect === "danger"))
     expect(command.warning, command.id).toBeTruthy();
 });
@@ -99,7 +99,7 @@ it("treats switching off an app as risky, because it can lock you out", () => {
 });
 
 it("targets the connected profile rather than assuming the first", () => {
-  for (const id of ["disable-app", "enable-app", "clear-app", "uninstall-app"]) {
+  for (const id of ["disable-app", "enable-app", "clear-app"]) {
     const command = all.find((c) => c.id === id)!;
     expect(
       buildCommand(command, { ...defaults(command), app: "org.demo", profile: "10" }),

@@ -14,7 +14,6 @@
 | **Switch an app off** | Be careful | App | `pm disable-user --user {profile} {app}` |
 | **Switch an app back on** | Changes the TV | App | `pm enable --user {profile} {app}` |
 | **Delete an app's data** | Be careful | App | `pm clear --user {profile} {app}` |
-| **Remove an app** | Be careful | App | `pm uninstall --user {profile} {app}` |
 
 Switching off Settings or your launcher can leave you unable to get back in without this app. Removing a system app can break the TV.
 

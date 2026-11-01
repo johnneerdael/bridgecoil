@@ -16,7 +16,7 @@ Open **Tools → Commands** and choose a group. Each command shows a description
 
 **This runs on the TV:** shows the exact command. **Run on the TV** opens a review, and **Save for later** adds it to the top of the list.
 
-The groups are **Apps**, **Display**, **Input**, **Network**, **Power**, **Settings**, **System** and **Logs**. [All commands](../reference/all-commands.md) lists all 42.
+The groups are **Apps**, **Display**, **Input**, **Network**, **Power**, **Settings**, **System** and **Logs**. [All commands](../reference/all-commands.md) lists all 41.
 
 ## Things to know
 

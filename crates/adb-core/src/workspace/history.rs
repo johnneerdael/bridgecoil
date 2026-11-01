@@ -67,7 +67,7 @@ impl History {
             }
             row.output.truncate(end);
             row.output
-                .push_str("\n[Output truncated for history; export a full report when needed.]");
+                .push_str("\n[History keeps the first 64 KB of this output.]");
         }
         let status = serde_json::to_value(&row.status)
             .map_err(storage)?

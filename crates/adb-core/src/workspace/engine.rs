@@ -470,7 +470,12 @@ impl Workspace {
             recovery: None,
         };
         self.history.put(&row)?;
-        match driver.shell(target, &p.review.commands[0]).await {
+        let sent = if matches!(p.action, Action::Shell { .. }) {
+            driver.shell_for_person(target, &p.review.commands[0]).await
+        } else {
+            driver.shell(target, &p.review.commands[0]).await
+        };
+        match sent {
             Err(e) => {
                 row.status = OperationStatus::Unknown;
                 row.error = Some(format!("{}. Inspect the TV before retrying.", e.message));

@@ -16,6 +16,7 @@
   import LauncherTool from "./LauncherTool.svelte";
   import LogsTool from "./LogsTool.svelte";
   import ScreenshotTool from "./ScreenshotTool.svelte";
+  import ShellTool from "./ShellTool.svelte";
   import SetupTool from "./SetupTool.svelte";
   import { internalStorage } from "./files";
   import Pager from "./Pager.svelte";
@@ -98,7 +99,6 @@
   let error = $state("");
   let output = $state("");
   let section = $state("logs");
-  let command = $state("");
   type Setting = {
     namespace: string;
     key: string;
@@ -276,27 +276,7 @@
         {busy}
         onpage={(n) => (settingPage = n)}
       />
-    {:else if tool === "shell"}<p class="subtle">
-        Advanced · ADB shell on {device.model}, profile {device.profileId}.
-        Commands may affect the whole TV. Output is bounded and recorded
-        locally.
-      </p>
-      <form
-        class="shell-form"
-        onsubmit={(e) => {
-          e.preventDefault();
-          void plan({ kind: "shell", command });
-        }}
-      >
-        <label for="shell-command">Command</label><textarea
-          id="shell-command"
-          bind:value={command}
-          maxlength={8192}
-          spellcheck={false}></textarea><button
-          class="primary"
-          disabled={busy || !command.trim()}>Review command</button
-        >
-      </form>
+    {:else if tool === "shell"}<ShellTool {device} {api} {reload} />
     {:else}{#if tool === "diagnostics"}<label
           class="sr-only"
           for="diagnostics-section">Diagnostics section</label

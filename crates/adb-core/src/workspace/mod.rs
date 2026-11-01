@@ -7,4 +7,5 @@ pub mod files;
 pub mod history;
 pub mod metadata;
 pub mod queries;
+pub mod shell_lists;
 pub mod types;
