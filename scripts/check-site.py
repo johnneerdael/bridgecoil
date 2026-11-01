@@ -47,7 +47,9 @@ def check(root):
         if url.scheme or url.netloc:
             return
         if url.path.startswith("/"):
-            errors.append(f"{source.relative_to(root)}: project-site link starts at domain root: {value}")
+            # MkDocs serves its 404 page at any depth, so only site-rooted links work there.
+            if source.relative_to(root).as_posix() != "guide/404.html":
+                errors.append(f"{source.relative_to(root)}: project-site link starts at domain root: {value}")
             return
         target = (source.parent / unquote(url.path)).resolve() if url.path else source
         if not target.is_relative_to(root):

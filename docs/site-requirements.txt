@@ -1,0 +1,7 @@
+# User guide toolchain (mkdocs.yml). Pinned, the same as TagGroove. Rebuild with
+# `mkdocs build --strict` after any change.
+mkdocs==1.6.1
+mkdocs-material==9.7.7
+pymdown-extensions==12.1
+Markdown==3.11
+Pygments==2.21.0

@@ -18,7 +18,7 @@ Bridgecoil connects directly over local wireless debugging. The supported wirele
 
 <p align="center">
   <a href="https://github.com/johnneerdael/bridgecoil/releases"><b>Releases</b></a> &nbsp;·&nbsp;
-  <a href="https://johnneerdael.github.io/bridgecoil/guide.html"><b>Get started</b></a> &nbsp;·&nbsp;
+  <a href="https://johnneerdael.github.io/bridgecoil/guide/"><b>Get started</b></a> &nbsp;·&nbsp;
   <a href="https://johnneerdael.github.io/bridgecoil/"><b>Website</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/johnneerdael/bridgecoil/issues"><b>Report an issue</b></a>
 </p>
@@ -55,7 +55,7 @@ Captured from the signed **v0.1.7** build on a phone emulator connected to an **
   </tr>
 </table>
 
-[Browse all 51 screenshots with captions](https://johnneerdael.github.io/bridgecoil/screenshots.html) · [Walk through the user guide](https://johnneerdael.github.io/bridgecoil/guide.html)
+[Browse all 51 screenshots with captions](https://johnneerdael.github.io/bridgecoil/screenshots.html) · [Walk through the user guide](https://johnneerdael.github.io/bridgecoil/guide/)
 
 ## Get Bridgecoil
 
@@ -77,7 +77,7 @@ Releases use one Android signing identity so compatible builds can update an exi
 4. Enable **Wireless debugging** and open its pairing-code screen.
 5. Open Bridgecoil, select the TV and enter the code it shows. Pairing establishes trust; connecting to the TV is a separate step. Confirm the selected device and profile before changing anything.
 
-Follow the [connection guide](https://johnneerdael.github.io/bridgecoil/guide.html#connect) for more context.
+Follow the [connection guide](https://johnneerdael.github.io/bridgecoil/guide/get-started/first-connection/) for more context.
 
 ## Guided TV setup
 
@@ -89,7 +89,7 @@ Persistent remote mappings need an execution helper and a listener on the TV. Br
 4. Connect Termux to the helper and approve its prompt on the TV.
 5. Enable helper startup at boot and let Bridgecoil prepare the startup script. Test the physical button, phone-independent operation and restart behavior separately.
 
-Play Protect may stop the Termux apps because of their older Android target. Read the TV prompt and decide there whether to continue. Bridgecoil does not turn Play Protect off. A package signed by an unexpected developer is refused. See [prepare the TV toolkit](https://johnneerdael.github.io/bridgecoil/guide.html#toolkit).
+Play Protect may stop the Termux apps because of their older Android target. Read the TV prompt and decide there whether to continue. Bridgecoil does not turn Play Protect off. A package signed by an unexpected developer is refused. See [prepare the TV toolkit](https://johnneerdael.github.io/bridgecoil/guide/get-started/set-up-your-tv/).
 
 ## Compatibility and current limits
 
@@ -104,11 +104,11 @@ Guided setup has run end to end on an **Android TV 16 emulator**, using secure A
 - Shizuku-Next cannot replace an app with the same package name and a different signer. Porter can sit alongside it.
 - Recovery exists only for supported operations. Reinstalling a package does not restore deleted app data.
 
-Read [compatibility and limits](https://johnneerdael.github.io/bridgecoil/guide.html#limits) and the individual build's release notes before relying on a workflow.
+Read [compatibility and limits](https://johnneerdael.github.io/bridgecoil/guide/help/not-available-yet/) and the individual build's release notes before relying on a workflow.
 
 ## Documentation
 
-- [User guide](https://johnneerdael.github.io/bridgecoil/guide.html): connection, apps, launchers, remotes, toolkit, files and recovery.
+- [User guide](https://johnneerdael.github.io/bridgecoil/guide/): connection, apps, launchers, remotes, toolkit, files and recovery.
 - [Screen guide](docs/guide/README.md): screenshots of each part of the app, step by step.
 - [Website maintenance](docs/website.md): local preview, Pages deployment, brand assets and screenshot handoff.
 - [Release process](docs/release.md): signing, version tags and branded release notes.

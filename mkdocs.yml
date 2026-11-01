@@ -1,0 +1,195 @@
+site_name: Bridgecoil user guide
+site_description: Take back control of your Android TV. Remap your remote, replace the home screen and clean up apps from your phone.
+site_url: https://johnneerdael.github.io/bridgecoil/guide/
+repo_url: https://github.com/johnneerdael/bridgecoil
+repo_name: johnneerdael/bridgecoil
+edit_uri: edit/main/docs/user-guide/
+docs_dir: docs/user-guide
+site_dir: build/user-guide-site
+
+# Writer-only material lives beside the pages but isn't published.
+exclude_docs: |
+  _meta/
+  _snippets/
+
+theme:
+  name: material
+  language: en
+  logo: assets/brand/bridgecoil-mark-dark.svg
+  favicon: assets/brand/favicon.svg
+  font:
+    text: Inter
+    code: IBM Plex Mono
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil-outline
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Follow the system setting
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.path
+    - navigation.top
+    - navigation.footer
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.tabs.link
+    - content.tooltips
+    - content.action.edit
+
+extra_css:
+  - stylesheets/bridgecoil.css
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/johnneerdael/bridgecoil
+      name: Bridgecoil on GitHub
+
+plugins:
+  - search
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.snippets:
+      base_path: docs/user-guide/_snippets
+      auto_append:
+        - abbreviations.md
+      check_paths: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - Get started:
+      - get-started/index.md
+      - Install Bridgecoil on your phone: get-started/install.md
+      - Turn on debugging on your TV: get-started/prepare-your-tv.md
+      - Connect your phone to the TV: get-started/first-connection.md
+      - Find your way around the app: get-started/find-your-way-around.md
+      - Set up your TV: get-started/set-up-your-tv.md
+      - Pick a guide for your goal: get-started/choose-your-path.md
+      - Connections:
+          - connect/index.md
+          - Reconnect to a saved TV: connect/saved-tvs.md
+          - Find TVs on your network: connect/find-tvs.md
+          - Update a TV's address: connect/update-address.md
+  - Your remote:
+      - buttons/index.md
+      - Make a button open the app you want: buttons/remap-a-button.md
+      - Replace what a button opens: buttons/replace-what-a-button-opens.md
+      - Do something different when you hold a button: buttons/hold-a-button.md
+      - Test, pause or remove your mappings: buttons/test-pause-remove.md
+      - Which buttons can be remapped: buttons/which-buttons.md
+      - Use your phone as a remote: remote/use-your-phone-as-a-remote.md
+  - Home screen:
+      - home-screen/index.md
+      - Replace your home screen: home-screen/replace-your-launcher.md
+      - Install a launcher: home-screen/install-a-launcher.md
+      - Update a launcher: home-screen/update-a-launcher.md
+      - Go back to your TV's own launcher: home-screen/restore-your-launcher.md
+      - If the Home button doesn't change: home-screen/if-home-doesnt-change.md
+  - Apps:
+      - apps/index.md
+      - Clean up your TV:
+          - clean-up/index.md
+          - Clean up your TV: clean-up/clean-up-your-tv.md
+          - Bring apps back: clean-up/bring-apps-back.md
+      - Browse and search your apps: apps/browse-and-search.md
+      - Check what an app does: apps/ratings.md
+      - Turn off, stop or remove an app: apps/turn-off-or-remove-an-app.md
+      - Change many apps at once: apps/change-many-apps.md
+      - Control what an app can access: apps/app-permissions.md
+      - Open an app or a specific screen: apps/open-an-app.md
+      - Install an app from a file: apps/install-from-a-file.md
+      - Choose a TV profile: apps/profiles.md
+  - Tools:
+      - tools/index.md
+      - Move files to and from your TV: tools/files.md
+      - Take a screenshot or recording: tools/screen-capture.md
+      - Find out why something isn't working: tools/diagnostics.md
+      - Change hidden settings: tools/settings.md
+      - See your TV's network details: tools/network.md
+      - Run a command without typing: tools/commands.md
+      - Run your own command: tools/shell.md
+      - History and undo:
+          - history/index.md
+          - How a change is reviewed and undone: history/reviews.md
+          - Undo a change: history/undo-a-change.md
+  - How it works:
+      - how-it-works/index.md
+      - What Bridgecoil installs on your TV: how-it-works/what-gets-installed.md
+      - Why it needs this much access: how-it-works/why-it-needs-access.md
+      - How your buttons work: how-it-works/how-buttons-work.md
+      - How it starts after a restart: how-it-works/how-it-starts.md
+      - How downloads are checked: how-it-works/how-downloads-are-checked.md
+      - What leaves your phone and TV: how-it-works/privacy.md
+      - Remove everything: how-it-works/remove-everything.md
+  - Reference:
+      - reference/index.md
+      - All commands: reference/all-commands.md
+      - TV compatibility: reference/tv-compatibility.md
+      - Glossary: reference/glossary.md
+  - Help:
+      - help/index.md
+      - The TV won't connect: help/wont-connect.md
+      - TV setup problems: help/setup-problems.md
+      - Button problems: help/button-problems.md
+      - Frequently asked questions: help/faq.md
+      - What Bridgecoil doesn't do yet: help/not-available-yet.md
+      - Report a problem: help/report-a-problem.md

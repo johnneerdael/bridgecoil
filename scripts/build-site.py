@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Stage the website with the canonical user-guide screenshots."""
+"""Stage the website with the canonical screenshots and the user guide."""
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "dist-site"
@@ -20,7 +22,12 @@ def build():
     (OUTPUT / "screenshots").mkdir(exist_ok=True)
     for source in images:
         shutil.copy2(source, OUTPUT / "screenshots" / source.name)
-    print(f"Staged website and {len(images)} screenshots in {OUTPUT}")
+    subprocess.run(
+        [sys.executable, "-m", "mkdocs", "build", "--strict", "--site-dir", str(OUTPUT / "guide")],
+        cwd=ROOT,
+        check=True,
+    )
+    print(f"Staged website, the user guide and {len(images)} screenshots in {OUTPUT}")
 
 
 if __name__ == "__main__":

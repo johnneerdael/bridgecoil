@@ -1,0 +1,105 @@
+/* Bridgecoil palette on Material for MkDocs. Values come from
+   site/assets/tokens/bridgecoil.css, so the guide matches the app and the site. */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #17202E;
+  --md-primary-fg-color--light: #2C3542;
+  --md-primary-fg-color--dark: #101318;
+  --md-primary-bg-color: #F2F5F9;
+  --md-primary-bg-color--light: rgba(242, 245, 249, 0.7);
+  --md-accent-fg-color: #4053A5;
+  --md-accent-fg-color--transparent: rgba(64, 83, 165, 0.1);
+  --md-accent-bg-color: #FFFFFF;
+  --md-default-bg-color: #FFFFFF;
+  --md-typeset-a-color: #4053A5;
+  --md-code-bg-color: #E8EDF4;
+  --bc-doc-surface: #F1F4F8;
+  --bc-doc-border: #8290A3;
+  --bc-doc-shot: #E8ECFC;
+  --bc-doc-shot-text: #4053A5;
+  --bc-doc-button: #436000;
+  --bc-doc-on-button: #FFFFFF;
+}
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #101318;
+  --md-primary-fg-color--light: #191E26;
+  --md-primary-fg-color--dark: #101318;
+  --md-primary-bg-color: #F2F5F9;
+  --md-primary-bg-color--light: rgba(242, 245, 249, 0.7);
+  --md-accent-fg-color: #D4F56B;
+  --md-accent-fg-color--transparent: rgba(212, 245, 107, 0.1);
+  --md-accent-bg-color: #172107;
+  --md-default-bg-color: #101318;
+  --md-default-fg-color: #F2F5F9;
+  --md-default-fg-color--light: #B0BDCF;
+  --md-typeset-a-color: #AAB8FF;
+  --md-code-bg-color: #232B36;
+  --md-code-fg-color: #F2F5F9;
+  --bc-doc-surface: #191E26;
+  --bc-doc-border: #465366;
+  --bc-doc-shot: #293149;
+  --bc-doc-shot-text: #AAB8FF;
+  --bc-doc-button: #D4F56B;
+  --bc-doc-on-button: #172107;
+}
+.md-header__button.md-logo img { height: 1.5rem; }
+.md-typeset h1, .md-typeset h2, .md-typeset h3 { font-family: Manrope, Inter, sans-serif; }
+.md-typeset h1 { font-weight: 700; color: var(--md-default-fg-color); }
+.md-typeset h2 { font-weight: 700; }
+.md-typeset p.lead { font-size: 0.9rem; color: var(--md-default-fg-color--light); }
+
+/* Material draws buttons in the primary colour, which is the header's near-black here. */
+.md-typeset .md-button {
+  color: var(--bc-doc-button);
+  border-color: var(--bc-doc-button);
+}
+.md-typeset .md-button--primary {
+  background-color: var(--bc-doc-button);
+  border-color: var(--bc-doc-button);
+  color: var(--bc-doc-on-button);
+}
+.md-typeset .md-button:hover {
+  background-color: var(--bc-doc-button);
+  border-color: var(--bc-doc-button);
+  color: var(--bc-doc-on-button);
+}
+
+.md-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.bc-hero { display: grid; gap: 2rem; align-items: center; margin-bottom: 1.5rem; }
+.md-typeset img.bc-hero__logo { height: 2.6rem; width: auto; }
+.md-typeset .bc-hero h2 { margin-top: 1rem; }
+@media (min-width: 60em) { .bc-hero { grid-template-columns: 3fr 2fr; } }
+
+/* A screenshot still to be captured. Each one becomes a row of the shot list. */
+.md-typeset .admonition.screenshot,
+.md-typeset details.screenshot {
+  border: 2px dashed var(--bc-doc-border);
+  border-radius: 12px;
+  background: var(--bc-doc-surface);
+  box-shadow: none;
+  font-size: 0.72rem;
+}
+.md-typeset .screenshot > .admonition-title {
+  background: var(--bc-doc-shot);
+  color: var(--bc-doc-shot-text);
+  font-family: "IBM Plex Mono", monospace;
+}
+.md-typeset .screenshot > .admonition-title::before {
+  background-color: var(--bc-doc-shot-text);
+  -webkit-mask-image: var(--md-admonition-icon--screenshot);
+  mask-image: var(--md-admonition-icon--screenshot);
+}
+:root {
+  --md-admonition-icon--screenshot: url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10m0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6"/></svg>');
+}
+.md-typeset table:not([class]) th { background: var(--bc-doc-surface); }

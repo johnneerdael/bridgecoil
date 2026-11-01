@@ -3,9 +3,9 @@ name: Website
 on:
   push:
     branches: [main]
-    paths: ["site/**", "docs/guide/**", "scripts/build-site.py", "scripts/check-site.py", "scripts/release-notes*.mjs", ".github/workflows/pages.yml"]
+    paths: ["site/**", "docs/guide/**", "docs/user-guide/**", "docs/site-requirements.txt", "mkdocs.yml", "scripts/docs-shots.py", "scripts/build-site.py", "scripts/check-site.py", "scripts/release-notes*.mjs", ".github/workflows/pages.yml"]
   pull_request:
-    paths: ["site/**", "docs/guide/**", "scripts/build-site.py", "scripts/check-site.py", "scripts/release-notes*.mjs", ".github/workflows/pages.yml", ".github/workflows/release.yml"]
+    paths: ["site/**", "docs/guide/**", "docs/user-guide/**", "docs/site-requirements.txt", "mkdocs.yml", "scripts/docs-shots.py", "scripts/build-site.py", "scripts/check-site.py", "scripts/release-notes*.mjs", ".github/workflows/pages.yml", ".github/workflows/release.yml"]
   workflow_dispatch:
 
 permissions:
@@ -26,6 +26,11 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install -r docs/site-requirements.txt
+      - run: python3 scripts/docs-shots.py --check
       - run: python3 scripts/build-site.py
       - run: python3 scripts/check-site.py
       - run: node --check site/theme.js

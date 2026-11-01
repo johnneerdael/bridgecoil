@@ -1,5 +1,7 @@
 # Bridgecoil screens
 
+These captures are from v0.1.7 and show an older setup flow. The landing page and the screenshot gallery still use them. The user guide in `docs/user-guide/` doesn't, and lists what it needs in `_meta/screenshots.md`.
+
 Screenshots for the user guide, taken from the signed v0.1.7 build on a phone emulator, connected to an Android TV 16 emulator. No real TV, phone or home network appears in them.
 
 Some details come from the test setup. The TV is called `sdk_google_atv64_arm64`, it connects with Legacy ADB, and `nl.neerdael.testhome` is a small test launcher.

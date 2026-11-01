@@ -24,3 +24,4 @@ src-tauri/gen/android/keystore.properties
 *.jks
 *.keystore
 *.p12
+build/
