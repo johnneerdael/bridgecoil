@@ -36,7 +36,7 @@ The review shows how many parts that comes to, such as *4 of 58 parts in this fi
 
 Some apps and games also have game data, in `.obb` files. The review shows its size, and Bridgecoil copies it to the TV after the app is installed. If that copy fails, the app stays installed and you'll be told.
 
-Installing an app also unpacks it on your phone first, so you need free space there for roughly the size of the file. It's removed when the app is installed or you close Bridgecoil.
+Bridgecoil unpacks the file on your phone first, so you need free space there for about twice its size for a moment. That copy is removed once the app is installed, or the next time Bridgecoil opens if it was closed before then. Your original file isn't touched.
 
 ## Only install what you trust
 

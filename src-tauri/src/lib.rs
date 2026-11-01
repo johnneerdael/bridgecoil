@@ -751,6 +751,7 @@ pub fn run() {
             let cache = app.path().app_cache_dir()?;
             std::fs::create_dir_all(&data)?;
             std::fs::create_dir_all(&cache)?;
+            adb_core::bundle::clear_leftovers(&cache);
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;

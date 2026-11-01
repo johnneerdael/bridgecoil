@@ -264,6 +264,24 @@ fn extract<R: Read + Seek>(
     Ok(written)
 }
 
+/// Unpacked files can run to gigabytes, and a phone can close the app before it cleans up after
+/// itself. Nothing in this folder outlives a run, so anything found at launch was left behind.
+pub fn clear_leftovers(cache: &Path) {
+    let Ok(entries) = std::fs::read_dir(cache) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name().to_string_lossy().starts_with(".tmp") {
+            let path = entry.path();
+            let _ = if path.is_dir() {
+                std::fs::remove_dir_all(path)
+            } else {
+                std::fs::remove_file(path)
+            };
+        }
+    }
+}
+
 fn hash(file: &Path) -> Result<String, String> {
     let mut source = File::open(file).map_err(|e| e.to_string())?;
     let mut digest = Sha256::new();
@@ -527,6 +545,21 @@ mod tests {
         let error = extract(&mut archive, 0, &path, 4096).unwrap_err();
         assert!(error.contains("too large"), "{error}");
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn clears_what_a_closed_app_left_and_nothing_else() {
+        let cache = tempfile::tempdir().unwrap();
+        let file = tempfile::Builder::new().tempfile_in(cache.path()).unwrap();
+        let (_, file) = file.keep().unwrap();
+        let folder = tempfile::tempdir_in(cache.path()).unwrap().keep();
+        std::fs::write(folder.join("part-0.apk"), "x").unwrap();
+        let kept = cache.path().join("WebView");
+        std::fs::create_dir(&kept).unwrap();
+        clear_leftovers(cache.path());
+        assert!(!file.exists());
+        assert!(!folder.exists());
+        assert!(kept.exists());
     }
 
     #[test]

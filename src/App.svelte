@@ -974,7 +974,7 @@
               {#if selection.available > 1}
                 <p class="install-note">
                   {selection.parts} of {selection.available} parts in this file are
-                  needed for this TV. The rest stay on your phone.
+                  needed for this TV, so only those are sent.
                 </p>
               {/if}
               {#if selection.gameData}
