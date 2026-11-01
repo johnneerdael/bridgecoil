@@ -4,8 +4,7 @@
 
 Open **Tools → Shell**. The page has two modes, **Normal** and **Advanced**, one line for the command and a fixed output window that scrolls. It always opens in **Normal**.
 
-!!! screenshot "shell-normal.png"
-    Shell in Normal, with the dropdown open on the first words.
+![Shell in Normal, with the dropdown open on the first words.](../assets/shots/shell-normal.png){ .bc-shot loading=lazy }
 
 ## Build a command in Normal
 
@@ -40,8 +39,7 @@ If what you want isn't listed, **Type it myself** lets you enter it.
 
 Some words need something Bridgecoil can't list, such as a web address or a position on the screen. A helper replaces the dropdown. It says what to enter and gives an example. Often it has a button that finds the answer for you. `ping` offers **Show the TV's address**, for example, and the result lands in the output window. Tap **Next word** when more words follow, or **Run** if that was the last one.
 
-!!! screenshot "shell-helper.png"
-    The helper for ping's host, with the example and the button that shows the TV's address.
+![The helper for ping's host, with the example and the button that shows the TV's address.](../assets/shots/shell-helper.png){ .bc-shot loading=lazy }
 
 ### Narrow down a result
 
@@ -66,6 +64,8 @@ Either way, the result lands in the output window and in History.
 ## The output window
 
 Each command's result stays in the window, newest at the bottom, and the window jumps to the start of the new result.
+
+![The output window after the helper's button ran ip -o addr show.](../assets/shots/shell-output.png){ .bc-shot loading=lazy }
 
 - Tap a `$` line to put that command in **Advanced** so you can edit it and run it again.
 - The two buttons in the corner copy everything and clear the window.
