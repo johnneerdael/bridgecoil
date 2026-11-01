@@ -4,7 +4,7 @@
 
 Open Bridgecoil while you're not connected and you see **Saved TVs**. Each row shows the TV's name, its address and its status: **Previously connected**, or **Paired · connection address needed** if you paired but never connected. **Legacy ADB** is added for a TV that uses the older connection.
 
-![Saved TVs with two TVs and a Quick connect button on each.](../assets/shots/connect-saved-tvs.png){ .bc-shot loading=lazy }
+![Saved TVs with a TV's row, showing Quick connect, Update connection address and Delete.](../assets/shots/connect-saved-tvs.png){ .bc-shot loading=lazy }
 
 ## Quick connect
 
@@ -27,6 +27,8 @@ Use this when you've finished with a TV, such as one that belongs to someone els
 1. Tap **Delete** on the TV's row.
 2. Read the warning, which lists what goes.
 3. Tap **Delete TV**. **Cancel** leaves everything as it was.
+
+![The warning listing what Delete removes, with Cancel and Delete TV buttons.](../assets/shots/saved-tv-delete.png){ .bc-shot loading=lazy }
 
 | Removed from your phone | Stays where it is |
 |---|---|
