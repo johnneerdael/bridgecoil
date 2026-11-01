@@ -25,8 +25,16 @@ tools = Path(args.ndk) / "toolchains/llvm/prebuilt" / host / "bin"
 out = root / "crates/adb-core/assets/agent"
 sources = sorted((root / "crates/tv-agent").rglob("*"))
 source = hashlib.sha256()
-for path in [p for p in sources if p.is_file()] + [root / "Cargo.lock"]:
+for path in [p for p in sources if p.is_file()]:
     source.update(path.read_bytes())
+# A release stamps its version into the app, and Cargo rewrites that line of Cargo.lock. It says
+# nothing about how the agent was built, so it's left out here and in metadata_inspection.rs.
+kept = []
+for line in (root / "Cargo.lock").read_text().split("\n"):
+    if kept and kept[-1] == 'name = "adb-studio-app"' and line.startswith("version = "):
+        continue
+    kept.append(line)
+source.update("\n".join(kept).encode())
 digests = {}
 for abi, (target, clang) in targets.items():
     key = target.upper().replace("-", "_")

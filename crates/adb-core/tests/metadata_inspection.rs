@@ -77,12 +77,44 @@ fn bundled_agents_were_built_from_this_source() {
     let mut found = Vec::new();
     files(&root.join("crates/tv-agent"), &mut found);
     found.sort();
-    found.push(root.join("Cargo.lock"));
     let mut hash = Sha256::new();
     for path in found {
         hash.update(fs::read(path).unwrap());
     }
+    hash.update(without_app_version(&fs::read_to_string(root.join("Cargo.lock")).unwrap()));
     let manifest: serde_json::Value =
         serde_json::from_str(include_str!("../assets/agent/agent-build.json")).unwrap();
     assert_eq!(manifest["sourceSha256"], hex::encode(hash.finalize()));
+}
+
+/// A release stamps its version into the app, and Cargo then rewrites that line of `Cargo.lock`.
+/// The agent doesn't depend on the app, so the line says nothing about how the agent was built.
+/// `scripts/build-agent.py` does the same.
+fn without_app_version(lock: &str) -> String {
+    let mut kept: Vec<&str> = Vec::new();
+    for line in lock.split('\n') {
+        if kept.last() == Some(&"name = \"adb-studio-app\"") && line.starts_with("version = ") {
+            continue;
+        }
+        kept.push(line);
+    }
+    kept.join("\n")
+}
+
+#[test]
+fn only_the_app_version_is_left_out_of_the_agent_source() {
+    let lock = |app: &str, dependency: &str| {
+        format!(
+            "[[package]]\nname = \"adb-studio-app\"\nversion = \"{app}\"\n\n\
+             [[package]]\nname = \"libadb\"\nversion = \"{dependency}\"\n"
+        )
+    };
+    assert_eq!(
+        without_app_version(&lock("0.1.7", "0.7.0")),
+        without_app_version(&lock("0.1.10", "0.7.0"))
+    );
+    assert_ne!(
+        without_app_version(&lock("0.1.7", "0.7.0")),
+        without_app_version(&lock("0.1.7", "0.7.1"))
+    );
 }
