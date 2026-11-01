@@ -11,14 +11,11 @@
 !!! screenshot "buttons-empty.png"
     Buttons with No buttons remapped yet and Remap a button.
 
-!!! screenshot "buttons-listening.png"
-    Press the button, with Listening for 8 seconds.
+![Press the button, with Listening for 8 seconds.](../assets/shots/buttons-listening.png){ .bc-shot loading=lazy }
 
-!!! screenshot "buttons-choose.png"
-    What should this button do, with the app list.
+![What should this button do, with the app list.](../assets/shots/buttons-choose.png){ .bc-shot loading=lazy }
 
-!!! screenshot "buttons-review.png"
-    The Save button mappings review showing the note about the normal action.
+![The Save button mappings review showing the note about the normal action.](../assets/shots/buttons-review.png){ .bc-shot loading=lazy }
 
 The review says: "Each button still does its normal action first, then yours follows." If the button used to open an app, Bridgecoil offers to deal with that next. See [Replace what a button opens](replace-what-a-button-opens.md).
 

@@ -10,8 +10,7 @@ Open **Tools → Commands** and choose a group. Each command shows a description
 | **Changes the TV** | Changes something |
 | **Be careful** | Can break something or disconnect you. Read the warning |
 
-!!! screenshot "commands-groups.png"
-    Commands showing the eight groups.
+![Commands showing the eight groups.](../assets/shots/commands-groups.png){ .bc-shot loading=lazy }
 
 !!! screenshot "commands-detail.png"
     A command with its badge, options and This runs on the TV.

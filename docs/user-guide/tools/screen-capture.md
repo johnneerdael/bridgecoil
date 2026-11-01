@@ -10,6 +10,8 @@ Captures go to your phone by themselves, and nothing stays on the TV. On Android
 
 Open **Tools → Screen capture** and tap **Take a screenshot**. The picture appears in the app and is saved straight away. If you close a save dialog without choosing, **Save screenshot** lets you try again.
 
+![Screen capture after a screenshot, with Open screenshot](../assets/shots/capture-saved.png){ .bc-shot loading=lazy }
+
 ## Record the screen
 
 1. Under **Record for**, choose **15 seconds**, **30 seconds**, **1 minute** or **3 minutes**.
@@ -17,11 +19,9 @@ Open **Tools → Screen capture** and tap **Take a screenshot**. The picture app
 3. It stops at the time you chose, or when you tap **Stop recording**.
 4. Bridgecoil copies it to your phone, then deletes it from the TV.
 
-!!! screenshot "capture-recording.png"
-    Screen capture while recording, with Stop recording.
+![Screen capture while recording, with Stop recording.](../assets/shots/capture-recording.png){ .bc-shot loading=lazy }
 
-!!! screenshot "capture-save.png"
-    Screen capture with a finished recording, Save recording and Discard.
+![Screen capture after a recording, with Open recording.](../assets/shots/capture-save.png){ .bc-shot loading=lazy }
 
 The recording is only deleted from the TV once it's safely on your phone. If the copy fails, or you close a save dialog, it stays on the TV and you get **Save recording** and **Discard**. If you left the app while it was recording, the copy starts when you come back to Screen capture.
 

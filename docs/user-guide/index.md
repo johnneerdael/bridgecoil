@@ -24,8 +24,7 @@ Bridgecoil runs on your phone and manages your Android TV over your home network
 
 <div markdown>
 
-!!! screenshot "home-hero.png"
-    The Device page on a phone, connected to a TV.
+![The Device page on a phone, connected to a TV.](./assets/shots/home-hero.png){ .bc-shot loading=lazy }
 
 </div>
 

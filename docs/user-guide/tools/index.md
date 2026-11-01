@@ -16,7 +16,6 @@
 | **Network** | The TV's addresses and routes | [See your TV's network details](network.md) |
 | **Shell** | Run a command you type | [Run your own command](shell.md) |
 
-!!! screenshot "tools-overview.png"
-    Tools on a connected TV, with all 11 tools on one page.
+![Tools on a connected TV, with all 11 tools on one page.](../assets/shots/tools-overview.png){ .bc-shot loading=lazy }
 
 Inside a tool, **All tools** takes you back, and the refresh icon reads the TV again.

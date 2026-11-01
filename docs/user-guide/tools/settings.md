@@ -4,8 +4,7 @@
 
 Open **Tools → Settings**. Each row shows its current value. Pick a new one and a review opens straight away. Bridgecoil reads the value back afterwards, and you can undo it from [History](../history/undo-a-change.md).
 
-!!! screenshot "settings-page.png"
-    Settings with Window animation and Transition animation.
+![Settings with Window animation and Transition animation.](../assets/shots/settings-page.png){ .bc-shot loading=lazy }
 
 | Setting | What it changes | Values | Applies to |
 |---|---|---|---|

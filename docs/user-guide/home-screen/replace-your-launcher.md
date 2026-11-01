@@ -2,8 +2,7 @@
 
 <p class="lead">Try a launcher first, then switch to it. Switching makes it the default, opens it and turns the old one off in one step.</p>
 
-!!! screenshot "home-list.png"
-    Home app with the four launchers and In use at the top.
+![Home app with the four launchers and In use at the top.](../assets/shots/home-list.png){ .bc-shot loading=lazy }
 
 1. Open **Tools → Home app**. If the launcher you want has **Install**, [install it](install-a-launcher.md) first.
 2. Tap **Try it** next to the launcher. It opens on the TV, and nothing has changed yet.
@@ -14,10 +13,11 @@
 !!! screenshot "home-try.png"
     Did it open, with Yes, it works and No.
 
-!!! screenshot "home-switch-review.png"
-    The Switch Home app review showing what will be turned off.
+![The Switch Home app review showing what will be turned off.](../assets/shots/home-switch-review.png){ .bc-shot loading=lazy }
 
 ## What the switch does
+
+![Operation result showing Verified after a switch](../assets/shots/home-switch-result.png){ .bc-shot loading=lazy }
 
 After you apply the review, Bridgecoil runs three commands in order, and stops if one fails:
 

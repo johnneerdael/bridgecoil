@@ -4,8 +4,7 @@
 
 If your stock launcher is off, Home app shows **Restore your TV's launcher** at the bottom. Tap it, read the review and apply it. Bridgecoil turns the launcher back on and makes it the default in one step, then checks that Android agrees.
 
-!!! screenshot "home-restore.png"
-    Home app with Restore your TV's launcher at the bottom.
+![Home app with Restore your TV's launcher at the bottom.](../assets/shots/home-restore.png){ .bc-shot loading=lazy }
 
 If you see **Restore your TV's launcher** with a package name in brackets, your TV has more than one stock launcher that's off. Choose the one you want.
 

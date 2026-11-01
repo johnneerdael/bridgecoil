@@ -7,11 +7,9 @@
 
 Rows are newest first. Each shows the title, profile, TV, time and result. Tap one to open **Operation details**, where **Summary** explains the result and **Output** shows what the TV said.
 
-!!! screenshot "history-list.png"
-    History with several results.
+![History with several results.](../assets/shots/history-list.png){ .bc-shot loading=lazy }
 
-!!! screenshot "history-details.png"
-    Operation details with Review recovery visible.
+![Operation details with Review recovery visible.](../assets/shots/history-details.png){ .bc-shot loading=lazy }
 
 Pairing, connecting, changing profile, ratings and APK installs aren't recorded here.
 

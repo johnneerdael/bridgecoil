@@ -15,11 +15,9 @@ A review shows:
 
 Tick **Apply this change to the reviewed target**, then tap **Apply change**. The box starts unticked every time. To cancel, close the review.
 
-!!! screenshot "review-effect.png"
-    Review change on the Effect tab.
+![Review change on the Effect tab.](../assets/shots/review-effect.png){ .bc-shot loading=lazy }
 
-!!! screenshot "review-commands.png"
-    Review change on the Commands tab, showing the exact command.
+![Review change on the Commands tab, showing the exact command.](../assets/shots/review-commands.png){ .bc-shot loading=lazy }
 
 ## What skips the review
 

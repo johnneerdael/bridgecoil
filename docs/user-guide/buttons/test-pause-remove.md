@@ -2,8 +2,7 @@
 
 <p class="lead">Check that a mapping works, switch all of them off for a while, or get rid of them.</p>
 
-!!! screenshot "buttons-saved.png"
-    Buttons with two mappings, and Test a button, Pause and Remove all.
+![Buttons with two mappings, and Test a button, Pause and Remove all.](../assets/shots/buttons-saved.png){ .bc-shot loading=lazy }
 
 ## See what's happening
 

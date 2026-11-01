@@ -4,8 +4,7 @@
 
 Open **Tools → Files**. The buttons at the top go to **Internal storage**, **Downloads**, **Movies**, **Music**, **Pictures** and **Device**. Device is the whole file system, most of which Android keeps private.
 
-!!! screenshot "files-browse.png"
-    Files in Internal storage, with folders and files.
+![Files in Internal storage, with folders and files.](../assets/shots/files-browse.png){ .bc-shot loading=lazy }
 
 Tap a folder to open it, and use the path at the top to go back. The parent icon goes up one level, and **Go to a path** lets you type one starting with `/`. Hidden items start with a dot, and **Show hidden** reveals them.
 

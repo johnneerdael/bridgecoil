@@ -14,8 +14,7 @@ Open **Tools → Diagnostics** and choose a section.
 | **Input devices** | See every remote and keyboard, and which keys each has |
 | **Battery** | See what the TV reports |
 
-!!! screenshot "diagnostics-logs.png"
-    Diagnostics on Recent logs, with the Show, From and Newest choices.
+![Diagnostics on Recent logs, with the Show, From and Newest choices.](../assets/shots/diagnostics-logs.png){ .bc-shot loading=lazy }
 
 ## Read an app's logs
 

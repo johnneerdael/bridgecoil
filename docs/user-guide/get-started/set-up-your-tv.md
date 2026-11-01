@@ -50,8 +50,7 @@ Your TV may show a Termux:Boot page for about 2 seconds afterwards. That's norma
 
 Normally this finishes by itself during step 2, and you go straight to **Your TV is ready**. If you see **Termux is connected. One step left.**, tap **Keep mappings running**.
 
-!!! screenshot "setup-ready.png"
-    Your TV is ready, with Remap buttons and the Shizuku section.
+![Your TV is ready, with Remap buttons and the Shizuku section.](../assets/shots/setup-ready.png){ .bc-shot loading=lazy }
 
 ## Prove it works
 

@@ -4,8 +4,7 @@
 
 Open Bridgecoil while you're not connected and you see **Saved TVs**. Each row shows the TV's name, its address and its status: **Previously connected**, or **Paired · connection address needed** if you paired but never connected. **Legacy ADB** is added for a TV that uses the older connection.
 
-!!! screenshot "connect-saved-tvs.png"
-    Saved TVs with two TVs and a Quick connect button on each.
+![Saved TVs with two TVs and a Quick connect button on each.](../assets/shots/connect-saved-tvs.png){ .bc-shot loading=lazy }
 
 ## Quick connect
 

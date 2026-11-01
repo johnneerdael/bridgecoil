@@ -12,8 +12,7 @@ Tap the menu icon at the top left to open **Navigation**.
 | **Tools** | Launcher, files and diagnostics |
 | **History** | Results and available recovery |
 
-!!! screenshot "app-navigation.png"
-    The Navigation drawer with Appearance visible.
+![The Navigation drawer with Appearance visible.](../assets/shots/app-navigation.png){ .bc-shot loading=lazy }
 
 ## The Device page
 
@@ -28,8 +27,7 @@ This is your home screen once you're connected. The card at the top shows the TV
 | **Take back control** | Goes to Tools, for setup, button remapping and advanced tools |
 | **Refresh** | Reads the TV's details again |
 
-!!! screenshot "app-device-page.png"
-    The Device page while connected to a TV.
+![The Device page while connected to a TV.](../assets/shots/app-device-page.png){ .bc-shot loading=lazy }
 
 **Device details** lists the model, manufacturer, Android and SDK version, processor type, address, serial, build, the shell identity, storage and how long the TV has been on. It's useful when someone asks which TV you have.
 

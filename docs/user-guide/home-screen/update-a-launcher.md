@@ -4,8 +4,7 @@
 
 When a newer version is out, its row shows the change, such as `4.72 → 4.73`, with **Update** next to it. Tap it. Bridgecoil downloads, checks and installs it, and your settings stay in place.
 
-!!! screenshot "home-update.png"
-    Home app with Projectivy showing 4.72 → 4.73 and Update.
+![Home app with Projectivy showing 4.72 → 4.73 and Update.](../assets/shots/home-update.png){ .bc-shot loading=lazy }
 
 If the launcher is in use, Android closes it during the update. Press Home on your remote to bring it back.
 
