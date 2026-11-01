@@ -8,6 +8,9 @@
     type DiscoveryResult,
   } from "./lib/discovery";
   import {
+    deleteSaved,
+    homePickKey,
+    homeProvenKey,
     loadSavedDevices,
     rememberConnected,
     rememberPaired,
@@ -17,6 +20,7 @@
   import Modal from "./lib/Modal.svelte";
   import WorkspaceScreen from "./lib/workspace/WorkspaceScreen.svelte";
   import Icon from "./lib/workspace/Icon.svelte";
+  import { dropScrollback } from "./lib/workspace/shell-line";
   import { destinations, type Destination } from "./lib/workspace/client";
   import {
     parseTheme,
@@ -97,6 +101,7 @@
   );
   let showSaved = $state(true);
   let connectionChoice = $state<SavedDevice | null>(null);
+  let deleting = $state<SavedDevice | null>(null);
   let discoveryOpen = $state(false);
   let discoveryPhase = $state(false);
   let cancelRefresh = false;
@@ -397,6 +402,39 @@
       showSaved = true;
     });
   }
+  async function deleteTv(saved: SavedDevice) {
+    deleting = null;
+    await run("Deleting TV", async () => {
+      // History goes first. If it can't, the TV stays so this can be tried again.
+      if (saved.deviceId)
+        await invoke("delete_tv_history", { deviceId: saved.deviceId });
+      const left = deleteSaved(
+        savedDevices,
+        pairs,
+        localStorage.getItem("adb.connectionEndpoint"),
+        saved,
+      );
+      localStorage.setItem(savedDevicesKey, JSON.stringify(left.devices));
+      localStorage.setItem(pairStoreKey, JSON.stringify(left.pairs));
+      if (left.lastEndpoint === null)
+        localStorage.removeItem("adb.connectionEndpoint");
+      if (saved.deviceId) {
+        localStorage.removeItem(homePickKey(saved.deviceId));
+        localStorage.removeItem(homeProvenKey(saved.deviceId));
+        dropScrollback(saved.deviceId);
+      }
+      savedDevices = left.devices;
+      pairs = left.pairs;
+      connectionChoice = null;
+      selectedAdvertisement = null;
+      if (endpointHost(endpoint) === saved.host) endpoint = "";
+      if (endpointHost(pairEndpoint) === saved.host) {
+        pairEndpoint = "";
+        code = "";
+      }
+      notice = `${saved.name} is deleted from this phone.`;
+    });
+  }
   async function pick() {
     if (!device) return;
     confirmed = false;
@@ -658,12 +696,20 @@
                     aria-label={`Quick connect to ${saved.name}`}
                     >Quick connect <span aria-hidden="true">→</span></button
                   >
-                  <button
-                    class="text-action"
-                    disabled={busy}
-                    onclick={() => editConnection(saved)}
-                    >Update connection address</button
-                  >
+                  <div class="saved-actions">
+                    <button
+                      class="text-action"
+                      disabled={busy}
+                      onclick={() => editConnection(saved)}
+                      >Update connection address</button
+                    >
+                    <button
+                      class="text-action danger-text"
+                      disabled={busy}
+                      aria-label={`Delete ${saved.name}`}
+                      onclick={() => (deleting = saved)}>Delete</button
+                    >
+                  </div>
                 </article>
               {/each}
             </div>
@@ -994,6 +1040,43 @@
     Use Find to look for nearby ADB devices. You can also copy the pairing and
     connection addresses from their separate TV screens.
   </p>
+</Modal>
+<Modal
+  open={!!deleting}
+  title="Delete this TV?"
+  onclose={() => (deleting = null)}
+>
+  {#if deleting}
+    <h3 class="break-word">{label(deleting.name, 120)}</h3>
+    <p>This removes the following from your phone, and it can't be undone:</p>
+    <ul class="delete-list">
+      <li>Its address and pairing record</li>
+      {#if deleting.deviceId}
+        <li>Its records in History, and the option to undo those changes</li>
+        <li>Any Shell output from it, and the Home app remembered for it</li>
+      {/if}
+    </ul>
+    {#if !deleting.deviceId && deleting.lastConnectedAt !== null}
+      <p>
+        This TV gave no ID to match its History records, so they stay. Use Clear
+        records in History to remove them.
+      </p>
+    {/if}
+    <p>
+      Nothing changes on the TV. What you set up there stays, and it keeps
+      trusting this phone until you remove that in the TV's debugging settings.
+      Screenshots and files you saved stay on your phone.
+    </p>
+    <div class="delete-actions">
+      <button class="secondary" onclick={() => (deleting = null)}>Cancel</button
+      >
+      <button
+        class="primary delete-confirm"
+        disabled={busy || !native || !nativeReady}
+        onclick={() => deleting && deleteTv(deleting)}>Delete TV</button
+      >
+    </div>
+  {/if}
 </Modal>
 <Modal
   open={deviceOpen}

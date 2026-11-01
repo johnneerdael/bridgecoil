@@ -8,6 +8,8 @@ import {
 import { afterEach, beforeAll, it, expect, vi } from "vitest";
 import App from "./App.svelte";
 import { savedDevicesKey } from "./lib/saved-devices";
+import { pairStoreKey } from "./lib/connection-model";
+import { keep, scrollback } from "./lib/workspace/shell-line";
 import type { Device } from "./lib/model";
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({
@@ -322,4 +324,125 @@ it("returns to saved TVs from the Device menu item while disconnected", async ()
   ).toBeTruthy();
   expect(screen.getByRole("button", { name: "Add device" })).toBeTruthy();
   expect(screen.queryByRole("alert")).toBeNull();
+});
+const stored = {
+  deviceId: tv.deviceId,
+  name: tv.model,
+  host: "192.0.2.12",
+  endpoint: tv.endpoint,
+  legacy: false,
+  pairedAt: 10,
+  lastConnectedAt: 20,
+};
+const other = {
+  ...stored,
+  deviceId: "android:other",
+  name: "Bedroom TV",
+  host: "192.0.2.77",
+  endpoint: "192.0.2.77:5555",
+};
+const warning = () =>
+  document.querySelector("dialog[open]")!.textContent!.replace(/\s+/g, " ");
+async function openWarning(name = tv.model) {
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole("button", {
+          name: `Quick connect to ${name}`,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false),
+  );
+  await fireEvent.click(screen.getByRole("button", { name: `Delete ${name}` }));
+  await screen.findByRole("heading", { name: "Delete this TV?" });
+}
+it("deletes a saved TV only after the warning, and a restart doesn't bring it back", async () => {
+  backend();
+  localStorage.setItem(savedDevicesKey, JSON.stringify([stored, other]));
+  localStorage.setItem(
+    pairStoreKey,
+    JSON.stringify([{ host: stored.host, guid: "guid", pairedAt: 10 }]),
+  );
+  localStorage.setItem("adb.connectionEndpoint", tv.endpoint);
+  localStorage.setItem(`bridgecoil.home.${tv.deviceId}`, "org.home");
+  localStorage.setItem(`bridgecoil.home.proven.${tv.deviceId}`, "org.home");
+  localStorage.setItem("bridgecoil.home.android:other", "org.kept");
+  keep(tv.deviceId, [{ id: 1, command: "ls", output: "x", failed: false }]);
+  const first = render(App);
+  await openWarning();
+  expect(warning()).toContain("records in History");
+  expect(
+    invoke.mock.calls.some(([command]) => command === "delete_tv_history"),
+  ).toBe(false);
+  await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(
+    screen.getByRole("button", { name: `Quick connect to ${tv.model}` }),
+  ).toBeTruthy();
+  expect(
+    invoke.mock.calls.some(([command]) => command === "delete_tv_history"),
+  ).toBe(false);
+  await openWarning();
+  await fireEvent.click(screen.getByRole("button", { name: "Delete TV" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: `Quick connect to ${tv.model}` }),
+    ).toBeNull(),
+  );
+  expect(invoke).toHaveBeenCalledWith("delete_tv_history", {
+    deviceId: tv.deviceId,
+  });
+  expect(localStorage.getItem("adb.connectionEndpoint")).toBeNull();
+  expect(JSON.parse(localStorage.getItem(pairStoreKey)!)).toEqual([]);
+  expect(localStorage.getItem(`bridgecoil.home.${tv.deviceId}`)).toBeNull();
+  expect(
+    localStorage.getItem(`bridgecoil.home.proven.${tv.deviceId}`),
+  ).toBeNull();
+  expect(localStorage.getItem("bridgecoil.home.android:other")).toBe(
+    "org.kept",
+  );
+  expect(scrollback(tv.deviceId)).toEqual([]);
+  first.unmount();
+  backend();
+  render(App);
+  await screen.findByRole("button", { name: "Quick connect to Bedroom TV" });
+  expect(
+    screen.queryByRole("button", { name: `Quick connect to ${tv.model}` }),
+  ).toBeNull();
+});
+it("keeps the TV saved when its History records can't be deleted", async () => {
+  invoke.mockImplementation(async (command) => {
+    if (command === "connection_status") return null;
+    if (command === "delete_tv_history")
+      throw { kind: "storage", message: "History is locked." };
+  });
+  localStorage.setItem(savedDevicesKey, JSON.stringify([stored]));
+  render(App);
+  await openWarning();
+  await fireEvent.click(screen.getByRole("button", { name: "Delete TV" }));
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "History is locked.",
+  );
+  expect(
+    screen.getByRole("button", { name: `Quick connect to ${tv.model}` }),
+  ).toBeTruthy();
+  expect(JSON.parse(localStorage.getItem(savedDevicesKey)!)).toHaveLength(1);
+});
+it("says History stays when a TV has no ID to match its records", async () => {
+  backend();
+  localStorage.setItem(
+    savedDevicesKey,
+    JSON.stringify([{ ...stored, deviceId: null }]),
+  );
+  render(App);
+  await openWarning();
+  expect(warning()).toContain("Use Clear records in History");
+  await fireEvent.click(screen.getByRole("button", { name: "Delete TV" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: `Quick connect to ${tv.model}` }),
+    ).toBeNull(),
+  );
+  expect(
+    invoke.mock.calls.some(([command]) => command === "delete_tv_history"),
+  ).toBe(false);
 });

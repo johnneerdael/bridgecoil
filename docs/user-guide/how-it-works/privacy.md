@@ -30,7 +30,7 @@ The agent and listener on the TV don't contact the internet. The agent's only tr
 
 History stays on your phone. It includes the commands you ran, and their output, up to 64 KB each. That means anything you typed into [Shell](../tools/shell.md) is stored, so don't put passwords there. **Clear records** removes it.
 
-Saved TVs store their address, name and a hash of the device ID. Your ADB key stays in the app's private data. Screenshots and recordings go to your phone's Download folder, or wherever you choose in the save dialog on devices that ask. Other files go only where you save them.
+Saved TVs store their address, name and a hash of the device ID. [Deleting a saved TV](../connect/saved-tvs.md#delete-a-saved-tv) removes that, along with its records in History. Your ADB key stays in the app's private data. Screenshots and recordings go to your phone's Download folder, or wherever you choose in the save dialog on devices that ask. Other files go only where you save them.
 
 ## On iPhone
 
@@ -38,4 +38,4 @@ If you test through TestFlight, Apple may collect crash and usage data. That's o
 
 ## Taking away access
 
-Disconnecting doesn't remove your phone's permission. To do that, remove it on the TV, in **Wireless debugging** under paired devices, or use **Revoke USB debugging authorizations** in Developer options. See [Remove everything](remove-everything.md).
+Disconnecting or deleting a saved TV doesn't remove your phone's permission. To do that, remove it on the TV, in **Wireless debugging** under paired devices, or use **Revoke USB debugging authorizations** in Developer options. See [Remove everything](remove-everything.md).

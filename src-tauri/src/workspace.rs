@@ -148,6 +148,10 @@ pub fn clear_history(workspace: State<'_, Workspace>) -> Result<()> {
     workspace.history.clear()
 }
 #[tauri::command]
+pub fn delete_tv_history(device_id: String, workspace: State<'_, Workspace>) -> Result<usize> {
+    workspace.history.delete_device(&device_id)
+}
+#[tauri::command]
 pub async fn prepare_recovery(
     operation_id: String,
     backend: State<'_, Backend>,

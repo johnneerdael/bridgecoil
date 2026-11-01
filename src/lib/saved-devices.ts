@@ -155,3 +155,35 @@ export function rememberConnected(
     ),
   ]);
 }
+export const homePickKey = (deviceId: string) => `bridgecoil.home.${deviceId}`;
+export const homeProvenKey = (deviceId: string) =>
+  `bridgecoil.home.proven.${deviceId}`;
+/**
+ * What's left once a saved TV is deleted. Its pairing and last address go too,
+ * because loadSavedDevices rebuilds a TV from either one on the next launch.
+ * Another saved TV can share the address, and then both of those are still in use.
+ */
+export function deleteSaved(
+  records: SavedDevice[],
+  pairs: PairRecord[],
+  lastEndpoint: string | null,
+  saved: SavedDevice,
+) {
+  const devices = records.filter(
+    (r) =>
+      r.deviceId !== saved.deviceId ||
+      r.host !== saved.host ||
+      r.endpoint !== saved.endpoint,
+  );
+  const shared = devices.some((r) => r.host === saved.host);
+  return {
+    devices,
+    pairs: shared ? pairs : pairs.filter((p) => p.host !== saved.host),
+    lastEndpoint:
+      lastEndpoint &&
+      endpointHost(lastEndpoint) === saved.host &&
+      !devices.some((r) => r.endpoint === lastEndpoint)
+        ? null
+        : lastEndpoint,
+  };
+}

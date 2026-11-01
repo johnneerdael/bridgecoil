@@ -20,6 +20,26 @@ Tap **Quick connect →**. Bridgecoil scans your network for a few seconds to fi
 
 Tap **Add device** and follow [Connect your phone to the TV](../get-started/first-connection.md). You can save up to 32 TVs, and only one is connected at a time.
 
+## Delete a saved TV
+
+Use this when you've finished with a TV, such as one that belongs to someone else. Disconnect first, because Saved TVs only shows while you're not connected.
+
+1. Tap **Delete** on the TV's row.
+2. Read the warning, which lists what goes.
+3. Tap **Delete TV**. **Cancel** leaves everything as it was.
+
+| Removed from your phone | Stays where it is |
+|---|---|
+| The TV's address and pairing record | Everything on the TV, including apps, mappings and Termux |
+| Its records in History, and the option to undo those changes | The TV's trust in your phone |
+| Shell output from it, and the Home app remembered for it | Screenshots, recordings and files you saved |
+
+This can't be undone. Your other saved TVs, their History records and your saved commands aren't touched.
+
+The TV still trusts your phone afterwards, so you can add it again without a new pairing code. To end that, remove your phone in the TV's debugging settings. See [Taking away access](../how-it-works/privacy.md#taking-away-access).
+
+If a TV never gave Bridgecoil a stable ID, its History records can't be matched to it, so they stay. The warning says so when this applies, and **Clear records** in History removes them.
+
 ## Limits
 
-Bridgecoil doesn't connect by itself when it opens. There's no button to rename or forget a saved TV yet. To clear the list, clear Bridgecoil's data in your phone's settings, which also removes its pairing key, so you'd need to pair each TV again.
+Bridgecoil doesn't connect by itself when it opens. There's no button to rename a saved TV yet.

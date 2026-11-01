@@ -1,5 +1,6 @@
 <script lang="ts">
   import { errorMessage, type Device } from "../model";
+  import { homePickKey, homeProvenKey } from "../saved-devices";
   import {
     targetOf,
     type InstallProgress,
@@ -94,7 +95,7 @@
   };
   const onStock = $derived(!!homes && homes.stock.includes(homes.current ?? ""));
   // A TV with no role service can't say what was chosen, so it's kept on the phone.
-  const pickKey = $derived(`bridgecoil.home.${device.deviceId}`);
+  const pickKey = $derived(homePickKey(device.deviceId));
   function readPick() {
     try {
       return localStorage.getItem(pickKey);
@@ -111,7 +112,7 @@
     }
   }
   // The Home button is only asked about once for each launcher, since a page reload loses `result`.
-  const provenKey = $derived(`bridgecoil.home.proven.${device.deviceId}`);
+  const provenKey = $derived(homeProvenKey(device.deviceId));
   let proven = $state<string | null>(null);
   $effect(() => {
     try {

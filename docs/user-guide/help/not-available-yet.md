@@ -1,7 +1,7 @@
 # What Bridgecoil doesn't do yet
 
 - A single button to remove everything. [These steps](../how-it-works/remove-everything.md) do it by hand.
-- Forgetting or renaming a saved TV.
+- Renaming a saved TV.
 - Installing split APK sets or Android App Bundles.
 - Sending the Power key from the Remote page.
 - Downloading whole folders in Files.

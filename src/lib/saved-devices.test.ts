@@ -1,5 +1,6 @@
-import { it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
+  deleteSaved,
   loadSavedDevices,
   rememberConnected,
   rememberPaired,
@@ -61,4 +62,74 @@ it("rejects malformed storage and does not replace another known device at a reu
   );
   expect(saved).toHaveLength(2);
   expect(loadSavedDevices(JSON.stringify(saved), [], null)).toHaveLength(2);
+});
+describe("deleteSaved", () => {
+  const pairs = [
+    { host: "192.0.2.12", guid: "a", pairedAt: 10 },
+    { host: "192.0.2.77", guid: "b", pairedAt: 11 },
+  ];
+  it("takes the pairing and last address too, so a restart can't rebuild the TV", () => {
+    const saved = loadSavedDevices(
+      JSON.stringify(rememberConnected(rememberPaired([], tv.endpoint, 10), tv, 20)),
+      pairs,
+      tv.endpoint,
+    );
+    const target = saved.find((d) => d.host === "192.0.2.12")!;
+    const left = deleteSaved(saved, pairs, tv.endpoint, target);
+    expect(left.devices.map((d) => d.host)).toEqual(["192.0.2.77"]);
+    expect(left.pairs.map((p) => p.host)).toEqual(["192.0.2.77"]);
+    expect(left.lastEndpoint).toBeNull();
+    expect(
+      loadSavedDevices(
+        JSON.stringify(left.devices),
+        left.pairs,
+        left.lastEndpoint,
+      ).map((d) => d.host),
+    ).toEqual(["192.0.2.77"]);
+  });
+  it("leaves another TV's last address alone", () => {
+    const saved = rememberConnected([], tv, 20);
+    const left = deleteSaved(saved, [], "192.0.2.77:5555", saved[0]);
+    expect(left.lastEndpoint).toBe("192.0.2.77:5555");
+  });
+  it("doesn't leave a stale port that the next launch would turn into a TV", () => {
+    let saved = rememberConnected([], tv, 20);
+    saved = rememberConnected(
+      saved,
+      {
+        ...tv,
+        deviceId: "android:other",
+        model: "Other TV",
+        endpoint: "192.0.2.12:5555",
+      },
+      30,
+    );
+    const left = deleteSaved(
+      saved,
+      [],
+      tv.endpoint,
+      saved.find((d) => d.name === "Smart TV Pro")!,
+    );
+    expect(left.lastEndpoint).toBeNull();
+    expect(
+      loadSavedDevices(JSON.stringify(left.devices), [], left.lastEndpoint),
+    ).toHaveLength(1);
+  });
+  it("keeps the pairing when another saved TV uses the same address", () => {
+    let saved = rememberConnected([], tv, 20);
+    saved = rememberConnected(
+      saved,
+      { ...tv, deviceId: "android:other", model: "Other TV" },
+      30,
+    );
+    const left = deleteSaved(
+      saved,
+      pairs,
+      tv.endpoint,
+      saved.find((d) => d.name === "Smart TV Pro")!,
+    );
+    expect(left.devices.map((d) => d.name)).toEqual(["Other TV"]);
+    expect(left.pairs).toEqual(pairs);
+    expect(left.lastEndpoint).toBe(tv.endpoint);
+  });
 });

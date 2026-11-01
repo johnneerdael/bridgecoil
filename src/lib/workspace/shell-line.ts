@@ -362,6 +362,7 @@ const scrollbacks = new Map<string, Entry[]>();
 /** One result can be 1 MB, and the next command shouldn't push it out of the window. */
 const limit = 4_000_000;
 export const scrollback = (device: string) => scrollbacks.get(device) ?? [];
+export const dropScrollback = (device: string) => scrollbacks.delete(device);
 export function keep(device: string, entries: Entry[]) {
   let total = 0;
   const kept: Entry[] = [];

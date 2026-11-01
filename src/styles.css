@@ -929,6 +929,31 @@ textarea {
   white-space: nowrap;
 }
 .saved-device .text-action {justify-self: start;}
+.saved-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.saved-actions .danger-text {flex-shrink: 0;}
+.delete-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.delete-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+.delete-actions button {justify-content: center;}
+.delete-confirm {
+  background: var(--bc-danger);
+  color: var(--bc-dangerSoft);
+}
 .saved-back {align-self: flex-start;}
 .list-row {
   width: 100%;

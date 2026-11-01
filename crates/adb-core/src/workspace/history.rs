@@ -125,6 +125,17 @@ impl History {
             page_size,
         })
     }
+    /// Removes one TV's records, and returns how many went.
+    pub fn delete_device(&self, device_id: &str) -> Result<usize, PocError> {
+        self.connection
+            .lock()
+            .map_err(storage)?
+            .execute(
+                "DELETE FROM operations WHERE json_extract(record,'$.target.deviceId')=?1",
+                [device_id],
+            )
+            .map_err(storage)
+    }
     pub fn clear(&self) -> Result<(), PocError> {
         self.connection
             .lock()

@@ -722,6 +722,7 @@ pub fn run() {
             discard_review,
             list_history,
             clear_history,
+            delete_tv_history,
             prepare_recovery,
             select_profile,
             remote_action,
