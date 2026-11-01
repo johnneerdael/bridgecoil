@@ -213,6 +213,9 @@ describe("building a line", () => {
     expect(commandOf(line)).toContain("run-as com.termux");
     expect(commandOf(line)).toContain("PREFIX=");
     expect(commandOf(line)).toMatch(/bash -c 'termux-info'$/);
+    expect(textOf(say("termux", "pkg list-installed"))).toBe(
+      "termux pkg list-installed",
+    );
   });
   it("runs a Termux install in the background so it can outlast the time limit", () => {
     const command = commandOf(say("termux", "pkg install", "python"));
@@ -288,9 +291,9 @@ describe("the scrollback", () => {
       output: "a".repeat(size),
       failed: false,
     });
-    const kept = keep("tv", [entry(1, 600_000), entry(2, 600_000)]);
+    const kept = keep("tv", [entry(1, 3_000_000), entry(2, 3_000_000)]);
     expect(kept.map((e) => e.id)).toEqual([2]);
-    expect(keep("tv", [entry(3, 2_000_000)]).map((e) => e.id)).toEqual([3]);
+    expect(keep("tv", [entry(3, 5_000_000)]).map((e) => e.id)).toEqual([3]);
     expect(scrollback("tv").map((e) => e.id)).toEqual([3]);
     keep("tv", []);
   });

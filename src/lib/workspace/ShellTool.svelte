@@ -231,6 +231,9 @@
     const following = stepAfter(next, root);
     open = !!following;
     void loadStep(following);
+    // A search box must not keep the keyboard up over the next list.
+    if (following?.kind !== "text" && document.activeElement instanceof HTMLElement)
+      document.activeElement.blur();
     void tick().then(() => {
       if (fieldEl) fieldEl.scrollLeft = fieldEl.scrollWidth;
     });

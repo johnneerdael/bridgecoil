@@ -228,7 +228,9 @@ export function pickWord(
   return [
     ...line,
     {
-      text: word.wrap ? word.word : literal,
+      // Inside a wrapped branch the row's name is what people picked, and the real command is long.
+      text:
+        word.wrap || line.some((pick) => pick.word?.wrap) ? word.word : literal,
       command: literal,
       word,
       from: step,
@@ -357,7 +359,8 @@ export type Entry = {
   note?: string;
 };
 const scrollbacks = new Map<string, Entry[]>();
-const limit = 1_000_000;
+/** One result can be 1 MB, and the next command shouldn't push it out of the window. */
+const limit = 4_000_000;
 export const scrollback = (device: string) => scrollbacks.get(device) ?? [];
 export function keep(device: string, entries: Entry[]) {
   let total = 0;

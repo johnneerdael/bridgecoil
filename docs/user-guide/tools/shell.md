@@ -71,7 +71,7 @@ Each command's result stays in the window, newest at the bottom, and the window 
 - The two buttons in the corner copy everything and clear the window.
 - If a command fails, you see its output and its exit code.
 - Only the first 1 MB of a result is shown, and a note says so. The command still runs to the end.
-- The window keeps about the most recent 1 MB of results, and stays filled while the app is open, even if you visit another page. Closing the app empties it. History keeps each result.
+- The window keeps about the most recent 4 MB of results, and stays filled while the app is open, even if you visit another page. Closing the app empties it. History keeps each result.
 
 ## Run something inside Termux
 
