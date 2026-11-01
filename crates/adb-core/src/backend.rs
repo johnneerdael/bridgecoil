@@ -413,6 +413,88 @@ impl Client {
         }
         Ok(())
     }
+    /// What decides which parts of an app this TV needs. A TV that won't say still gets its app,
+    /// only with more parts than it strictly needs.
+    pub async fn install_profile(&mut self, session: &str) -> Result<crate::bundle::DeviceProfile> {
+        let target = self
+            .current_target()
+            .filter(|t| t.session_id == session)
+            .ok_or_else(|| {
+                PocError::new("staleSession", "Connect to a TV before choosing a file.")
+            })?;
+        let info = self.status().ok_or_else(|| {
+            PocError::new("staleSession", "Connect to a TV before choosing a file.")
+        })?;
+        let output = self
+            .execute_target(&target, crate::bundle::PROFILE_COMMAND)
+            .await?;
+        Ok(crate::bundle::parse_profile(
+            info.sdk,
+            info.abis,
+            &output.combined(),
+        ))
+    }
+    /// Installs an app made of several APKs, as one session. Android takes all of it or none, so
+    /// a failure can't leave half an app on the TV. Game data follows only once the app is proven
+    /// to be there, since it means nothing without one and can be as large as the TV's free space.
+    pub async fn install_set(
+        &mut self,
+        session: &str,
+        set: &crate::bundle::Unpacked,
+        mut progress: impl FnMut(InstallProgress) + Send,
+    ) -> Result<()> {
+        if self.active.as_ref().is_none_or(|a| a.info.id != session) {
+            return Err(PocError::new(
+                "staleSession",
+                "The connection changed. Reconnect and choose the file again.",
+            ));
+        }
+        let parts: Vec<_> = set
+            .paths
+            .iter()
+            .cloned()
+            .zip(set.set.files.iter().map(|f| f.info.sha256.clone()))
+            .collect();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            for (path, sha256) in parts {
+                let actual = apk::inspect_package(&path).map_err(|e| PocError::new("apk", e))?;
+                if actual.sha256 != sha256 {
+                    return Err(PocError::new(
+                        "apkChanged",
+                        "The selected file changed. Choose it and review it again.",
+                    ));
+                }
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|_| PocError::new("apk", "Could not check the selected file."))??;
+        let mut active = self
+            .active
+            .take()
+            .ok_or_else(|| PocError::new("staleSession", "Device disconnected."))?;
+        let mut committing = false;
+        let result = install_parts(&mut active, set, &mut committing, &mut progress).await;
+        self.label_cache = None;
+        match result {
+            Ok(()) => {
+                self.active = Some(active);
+                Ok(())
+            }
+            Err(e) if ["installRejected", "gameData"].contains(&e.kind.as_str()) => {
+                self.active = Some(active);
+                Err(e)
+            }
+            Err(e) if !committing => Err(e),
+            Err(e) => Err(PocError::new(
+                "unknownInstall",
+                format!(
+                    "Installation outcome is not verified. Reconnect and inspect the TV before retrying. {}",
+                    e.message
+                ),
+            )),
+        }
+    }
     pub async fn install(
         &mut self,
         session: &str,
@@ -754,6 +836,165 @@ impl Client {
     }
 }
 const UPLOAD_STALL: Duration = Duration::from_secs(60);
+async fn install_parts(
+    active: &mut Active,
+    set: &crate::bundle::Unpacked,
+    committing: &mut bool,
+    progress: &mut (impl FnMut(InstallProgress) + Send),
+) -> Result<()> {
+    let apks: u64 = set.set.files.iter().map(|f| f.info.bytes).sum();
+    let data: u64 = set.obb.iter().map(|o| o.bytes).sum();
+    let total = apks + data;
+    let profile = active.info.profile_id;
+    let wire = &mut active.wire;
+    let rejected = |output: &str| PocError::new("installRejected", install_rejection(output));
+    let created = command(wire, &format!("pm install-create -r --user {profile} -S {apks}")).await?;
+    let session = install_session(created.1.trim()).ok_or_else(|| rejected(&created.1))?;
+    let mut done = 0;
+    let written: Result<()> = async {
+        progress(InstallProgress { stage: "uploading".into(), sent: 0, total });
+        for (index, (path, file)) in set.paths.iter().zip(&set.set.files).enumerate() {
+            let remote = format!("/data/local/tmp/bridgecoil-{}.apk", Uuid::new_v4());
+            let pushed = push_part(wire, path, &remote, 0o100600, &mut done, &mut |sent| {
+                progress(InstallProgress { stage: "uploading".into(), sent, total })
+            })
+            .await;
+            let output = match pushed {
+                Ok(()) => {
+                    command(
+                        wire,
+                        &format!(
+                            "pm install-write -S {} {session} part{index}.apk {}",
+                            file.info.bytes,
+                            shell_quote(&remote)
+                        ),
+                    )
+                    .await
+                }
+                Err(e) => Err(e),
+            };
+            // TVs have little space, so a part leaves as soon as Android holds its own copy.
+            let _ = timeout(
+                Duration::from_secs(5),
+                command(wire, &format!("rm -f {}", shell_quote(&remote))),
+            )
+            .await;
+            let output = output?;
+            if output.0 != Some(0) || !output.1.trim().starts_with("Success") {
+                return Err(rejected(&output.1));
+            }
+        }
+        Ok(())
+    }
+    .await;
+    if let Err(e) = written {
+        let _ = timeout(
+            Duration::from_secs(5),
+            command(wire, &format!("pm install-abandon {session}")),
+        )
+        .await;
+        return Err(e);
+    }
+    progress(InstallProgress { stage: "installing".into(), sent: done, total });
+    *committing = true;
+    // Play Protect can hold this open until someone answers it on the TV.
+    let output = timeout(
+        Duration::from_secs(300),
+        command(wire, &format!("pm install-commit {session}")),
+    )
+    .await
+    .map_err(|_| PocError::new("timeout", "Android didn't finish installing in time."))??;
+    if !install_succeeded(output.0, &output.1) {
+        return Err(rejected(&output.1));
+    }
+    progress(InstallProgress { stage: "verifying".into(), sent: done, total });
+    let package = &set.set.package;
+    let output = command(wire, &format!("dumpsys package {}", shell_quote(package))).await?;
+    if output.0 != Some(0) || installed_version(&output.1) != Some(set.set.version_code) {
+        return Err(PocError::new(
+            "unknownInstall",
+            "Android reported success, but the expected installed version could not be verified. Check the TV before retrying.",
+        ));
+    }
+    if set.obb.is_empty() {
+        return Ok(());
+    }
+    let failed = |why: String| {
+        PocError::new(
+            "gameData",
+            format!("The app is installed, but its game data couldn't be copied. {why}"),
+        )
+    };
+    let folder = format!("/storage/emulated/{profile}/Android/obb/{package}");
+    let made = command(wire, &format!("mkdir -p {}", shell_quote(&folder)))
+        .await
+        .map_err(|e| failed(e.message))?;
+    if made.0 != Some(0) {
+        return Err(failed(made.1));
+    }
+    for obb in &set.obb {
+        let target = format!("{folder}/{}", obb.name);
+        let staging = format!("{target}.bridgecoil-part");
+        push_part(wire, &obb.path, &staging, 0o100644, &mut done, &mut |sent| {
+            progress(InstallProgress { stage: "copyingData".into(), sent, total })
+        })
+        .await
+        .map_err(|e| failed(e.message))?;
+        let moved = command(
+            wire,
+            &format!("mv -f {} {}", shell_quote(&staging), shell_quote(&target)),
+        )
+        .await
+        .map_err(|e| failed(e.message))?;
+        if moved.0 != Some(0) {
+            return Err(failed(moved.1));
+        }
+    }
+    Ok(())
+}
+/// Pushes one file, counting towards the install's overall progress.
+async fn push_part(
+    wire: &mut Wire,
+    from: &Path,
+    remote: &str,
+    mode: u32,
+    done: &mut u64,
+    report: &mut (impl FnMut(u64) + Send),
+) -> Result<()> {
+    let never = AtomicBool::new(false);
+    let mut buffer = vec![0u8; 66000];
+    let mut sync = libadb::sync::open(wire, &mut buffer)
+        .await
+        .map_err(connection_error)?;
+    sync.send_start(remote, mode)
+        .await
+        .map_err(connection_error)?;
+    let mut file = tokio::fs::File::open(from)
+        .await
+        .map_err(connection_error)?;
+    let mut chunk = vec![0u8; 65536];
+    loop {
+        let n = file.read(&mut chunk).await.map_err(connection_error)?;
+        if n == 0 {
+            break;
+        }
+        files::interruptible(sync.send_data(&chunk[..n]), &never, UPLOAD_STALL)
+            .await
+            .map_err(|_| PocError::new("timeout", "The transfer to the TV stalled."))?
+            .map_err(connection_error)?;
+        *done += n as u64;
+        report(*done);
+    }
+    sync.send_done(0).await.map_err(connection_error)?;
+    sync.quit().await.map_err(connection_error)?;
+    Ok(())
+}
+/// Reads `Success: created install session [1234]`.
+pub fn install_session(output: &str) -> Option<u32> {
+    let start = output.find('[')? + 1;
+    let end = start + output[start..].find(']')?;
+    output.starts_with("Success").then(|| output[start..end].parse().ok())?
+}
 const SHELL_OUTPUT_LIMIT: usize = 1024 * 1024;
 const OUTPUT_LIMIT: &str = "outputLimit";
 const OUTPUT_LIMIT_MESSAGE: &str = "The TV returned more output than this command allows.";
@@ -907,6 +1148,17 @@ impl crate::workspace::driver::ShellDriver for Client {
     }
 }
 
+#[cfg(test)]
+mod install_session_tests {
+    use super::install_session;
+    #[test]
+    fn reads_the_number_android_gives_a_session() {
+        assert_eq!(install_session("Success: created install session [1394583712]"), Some(1394583712));
+        assert_eq!(install_session("Failure [INSTALL_FAILED_INTERNAL_ERROR]"), None);
+        assert_eq!(install_session("Success: created install session"), None);
+        assert_eq!(install_session("Success: [x]"), None);
+    }
+}
 #[cfg(test)]
 mod output_limit_tests {
     use super::*;

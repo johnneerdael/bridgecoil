@@ -24,6 +24,11 @@ export type Selection = {
   sha256: string;
   minSdk?: number;
   abis: string[];
+  /** How many APKs this TV gets, out of how many are in the file. */
+  parts: number;
+  available: number;
+  gameData: number;
+  warnings: string[];
 };
 export function canInstall(
   device: Device | null,

@@ -25,8 +25,13 @@ use tempfile::NamedTempFile;
 use workspace::*;
 
 type Result<T> = std::result::Result<T, PocError>;
+enum Payload {
+    Single(NamedTempFile),
+    /// The folder holds the unpacked parts, and goes with them.
+    Set(tempfile::TempDir, adb_core::bundle::Unpacked),
+}
 struct Selected {
-    file: NamedTempFile,
+    payload: Payload,
     info: ApkInfo,
     session_id: String,
 }
@@ -83,6 +88,11 @@ struct SelectionInfo {
     name: String,
     #[serde(flatten)]
     info: ApkInfo,
+    /// How many APKs this TV gets, of `available` in the file. Both are 1 for a plain APK.
+    parts: usize,
+    available: usize,
+    game_data: u64,
+    warnings: Vec<String>,
 }
 fn err(e: impl std::fmt::Display) -> PocError {
     PocError::new("file", e.to_string())
@@ -207,15 +217,34 @@ async fn choose_apk(
             "Connect to a device before choosing an APK.",
         ));
     }
+    // Without this a TV still gets its app, only with every part in the file.
+    let profile = {
+        let mut client = state.0.lock().await;
+        match client.install_profile(&session_id).await {
+            Ok(profile) => profile,
+            Err(_) => {
+                let info = client.status();
+                adb_core::bundle::DeviceProfile {
+                    sdk: info.as_ref().map_or(0, |v| v.sdk),
+                    abis: info.map_or_else(Vec::new, |v| v.abis),
+                    ..Default::default()
+                }
+            }
+        }
+    };
     let picker_app = app.clone();
+    let cache = app.path().app_cache_dir().map_err(err)?;
     let selected = tauri::async_runtime::spawn_blocking(
-        move || -> Result<Option<(NamedTempFile, ApkInfo)>> {
-            let Some(path) = picker_app
-                .dialog()
-                .file()
-                .add_filter("Android package", &["apk"])
-                .blocking_pick_file()
-            else {
+        move || -> Result<Option<(Payload, ApkInfo)>> {
+            let picker = picker_app.dialog().file();
+            // Phones filter by MIME type, and .xapk, .apkm and .apks have none, so a filter would
+            // hide them. What a file really is gets decided by reading it.
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            let picker = picker.add_filter(
+                "Android app",
+                &["apk", "apks", "apkm", "xapk", "apk+", "zip"],
+            );
+            let Some(path) = picker.blocking_pick_file() else {
                 return Ok(None);
             };
             let copied = (|| -> Result<NamedTempFile> {
@@ -225,12 +254,12 @@ async fn choose_apk(
                 let mut file =
                     NamedTempFile::new_in(picker_app.path().app_cache_dir().map_err(err)?)
                         .map_err(err)?;
-                let mut bounded = source.take(apk::MAX_APK_BYTES + 1);
+                let mut bounded = source.take(adb_core::bundle::MAX_BUNDLE_BYTES + 1);
                 let n = std::io::copy(&mut bounded, &mut file).map_err(err)?;
-                if n == 0 || n > apk::MAX_APK_BYTES {
+                if n == 0 || n > adb_core::bundle::MAX_BUNDLE_BYTES {
                     return Err(PocError::new(
                         "apk",
-                        "Choose a nonempty APK smaller than 1 GiB.",
+                        "Choose a file that isn't empty and is smaller than 4 GB.",
                     ));
                 }
                 file.flush().map_err(err)?;
@@ -241,13 +270,23 @@ async fn choose_apk(
                 .fs()
                 .stop_accessing_security_scoped_resource(path);
             let file = copied?;
-            let info = apk::inspect(file.path()).map_err(err)?;
-            Ok(Some((file, info)))
+            let rejected = |e: String| PocError::new("apk", e);
+            if !adb_core::bundle::is_bundle(file.path()).map_err(rejected)? {
+                let info = apk::inspect(file.path()).map_err(err)?;
+                return Ok(Some((Payload::Single(file), info)));
+            }
+            let folder = tempfile::tempdir_in(cache).map_err(err)?;
+            let set = adb_core::bundle::unpack(file.path(), folder.path(), &profile)
+                .map_err(rejected)?;
+            let mut info = set.set.files[0].info.clone();
+            info.bytes = set.set.bytes;
+            info.sha256 = set.sha256.clone();
+            Ok(Some((Payload::Set(folder, set), info)))
         },
     )
     .await
     .map_err(err)??;
-    let Some((file, info)) = selected else {
+    let Some((payload, info)) = selected else {
         return Ok(None);
     };
     if state
@@ -263,18 +302,31 @@ async fn choose_apk(
         ));
     }
     let id = uuid::Uuid::new_v4().to_string();
+    let (parts, available, game_data, warnings) = match &payload {
+        Payload::Single(_) => (1, 1, 0, Vec::new()),
+        Payload::Set(_, set) => (
+            set.set.files.len(),
+            set.available,
+            set.obb.iter().map(|o| o.bytes).sum(),
+            set.set.warnings.clone(),
+        ),
+    };
     let result = SelectionInfo {
         id: id.clone(),
         session_id: session_id.clone(),
         name: format!("{}-{}.apk", info.package, info.version_code),
         info: info.clone(),
+        parts,
+        available,
+        game_data,
+        warnings,
     };
     let mut store = selections.0.lock().map_err(err)?;
     store.clear();
     store.insert(
         id,
         Selected {
-            file,
+            payload,
             info,
             session_id,
         },
@@ -305,19 +357,18 @@ async fn install_apk(
         })?
     };
     let progress_id = selection_id.clone();
-    state
-        .0
-        .lock()
-        .await
-        .install(
-            &session_id,
-            selected.file.path(),
-            &selected.info,
-            move |p: InstallProgress| {
-                let _ = app.emit("install-progress", serde_payload(&progress_id, p));
-            },
-        )
-        .await
+    let report = move |p: InstallProgress| {
+        let _ = app.emit("install-progress", serde_payload(&progress_id, p));
+    };
+    let mut client = state.0.lock().await;
+    match &selected.payload {
+        Payload::Single(file) => {
+            client
+                .install(&session_id, file.path(), &selected.info, report)
+                .await
+        }
+        Payload::Set(_, set) => client.install_set(&session_id, set, report).await,
+    }
 }
 struct PendingUpload {
     id: String,

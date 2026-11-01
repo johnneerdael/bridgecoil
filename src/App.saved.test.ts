@@ -637,3 +637,53 @@ describe("Wake-on-LAN", () => {
     expect(connects()).toHaveLength(1);
   });
 });
+it("shows how much of a multi-part file this TV gets before installing it", async () => {
+  backend();
+  const fallback = invoke.getMockImplementation()!;
+  invoke.mockImplementation(async (command, args) =>
+    String(command).includes("rating")
+      ? { stored: false }
+      : command === "choose_apk"
+      ? {
+          id: "selection",
+          sessionId: "fresh-session",
+          name: "game.apk",
+          package: "com.example.game",
+          versionCode: 12,
+          bytes: 4096,
+          sha256: "ab",
+          abis: [],
+          parts: 4,
+          available: 58,
+          gameData: 3 * 1048576,
+          warnings: ["Some signatures cannot be verified locally."],
+        }
+      : fallback(command, args),
+  );
+  localStorage.setItem(savedDevicesKey, JSON.stringify([stored]));
+  render(App);
+  const quick = (await screen.findByRole("button", {
+    name: `Quick connect to ${tv.model}`,
+  })) as HTMLButtonElement;
+  await waitFor(() => expect(quick.disabled).toBe(false));
+  await fireEvent.click(quick);
+  await screen.findByRole("button", { name: "Connection status: Connected" });
+  await fireEvent.click(await screen.findByRole("button", { name: /Manage apps/ }));
+  await fireEvent.click(await screen.findByRole("button", { name: /Install APK/ }));
+  await fireEvent.click(await screen.findByRole("button", { name: /Choose file/ }));
+  const review = (await screen.findByText(/parts in this file/)).closest("section")!;
+  const text = review.textContent!.replace(/\s+/g, " ");
+  expect(text).toContain("4 of 58 parts in this file are needed for this TV");
+  expect(text).toContain("3.0 MB of game data");
+  expect(text).toContain("Some signatures cannot be verified locally.");
+  const install = screen.getByRole("button", { name: /Install app/ });
+  expect((install as HTMLButtonElement).disabled).toBe(true);
+  await fireEvent.click(screen.getByRole("checkbox"));
+  await fireEvent.click(install);
+  await waitFor(() =>
+    expect(invoke).toHaveBeenCalledWith("install_apk", {
+      sessionId: "fresh-session",
+      selectionId: "selection",
+    }),
+  );
+});

@@ -484,7 +484,7 @@
     selection = null;
     progress = null;
     const sessionId = device.id;
-    await run("Reading the selected APK", async () => {
+    await run("Reading the file", async () => {
       selection = await invoke<Selection | null>("choose_apk", { sessionId });
     });
   }
@@ -937,10 +937,12 @@
               <div class="state-icon" aria-hidden="true">↑</div>
               <h2>
                 {progress.stage === "uploading"
-                  ? "Transferring APK"
+                  ? "Transferring app"
                   : progress.stage === "installing"
                     ? "Installing app"
-                    : "Verifying installation"}
+                    : progress.stage === "copyingData"
+                      ? "Copying game data"
+                      : "Verifying installation"}
               </h2>
               <p>{label(selection.package, 80)}</p>
               <div class="transfer">
@@ -969,6 +971,21 @@
                 </div>
               </div>
               <p class="target-caption">On {label(device.model, 45)} · Owner</p>
+              {#if selection.available > 1}
+                <p class="install-note">
+                  {selection.parts} of {selection.available} parts in this file are
+                  needed for this TV. The rest stay on your phone.
+                </p>
+              {/if}
+              {#if selection.gameData}
+                <p class="install-note">
+                  Includes {formatBytes(selection.gameData)} of game data, copied
+                  once the app is installed.
+                </p>
+              {/if}
+              {#each selection.warnings as warning}
+                <p class="install-note">{warning}</p>
+              {/each}
               <button
                 class="text-action file-details"
                 onclick={() => (fileOpen = true)}
@@ -985,7 +1002,7 @@
                   bind:checked={confirmed}
                   disabled={busy}
                 /><span
-                  >Install this APK on this device<small
+                  >Install this app on this device<small
                     >I chose and trust the file source.</small
                   ></span
                 ></label
@@ -1007,9 +1024,10 @@
         {:else}
           <section class="center-state">
             <div class="state-icon" aria-hidden="true">⇧</div>
-            <h2>Choose your APK</h2>
+            <h2>Choose an app file</h2>
             <p class="subtle">
-              Select a standalone APK using the native file picker.
+              Pick an APK, APKS, XAPK or APKM file. For a file with several
+              parts, Bridgecoil picks the ones this TV needs.
             </p>
             <p class="target-caption">
               Target: {label(device.model, 55)} · Profile {device.profileId}
@@ -1018,7 +1036,7 @@
               class="primary"
               onclick={pick}
               disabled={busy || !native || !nativeReady}
-              >{busy ? busyLabel : "Choose APK file"}<span aria-hidden="true"
+              >{busy ? busyLabel : "Choose file"}<span aria-hidden="true"
                 >＋</span
               ></button
             >
@@ -1200,7 +1218,7 @@
 </Modal>
 <Modal
   open={fileOpen}
-  title="APK file details"
+  title="App file details"
   onclose={() => (fileOpen = false)}
 >
   {#if selection}<dl>
@@ -1273,12 +1291,13 @@
   title="About APK installation"
   onclose={() => (installHelpOpen = false)}
   ><p>
-    Choose a standalone APK, inspect the package and target device, then confirm
-    installation. Android checks signing and update compatibility.
+    Choose an APK, or an APKS, XAPK or APKM file holding an app in several parts,
+    inspect the package and target device, then confirm installation. Android
+    checks signing and update compatibility.
   </p>
   <p>
-    Existing apps are never automatically uninstalled. Split APK sets and
-    Android App Bundles are not supported by this build. The current file limit
-    is 1 GiB.
+    Existing apps are never automatically uninstalled. Android App Bundles
+    (.aab) can't be installed directly. Files can be up to 4 GB, and the APKs
+    installed from one can be up to 1 GB together.
   </p></Modal
 >

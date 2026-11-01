@@ -23,6 +23,10 @@ const apk = {
   bytes: 42,
   sha256: "hash",
   abis: [],
+  parts: 1,
+  available: 1,
+  gameData: 0,
+  warnings: [],
 } satisfies Selection;
 describe("installation target", () => {
   it("requires a live matching session and selection", () => {
