@@ -54,6 +54,9 @@
   const nameOf = (component: string) =>
     catalog.find((c) => c.package === packageOf(component))?.name ??
     packageOf(component);
+  // A stock launcher's package name means nothing to most people.
+  const titleOf = (component: string) =>
+    homes?.stock.includes(component) ? "your TV's launcher" : nameOf(component);
   const componentOf = (listed: Listed) =>
     homes?.homes.find((h) => packageOf(h) === listed.package);
   const latestOf = (listed: Listed) =>
@@ -145,6 +148,12 @@
     others.filter((h) => !catalog.some((c) => c.package === packageOf(h))),
   );
   const stockLeft = $derived(homes?.stock.filter((h) => h !== homes!.current) ?? []);
+  // The default and whatever is taking Home back from it. Only the viewer knows which they want.
+  const contenders = $derived(
+    homes?.homes.filter(
+      (h) => h === homes!.current || overriding.includes(packageOf(h)),
+    ) ?? [],
+  );
   $effect(() => {
     let cancelled = false;
     // Without this, the list still works and just offers no updates.
@@ -310,23 +319,7 @@
     >
     <button class="secondary" onclick={() => (tried = null)}>No</button>
   </div>
-{:else if overriding.length}
-  <div class="setup-card">
-    <h3>{nameOf(overriding[0])} is still taking over Home</h3>
-    <p>
-      Your TV's default is {homes.current ? nameOf(homes.current) : "another launcher"},
-      but {nameOf(overriding[0])} takes the Home button back. Turning it off ends
-      that. You can undo this from History or Apps.
-    </p>
-    <button
-      class="primary"
-      disabled={busy}
-      onclick={() =>
-        homes?.current ? switchTo(homes.current) : turnOff(overriding[0])}
-      >Turn off {nameOf(overriding[0])}</button
-    >
-  </div>
-{:else if outranked && homes.current}
+{:else if outranked && homes.current && !overriding.length}
   {@const inUse = homes.current}
   <div class="setup-card">
     <h3>Your TV's own launcher comes first</h3>
@@ -349,7 +342,7 @@
       onclick={() => makeDefault(inUse)}>Keep {nameOf(inUse)}</button
     >
   </div>
-{:else if !onStock && result === null && homes.current && !confirmed}
+{:else if !onStock && result === null && homes.current && !confirmed && !overriding.length}
   <div class="setup-card">
     <h3>Press Home on your remote</h3>
     <p>
@@ -368,7 +361,20 @@
     {@render wayBack()}
   </div>
 {:else}
-  {#if result === "proven" || (confirmed && stockLeft.length)}<div class="setup-card">
+  {#if overriding.length}<div class="setup-card">
+      <h3>Which launcher do you want?</h3>
+      <p>
+        Your TV's default is {homes.current ? titleOf(homes.current) : "another launcher"},
+        but {nameOf(overriding[0])} takes the Home button back. Keep the one you
+        want, and the other is turned off. You can undo this from History or Apps.
+      </p>
+      {#each contenders as component (component)}<button
+          class="secondary"
+          disabled={busy}
+          onclick={() => switchTo(component)}>Keep {titleOf(component)}</button
+        >{/each}
+    </div>{/if}
+  {#if !overriding.length && (result === "proven" || (confirmed && stockLeft.length))}<div class="setup-card">
       <h3>Your launcher is in charge</h3>
       {#if stockLeft.length}<p>
           You can switch off the launcher your TV came with. Some TV features can

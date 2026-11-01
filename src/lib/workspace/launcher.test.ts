@@ -311,45 +311,73 @@ it("doesn't try to turn off something that isn't a launcher", async () => {
   );
 });
 
-// A launcher left on could take Home back straight after a success.
-it("turns off everything that could keep Home, not only the one in use", async () => {
+function contested(extra: object = {}) {
   const api = onProjectivy();
   (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
-    homes: [fresh, projectivy, "org.third/.Home"],
-    current: fresh,
-    stock: [],
+    homes: [stock, projectivy],
+    current: stock,
+    stock: [stock],
     catalog: [listed({})],
-    overriding: ["com.spocky.projengmenu", "org.third"],
+    overriding: ["com.spocky.projengmenu"],
+    ...extra,
   });
+  return api;
+}
+
+// Android's default says nothing about which launcher someone wants, so neither is assumed.
+it("asks which launcher to keep when one takes Home back", async () => {
+  const api = contested();
   open(api);
-  await fireEvent.click(await screen.findByRole("button", { name: "Turn off Projectivy" }));
+  expect(await screen.findByText("Which launcher do you want?")).toBeTruthy();
+  expect(screen.getByText(/your TV's launcher, but Projectivy takes/)).toBeTruthy();
+  const keep = screen.getAllByRole("button", { name: /^Keep / });
+  expect(keep.map((b) => b.className)).toEqual(["secondary", "secondary"]);
+  await fireEvent.click(screen.getByRole("button", { name: "Keep Projectivy" }));
   await waitFor(() =>
     expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
       kind: "switchHome",
-      component: fresh,
-      replacing: ["com.spocky.projengmenu", "org.third"],
+      component: projectivy,
+      replacing: ["com.vendor.home"],
     }),
   );
 });
 
-it("says when another launcher is still taking over Home", async () => {
-  const api = onProjectivy();
-  (api.query as ReturnType<typeof vi.fn>).mockResolvedValue({
-    homes: [fresh, projectivy],
-    current: fresh,
-    stock: [],
-    catalog: [listed({})],
-    overriding: ["com.spocky.projengmenu"],
-  });
-  const onreview = vi.fn();
-  open(api, onreview);
-  expect(await screen.findByText("Projectivy is still taking over Home")).toBeTruthy();
-  await fireEvent.click(screen.getByRole("button", { name: "Turn off Projectivy" }));
+it("can keep the default and turn off the launcher taking Home back", async () => {
+  const api = contested();
+  open(api);
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Keep your TV's launcher" }),
+  );
   await waitFor(() =>
     expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
       kind: "switchHome",
-      component: fresh,
+      component: stock,
       replacing: ["com.spocky.projengmenu"],
+    }),
+  );
+});
+
+it("still lets you reach every launcher while asking", async () => {
+  open(contested());
+  await screen.findByText("Which launcher do you want?");
+  expect(screen.getByRole("button", { name: "Install from a file" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Update Projectivy" })).toBeTruthy();
+  expect(screen.queryByText(/Press Home/)).toBeNull();
+});
+
+it("turns off everything else that could keep Home", async () => {
+  const third = "org.third/.Home";
+  const api = contested({
+    homes: [stock, projectivy, third],
+    overriding: ["com.spocky.projengmenu", "org.third"],
+  });
+  open(api);
+  await fireEvent.click(await screen.findByRole("button", { name: "Keep Projectivy" }));
+  await waitFor(() =>
+    expect(api.prepare).toHaveBeenCalledWith(expect.anything(), {
+      kind: "switchHome",
+      component: projectivy,
+      replacing: ["com.vendor.home", "org.third"],
     }),
   );
 });
