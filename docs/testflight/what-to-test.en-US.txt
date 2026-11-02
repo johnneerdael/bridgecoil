@@ -1,5 +1,7 @@
 Please test with an Android TV / Google TV you are authorized to manage.
 
+Bulk uninstall: select 10–20 apps you added, choose Uninstall and review once for the batch. Confirm per-app results, cancellation and failed items; uninstall deletes app data for every TV profile. Check that single and batch uninstall keep your app-list position and failed items selected. If refresh fails, retry it before loading more rows.
+
 - Local Network permission: grant/deny, recovery from Settings, discovery, code pairing and connection.
 - Confirm the selected device/profile, inspect apps and try a reviewed reversible change. Check results and supported recovery in History.
 - On-screen remote navigation and app shortcuts.

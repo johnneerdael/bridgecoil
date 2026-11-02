@@ -4,8 +4,6 @@
   import type { Platform, BulkReview, Operation } from "./client";
   import { errorMessage } from "../model";
   import Modal from "../Modal.svelte";
-  import Pager from "./Pager.svelte";
-  import Output from "./Output.svelte";
   let {
     review,
     api,
@@ -19,21 +17,17 @@
     onclose: () => void;
     onresult: (r: Operation) => void;
   } = $props();
-  let page = $state(0),
-    busy = $state(false),
+  let busy = $state(false),
     confirmed = $state(false),
     stopAfterFailure = $state(true),
     cancelling = $state(false),
     error = $state("");
-  let detail = $state(false);
   $effect(() => {
     review;
-    page = 0;
     confirmed = false;
     error = "";
     stopAfterFailure = true;
     cancelling = false;
-    detail = false;
   });
   const items = $derived(
     review
@@ -99,35 +93,35 @@
       <button class="secondary" disabled={cancelling} onclick={cancel}
         >Cancel remaining items</button
       >
-    {:else}{@const item = items[page]}{#if item}<h3 class="break-word">
-          {item.package}
-        </h3>
-        <p class="subtle">
-          {item.excluded ? "Excluded · will not run" : "Included"}
-        </p>
-        {#if item.rating === "expert" || item.rating === "unsafe"}<div
-            class="risk-note rating-warning"
-          >
-            <RatingBadge level={item.rating} />
-            <p>{levelInfo[item.rating].explanation}</p>
-          </div>{:else if item.rating}<RatingBadge level={item.rating} />{/if}
-        <button class="text-action" onclick={() => (detail = !detail)}
-          >{detail ? "Show review" : "Inspect this item's impact"}</button
-        >{#if detail}<Output
-            text={[item.text, ...item.losses].join("\n\n")}
-          />{:else}<p>{item.text}</p>
-          {#if item.losses.length}<p class="risk-note">
-              This action can delete app data. Inspect its impact before
-              applying.
-            </p>{/if}{/if}{/if}<Pager
-        {page}
-        total={items.length}
-        size={1}
-        onpage={(n) => {
-          page = n;
-          detail = false;
-        }}
-      />
+    {:else}
+      {#if review.items[0]}<h3>{review.items[0].review.title}</h3>{/if}
+      {#each [...new Set(review.items.flatMap((item) => item.review.losses))] as loss}<p
+          class="risk-note"
+        >
+          {loss}
+        </p>{/each}
+      <p class="subtle">
+        One confirmation applies to the included apps. Open an app below to
+        inspect its impact.
+      </p>
+      <div class="bulk-review-list">
+        {#each items as item (item.package)}<details class="bulk-review-item">
+            <summary
+              ><strong>{item.package}</strong><span class="subtle"
+                >{item.excluded ? "Excluded · will not run" : "Included"}</span
+              ></summary
+            >
+            <p>{item.text}</p>
+            {#if item.rating === "expert" || item.rating === "unsafe"}<div
+                class="risk-note rating-warning"
+              >
+                <RatingBadge level={item.rating} />
+                <p>{levelInfo[item.rating].explanation}</p>
+              </div>{:else if item.rating}<RatingBadge
+                level={item.rating}
+              />{/if}
+          </details>{/each}
+      </div>
       <label class="checkbox"
         ><input type="checkbox" bind:checked={stopAfterFailure} /><span
           >Stop after the first failed or unknown item</span
@@ -146,3 +140,31 @@
       >{/if}
     {#if error}<p role="alert" class="error-text">{error}</p>{/if}{/if}</Modal
 >
+
+<style>
+  .bulk-review-list {
+    max-height: 36dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .bulk-review-item {
+    border-bottom: 1px solid var(--line);
+    padding: 10px 0;
+  }
+  summary {
+    cursor: pointer;
+    min-height: 44px;
+  }
+  summary strong {
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+  summary span {
+    display: block;
+    padding-top: 4px;
+  }
+  summary:focus-visible {
+    outline: 3px solid var(--bc-focus);
+    outline-offset: -3px;
+  }
+</style>

@@ -18,7 +18,8 @@
     review = $state<Review | null>(null),
     bulk = $state<BulkReview | null>(null),
     keyboard = $state(false),
-    dark = $state(false);
+    dark = $state(false),
+    reload = $state(0);
   const titles = {
     device: "Device",
     apps: "Apps",
@@ -62,6 +63,7 @@
       {:else if page === "apps"}<AppsPage
           {device}
           {api}
+          {reload}
           onreview={(r) => (review = r)}
           onbulk={(r) => (bulk = r)}
           oninstall={() => {}}
@@ -90,14 +92,14 @@
   {api}
   deviceName={device.model}
   onclose={() => (review = null)}
-  onresult={() => {}}
+  onresult={() => { reload++; }}
 />
 <BulkReviewView
   review={bulk}
   {api}
   deviceName={device.model}
   onclose={() => (bulk = null)}
-  onresult={() => {}}
+  onresult={() => { reload++; }}
 />
 
 <style>

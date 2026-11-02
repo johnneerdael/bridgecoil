@@ -107,7 +107,7 @@ function makeReview(t: Target, action: Action): Review {
     currentState: "Fixture current state",
     losses:
       action.kind === "package" &&
-      ["remove", "clearData"].includes(action.action)
+      ["remove", "clearData", "uninstall"].includes(action.action)
         ? [
             "Fixture data-loss review. App data would be deleted by this kind of real operation.",
           ]
@@ -471,6 +471,11 @@ export const api: Platform = {
   apply: async (id) => {
     const r = reviews.get(id)!;
     reviews.delete(id);
+    const action = JSON.parse(r.commands[0]) as Action;
+    if (action.kind === "package" && action.action === "uninstall") {
+      const index = apps.findIndex((app) => app.package === action.package);
+      if (index >= 0) apps.splice(index, 1);
+    }
     return result(r.target, r.title);
   },
   discard: async (id) => {
@@ -511,6 +516,13 @@ export const api: Platform = {
   applyBulk: async (id) => {
     const r = bulks.get(id)!;
     bulks.delete(id);
+    for (const item of r.items) {
+      const action = JSON.parse(item.review.commands[0]) as Action;
+      if (action.kind === "package" && action.action === "uninstall") {
+        const index = apps.findIndex((app) => app.package === action.package);
+        if (index >= 0) apps.splice(index, 1);
+      }
+    }
     return result(r.target, "Fixture bulk result");
   },
   cancelBulk: async () => {},
