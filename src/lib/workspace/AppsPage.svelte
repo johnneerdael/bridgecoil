@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { errorMessage, type Device } from "../model";
   import {
     targetOf,
@@ -35,6 +35,7 @@
     filter = $bindable("all"),
     search = $bindable(""),
     submitted = $bindable(""),
+    reload = 0,
   }: {
     device: Device;
     api: Platform;
@@ -44,11 +45,13 @@
     filter?: string;
     search?: string;
     submitted?: string;
+    reload?: number;
   } = $props();
   const pageSize = 32;
   let list = $state<HTMLDivElement>();
   let loadingMore = $state(false);
   let loadError = $state("");
+  let refreshFailed = $state(false);
   let nextPage = 1;
   let generation = 0;
   let selecting = $state(false),
@@ -60,6 +63,12 @@
       : selected.length < 32
         ? [...selected, id]
         : selected;
+  }
+  function selectShown() {
+    const shown = result.items
+      .filter((app) => app.group !== "unsafe" || !unsafeCollapsed)
+      .map((app) => app.package);
+    selected = [...new Set([...selected, ...shown])].slice(0, 32);
   }
   async function reviewBulk() {
     if (!selected.length || busy) return;
@@ -203,8 +212,38 @@
         !(canUninstall && a.id === "restore" && detail?.state.installed),
     ),
   );
-  /** Bulk changes span system apps too, so Uninstall stays on each app's own page. */
-  const bulkActions = actions.filter((a) => a.id !== "uninstall");
+  let previousView = "";
+  function listPosition() {
+    const top = list?.getBoundingClientRect().top ?? 0;
+    return {
+      scroll: list?.scrollTop ?? 0,
+      anchors: Array.from(
+        list?.querySelectorAll<HTMLElement>("[data-package]") ?? [],
+      )
+        .filter((row) => row.getBoundingClientRect().bottom > top)
+        .map((row) => ({
+          package: row.dataset.package,
+          offset: row.getBoundingClientRect().top - top,
+        })),
+    };
+  }
+  function restorePosition(position: ReturnType<typeof listPosition>) {
+    if (!list) return;
+    list.scrollTop = position.scroll;
+    const rows = Array.from(
+      list.querySelectorAll<HTMLElement>("[data-package]"),
+    );
+    for (const anchor of position.anchors) {
+      const row = rows.find((row) => row.dataset.package === anchor.package);
+      if (row) {
+        list.scrollTop +=
+          row.getBoundingClientRect().top -
+          list.getBoundingClientRect().top -
+          anchor.offset;
+        break;
+      }
+    }
+  }
   $effect(() => {
     const target = targetOf(device);
     const q = {
@@ -215,28 +254,67 @@
       pageSize,
     };
     refresh;
+    reload;
+    const view = JSON.stringify([target, filter, submitted]);
+    const preserve = previousView === view;
+    previousView = view;
+    const pagesToLoad = preserve ? nextPage : 1;
+    const position = untrack(listPosition);
     generation++;
     let cancelled = false;
     busy = true;
     loadingMore = false;
     loadError = "";
-    nextPage = 1;
-    selected = [];
-    if (list) list.scrollTop = 0;
-    error = "";
-    result = { items: [], total: 0, page: 0, pageSize };
-    detail = null;
-    void api
-      .query<AppPage>(target, q)
-      .then((r) => {
-        if (!cancelled) result = r;
-      })
-      .catch((e) => {
-        if (!cancelled) error = errorMessage(e);
-      })
-      .finally(() => {
-        if (!cancelled) busy = false;
+    refreshFailed = false;
+    if (!preserve) {
+      nextPage = 1;
+      selected = [];
+      untrack(() => {
+        if (list) list.scrollTop = 0;
       });
+      result = { items: [], total: 0, page: 0, pageSize };
+    }
+    error = "";
+    detail = null;
+    void (async () => {
+      try {
+        let updated = await api.query<AppPage>(target, q);
+        let pages = 1;
+        while (
+          !cancelled &&
+          pages < pagesToLoad &&
+          updated.items.length < updated.total
+        ) {
+          const more = await api.query<AppPage>(target, { ...q, page: pages });
+          const seen = new Set(updated.items.map((app) => app.package));
+          const additional = more.items.filter((app) => !seen.has(app.package));
+          pages++;
+          updated = {
+            ...updated,
+            items: [...updated.items, ...additional],
+            total: more.total,
+            groups: more.groups,
+          };
+          if (!additional.length) break;
+        }
+        if (cancelled) return;
+        result = updated;
+        nextPage = pages;
+        selected = selected.filter((id) =>
+          updated.items.some((app) => app.package === id),
+        );
+        busy = false;
+        await tick();
+        if (!cancelled && preserve) restorePosition(position);
+      } catch (e) {
+        if (!cancelled) {
+          error = errorMessage(e);
+          refreshFailed = preserve;
+        }
+      } finally {
+        if (!cancelled) busy = false;
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -246,6 +324,7 @@
       busy ||
       loadingMore ||
       loadError ||
+      refreshFailed ||
       atCollapsedUnsafe ||
       result.items.length >= result.total
     )
@@ -356,8 +435,10 @@
           unsafeOpen = !unsafeOpen;
           void loadMore();
         }}
-        ><span>{groupLabels[group]}</span> <span>{groupCount(group)}</span
-        ><Icon name={unsafeCollapsed ? "chevron-right" : "chevron-down"} size={14} /></button
+        ><span>{groupLabels[group]}</span> <span>{groupCount(group)}</span><Icon
+          name={unsafeCollapsed ? "chevron-right" : "chevron-down"}
+          size={14}
+        /></button
       >
     {:else}<span>{groupLabels[group]}</span>
       <span>{groupCount(group)}</span>{/if}
@@ -403,7 +484,7 @@
       <label class="sr-only" for="bulk-action">Bulk app action</label><select
         id="bulk-action"
         bind:value={bulkAction}
-        >{#each bulkActions as action}<option value={action.id}
+        >{#each actions as action}<option value={action.id}
             >{action.label}</option
           >{/each}</select
       ><button
@@ -412,6 +493,19 @@
         onclick={reviewBulk}
         >Review {selected.length}
         {selected.length === 1 ? "app" : "apps"}</button
+      >
+    </div>
+    <div class="selection-tools">
+      <span class="subtle">{selected.length} selected · Up to 32</span>
+      <button
+        class="text-action"
+        disabled={busy || selected.length >= 32}
+        onclick={selectShown}>Select shown</button
+      >
+      <button
+        class="text-action"
+        disabled={busy || !selected.length}
+        onclick={() => (selected = [])}>Clear selection</button
       >
     </div>
   {:else}<div class="apps-summary">
@@ -449,6 +543,11 @@
       </div>
     </aside>{/if}
   {#if error}<p class="error-text" role="status">{error}</p>{/if}
+  {#if refreshFailed}<button
+      class="secondary"
+      disabled={busy}
+      onclick={() => refresh++}>Retry refreshing apps</button
+    >{/if}
   <!-- Keyboard users need to focus the scrolling region to use arrow/Page keys. -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
@@ -468,7 +567,9 @@
           app.group,
         )}{/if}
       {#if app.group === "unsafe" && unsafeCollapsed}<!-- Hidden until expanded. -->
-      {:else if selecting}<label class="checkbox list-row bulk-choice"
+      {:else if selecting}<label
+          class="checkbox list-row bulk-choice"
+          data-package={app.package}
           ><input
             type="checkbox"
             checked={selected.includes(app.package)}
@@ -480,6 +581,7 @@
         >
       {:else}<button
           class="list-row"
+          data-package={app.package}
           disabled={busy}
           onclick={() => inspect(app.package)}
           >{@render appSummary(app)}<Icon name="chevron-right" /></button
@@ -531,7 +633,8 @@
           rating={detail.rating}
           installedRelated={detail.installedRelated ?? []}
           listDate={ratings?.committedAt ?? null}
-        />{/if}<dl>
+        />{/if}
+      <dl>
         <div>
           <dt>Version</dt>
           <dd>
@@ -604,7 +707,8 @@
               actionPage = 0;
             }}>Show these actions anyway</button
           >
-        </div>{/if}<div class="action-grid">
+        </div>{/if}
+      <div class="action-grid">
         {#each detailActions.slice(actionPage * 4, actionPage * 4 + 4) as action}<button
             class="secondary"
             disabled={busy}
@@ -725,3 +829,18 @@
     onpage={(n) => (activityPage = n)}
   />
 </Modal>
+
+<style>
+  .selection-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+  }
+  .selection-tools span {
+    margin-right: auto;
+  }
+  .selection-tools button {
+    min-height: 44px;
+  }
+</style>

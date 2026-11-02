@@ -43,6 +43,8 @@ Disable is the one to reach for first. It hides the app and stops it running, an
 
 **Uninstall** deletes an app you added from the TV completely, for every profile, along with its data. It's on the app's **Overview** tab, under **Open app**, and at the top of **Actions**. Apps that came with the TV don't have it, because Android won't uninstall them. The result only says **Verified** once the app is gone. Uninstalling Termux or Termux:Boot stops your button mappings, and the review tells you so.
 
+To uninstall several apps with one batch confirmation, use **Select → Uninstall → Review** on the Apps page. You can select up to 32 apps. See [Change many apps at once](change-many-apps.md). Single and bulk changes keep your place in the app list.
+
 ![An app you added, with Uninstall under Open app.](../assets/shots/app-uninstall.png){ .bc-shot loading=lazy }
 
 **Remove from profile** is for apps that came with the TV. It deletes the app for the selected profile, and its data with it. Android keeps the app itself on the TV, so **Restore existing package** can bring it back. Apps you added show **Uninstall** in its place.

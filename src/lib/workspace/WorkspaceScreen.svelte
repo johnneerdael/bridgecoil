@@ -100,16 +100,11 @@
       >Open connection setup</button
     >
   </section>
-{:else}{#key `${device.id}:${reload}`}
-    {#if page === "device"}<DevicePage
+{:else}{#key device.id}
+    {#if page === "apps"}<AppsPage
         {device}
         {api}
-        ondevice={(d) => ondevice(d)}
-        {onnavigate}
-      />
-    {:else if page === "apps"}<AppsPage
-        {device}
-        {api}
+        {reload}
         onbulk={acceptBulk}
         bind:filter={appFilter}
         bind:search={appSearch}
@@ -117,29 +112,36 @@
         onreview={acceptReview}
         oninstall={() => onnavigate("install")}
       />
-    {:else if page === "remote"}<RemotePage
-        {device}
-        {api}
-        onresult={(r) => {
-          if (r.status !== "sent") outcome = r;
-        }}
-        onapps={() => onnavigate("apps")}
-        onbuttons={() => {
-          toolChoice = "buttons";
-          onnavigate("tools");
-        }}
-      />
-    {:else if page === "tools"}<ToolsPage
-        {device}
-        {api}
-        bind:tool={toolChoice}
-        bind:buttonFollowUp
-        bind:filePath={toolFilePath}
-        onreview={acceptReview}
-        onbulk={acceptBulk}
-        oninstall={() => onnavigate("install")}
-      />{/if}
-  {/key}{/if}
+    {:else}{#key reload}
+        {#if page === "device"}<DevicePage
+            {device}
+            {api}
+            ondevice={(d) => ondevice(d)}
+            {onnavigate}
+          />
+        {:else if page === "remote"}<RemotePage
+            {device}
+            {api}
+            onresult={(r) => {
+              if (r.status !== "sent") outcome = r;
+            }}
+            onapps={() => onnavigate("apps")}
+            onbuttons={() => {
+              toolChoice = "buttons";
+              onnavigate("tools");
+            }}
+          />
+        {:else if page === "tools"}<ToolsPage
+            {device}
+            {api}
+            bind:tool={toolChoice}
+            bind:buttonFollowUp
+            bind:filePath={toolFilePath}
+            onreview={acceptReview}
+            onbulk={acceptBulk}
+            oninstall={() => onnavigate("install")}
+          />{/if}
+      {/key}{/if}{/key}{/if}
 <BulkActionReview
   review={bulkReview}
   {api}
